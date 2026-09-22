@@ -3639,6 +3639,24 @@ pub fn establishesBlockFormattingContext(element: *Element, frame: *Frame) bool 
     }) |name| {
         if (std.mem.eql(u8, display, name)) return true;
     }
+
+    // A multi-column container is one too, so no margin passes through its
+    // edges: four 20px blocks with 5px margins inside a `column-count: 3` box
+    // measure 35 in Chrome 153 and not the 31.67 a third of the strip is once
+    // the outermost 5s have escaped (scratch/s76/expr-multicol2.js).
+    return isMultiColumnContainer(element, frame);
+}
+
+/// Does this element cut its content into columns? True as soon as either
+/// `column-count` or `column-width` names something other than `auto`.
+pub fn isMultiColumnContainer(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    inline for (.{ "column-count", "column-width" }) |name| {
+        if (cascadedKeyword(style_manager, element, name)) |value| {
+            const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+            if (trimmed.len != 0 and !std.ascii.eqlIgnoreCase(trimmed, "auto")) return true;
+        }
+    }
     return false;
 }
 

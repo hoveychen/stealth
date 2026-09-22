@@ -4904,7 +4904,19 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         // calculateDocumentPosition -- and not a reading a page can make.
         if (self.textLayout(frame, wants_text_width, width, measure_text_width)) |text| {
             if (wants_text_width) width = text.width;
-            if (height == null) height = text.height;
+            // A multi-column container's own text is NOT one strip at this
+            // width: it wraps one column wide and is then cut into columns, so
+            // the height here would both over- and under-state it. Left open
+            // for `multiColumnContent`, which clientHeightOf reaches through
+            // the content fallback a box with no height of its own takes.
+            //
+            // Without this the cut was invisible on exactly the shape the sweep
+            // reads: six words in a `column-count: 3` box measured 54, the
+            // text's own height at the full width, where Chrome says 36 -- the
+            // columns had been worked out and then thrown away by the `@max`.
+            if (height == null and !CSSStyleDeclaration.isMultiColumnContainer(self, frame)) {
+                height = text.height;
+            }
         }
     }
 
@@ -5461,7 +5473,18 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     if (self.flexColumnContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
         return flexed;
     }
+    // A MULTI-COLUMN container stacks its content too -- into a strip one
+    // column wide -- and then cuts the strip into columns side by side, so its
+    // height is a share of the stack and not the whole of it.
+    if (self.multiColumnContent(frame, visibility_cache, extent, content_width, depth, pass)) |columns| {
+        return columns;
+    }
+    return self.blockContent(frame, visibility_cache, extent, content_width, depth, pass);
+}
 
+/// The stack itself: every content height that is not a flex line or a column
+/// strip lands here.
+fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -6499,6 +6522,131 @@ fn flexColumnContent(
     }
 
     return .{ .total = cursor };
+}
+
+/// A multi-column container's content height: the stack of its content,
+/// measured one column wide, shared out over the columns it has.
+///
+/// Nothing had ever cut the strip, so a `column-count: 3` box was as tall as
+/// all of its content -- 54 against Chrome's 36 on the six-word probe in
+/// scratch/s74/expr-geom.js (`columns.count`), and 216 against 288 on a
+/// paragraph, wrong in BOTH directions because the narrow column wraps the text
+/// into more lines than the full width does and the cut then takes a third of
+/// them.
+///
+/// The share is exact and the columns are not rounded up to fit a whole box:
+/// Chrome FRAGMENTS across the break, and three 20px blocks in three columns
+/// measure 20 while two of them measure 13.3359 -- the second block is cut in
+/// half and half of it sits at the top of the second column. Measured over
+/// eleven counts and content shapes on headed Chrome 153,
+/// scratch/s76/expr-multicol2.js.
+///
+/// What is NOT done here is placing the boxes: the walk below records them
+/// stacked, one column wide, so a page reading a rect inside a multicol
+/// container still gets the strip's coordinate rather than the column's. The
+/// height is what every reading of the container itself -- its rect, its
+/// clientHeight, its scrollHeight -- is built from, and it is the reading the
+/// two-arm sweep makes.
+fn multiColumnContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    extent: Extent,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    // No width, no columns: the count divides a space, and a shrink-to-fit box
+    // has not been given one to divide.
+    const available = content_width orelse return null;
+    const tracks = self.columnTracks(frame, available) orelse return null;
+
+    const strip = self.blockContent(frame, visibility_cache, extent, tracks.width, depth, pass);
+    var share = strip.total / tracks.count;
+
+    // A line box is the one thing a column break cannot land inside, so a strip
+    // made ONLY of lines is shared out in whole lines: eight lines over three
+    // columns measure 54 in Chrome and not the 48 an exact third is. A strip
+    // with a block child in it has no such floor -- Chrome cuts the block --
+    // which is why this asks whether the container holds any elements at all
+    // rather than trying to find the breaks.
+    if (self.firstElementChild() == null) {
+        const font = self.resolveFont(frame);
+        const strut = self.lineBoxHalves(frame, font.face, font.size);
+        const line = strut.above + strut.below;
+        if (line > 0) {
+            share = @ceil(share / line - grid_epsilon) * line;
+        }
+    }
+
+    return .{
+        .total = ceilLayoutUnit(share),
+        .escaped_top = strip.escaped_top,
+        .escaped_bottom = strip.escaped_bottom,
+    };
+}
+
+/// A share that is a whole number of lines in arithmetic can land a bit above
+/// it after the division, and rounding that up adds a line nobody asked for.
+/// Small enough that no real line height is inside it.
+const grid_epsilon: f64 = 1e-9;
+
+const ColumnTracks = struct {
+    /// How many columns the content is shared out over, as a float because that
+    /// is the only thing done with it.
+    count: f64,
+    /// One column's width, which is the width the content is measured at.
+    width: f64,
+};
+
+/// The columns `column-count` and `column-width` ask for, or null when this
+/// element is not a multi-column container.
+///
+/// The two properties are a request and a bound: a count alone is the count, a
+/// width alone is as many columns of at least that width as fit, and together
+/// the smaller wins. `column-width: 90px` in a 300px box with a 20px gap is two
+/// columns of 140 and not three of 86.7, and adding `column-count: 2` leaves it
+/// at two -- measured on Chrome 153, scratch/s76/expr-multicol.js, where both
+/// answer the same 270px box.
+fn columnTracks(self: *Element, frame: *Frame, available: f64) ?ColumnTracks {
+    const declared_count: ?f64 = blk: {
+        const text = CSSStyleDeclaration.cascadedComputedValue(self, "column-count", frame) orelse break :blk null;
+        const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+        break :blk std.fmt.parseFloat(f64, trimmed) catch null;
+    };
+    const declared_width = CSSStyleDeclaration.cascadedComputedLength(self, "column-width", frame);
+    if (declared_count == null and declared_width == null) {
+        return null;
+    }
+
+    // `column-gap: normal` is one em here, not the zero it is between grid
+    // tracks. The cascade reports the keyword, so the em is resolved against
+    // this element's own font.
+    const gap = CSSStyleDeclaration.cascadedComputedLength(self, "column-gap", frame) orelse
+        self.resolveFont(frame).size;
+
+    var count: f64 = declared_count orelse std.math.inf(f64);
+    if (declared_width) |wanted| {
+        if (wanted + gap > 0) {
+            count = @min(count, @floor((available + gap) / (wanted + gap)));
+        }
+    }
+    count = @max(1, @floor(count));
+    if (!std.math.isFinite(count)) {
+        return null;
+    }
+    return .{
+        .count = count,
+        .width = @max(0, (available - (count - 1) * gap) / count),
+    };
+}
+
+/// `layoutUnit`, upwards. A balanced column height is the one grid step that
+/// HOLDS the share rather than the one beneath it: one 20px block over three
+/// columns measures 6.671875 in Chrome, which is 854/128 and not 853/128.
+fn ceilLayoutUnit(px: f64) f64 {
+    const narrowed: f64 = @as(f32, @floatCast(px));
+    return @ceil(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
 }
 
 const ContentHeight = struct {
