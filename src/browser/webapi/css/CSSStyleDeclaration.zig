@@ -51,6 +51,7 @@ const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
 const text_measure = @import("../../text_measure.zig");
 const grid = @import("grid.zig");
+const css_table = @import("table.zig");
 const transform = @import("transform.zig");
 const animation_timing = @import("animation_timing.zig");
 const typed_om = @import("typed_om.zig");
@@ -3672,8 +3673,14 @@ pub fn blockEdgePx(
     containing: *?f64,
     depth: u8,
 ) f64 {
-    return paddingPx(element, "padding-" ++ side, frame, containing, depth) +
-        borderPx(element, "border-" ++ side, frame);
+    const padding = paddingPx(element, "padding-" ++ side, frame, containing, depth);
+    // A collapsed table's cells -- and the table itself -- are inset by half of
+    // each border they share, not by the whole one they wrote: a `border:10px`
+    // table around `border:2px` cells puts the first cell at x=5 in Chrome.
+    if (collapsedBorders(element, frame, depth)) |merged| {
+        return padding + @field(merged, side);
+    }
+    return padding + borderPx(element, "border-" ++ side, frame);
 }
 
 /// Whether this element establishes a block formatting context, which is what
@@ -5301,6 +5308,779 @@ pub fn gridCellOf(element: *Element, frame: *Frame, depth: u8) ?GridCell {
     const parent = element.parentElement() orelse return null;
     gridCells(parent, frame, depth);
     return frame._grid_cells.get(element);
+}
+
+// ---------------------------------------------------------------------------
+// Tables.
+//
+// A table is the one box whose children's widths are decided by their SIBLINGS:
+// a cell is as wide as the widest cell above or below it, which is why none of
+// this can be answered one element at a time the way a block's width can. The
+// whole table is therefore solved at once -- every cell measured, the columns
+// sized, the result remembered on the frame -- and each cell then reads its
+// share back out.
+//
+// Measured against Chrome 153 with scratch/s79/expr-table.js and
+// scratch/s80/expr-tabledist.js; css/table.zig holds the arithmetic and the
+// shapes each rule came from.
+// ---------------------------------------------------------------------------
+
+/// Which cells of the grid one `<td>` covers.
+pub const TableCell = struct {
+    column: usize,
+    column_span: usize = 1,
+    row: usize,
+    row_span: usize = 1,
+    /// Half of each border this cell shares with the cell -- or the table edge
+    /// -- on the other side of it. All four are zero unless the table collapses.
+    borders: CollapsedBorders = .{},
+};
+
+/// A solved table: where its columns are, and the content width they span.
+pub const TableLayout = struct {
+    columns: []const css_table.Placed,
+    /// The table's own content width -- what a shrink-to-fit table came out at,
+    /// or what a declared one was widened to hold.
+    content_width: f64,
+    /// `border-spacing`, already zeroed when the table collapses its borders.
+    spacing_x: f64,
+    spacing_y: f64,
+    /// Whether `border-collapse: collapse` merged the cells' borders.
+    collapsed: bool = false,
+    /// The merged width of each vertical grid line, outermost ones included, so
+    /// there is one more of these than there are columns. Empty unless the
+    /// table collapses.
+    v_lines: []const f64 = &.{},
+    /// The same down the page: one per horizontal grid line, so one more than
+    /// there are rows.
+    h_lines: []const f64 = &.{},
+};
+
+/// The four borders a collapsed table's box actually draws -- half of each grid
+/// line it sits on, because the other half belongs to the box on the other side.
+pub const CollapsedBorders = struct {
+    left: f64 = 0,
+    right: f64 = 0,
+    top: f64 = 0,
+    bottom: f64 = 0,
+};
+
+/// Whether this element lays its children out as a table.
+pub fn isTableContainer(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    return std.mem.eql(u8, display, "table") or std.mem.eql(u8, display, "inline-table");
+}
+
+/// Whether this element is one of a table's cells.
+pub fn isTableCell(element: *Element, frame: *Frame) bool {
+    if (flowKind(element, frame) != .in_flow) return false;
+    return std.mem.eql(u8, resolvedDisplay(element, frame), "table-cell");
+}
+
+/// Whether this element is a table's `<caption>`, which is neither a row nor a
+/// cell: it is stacked above or below the grid, as wide as the table's whole
+/// box.
+pub fn isTableCaption(element: *Element, frame: *Frame) bool {
+    if (flowKind(element, frame) != .in_flow) return false;
+    return std.mem.eql(u8, resolvedDisplay(element, frame), "table-caption");
+}
+
+/// Whether a caption goes above the grid. `caption-side` has no other value in
+/// Chrome -- `left` and `right` never shipped -- so anything but `bottom` is
+/// the top.
+pub fn tableCaptionOnTop(caption: *Element, frame: *Frame) bool {
+    const style_manager = &caption.ownerFrame(frame)._style_manager;
+    const value = cascadedKeyword(style_manager, caption, "caption-side") orelse return true;
+    return !std.ascii.eqlIgnoreCase(value, "bottom");
+}
+
+fn isTableRow(element: *Element, frame: *Frame) bool {
+    return std.mem.eql(u8, resolvedDisplay(element, frame), "table-row");
+}
+
+/// `thead` / `tbody` / `tfoot`, which hold rows without being one. A table with
+/// them lays out exactly as one without (scratch/s79 `tbody`), so the walk has
+/// to see through them rather than treat them as rows.
+fn isTableRowGroup(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    return std.mem.eql(u8, display, "table-row-group") or
+        std.mem.eql(u8, display, "table-header-group") or
+        std.mem.eql(u8, display, "table-footer-group");
+}
+
+/// The gap `border-spacing` puts between two cells and around the outside ones.
+/// `border-collapse: collapse` has none by definition.
+fn collapsesBorders(container: *Element, frame: *Frame) bool {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const value = cascadedKeyword(style_manager, container, "border-collapse") orelse return false;
+    return std.ascii.eqlIgnoreCase(value, "collapse");
+}
+
+fn tableSpacing(container: *Element, frame: *Frame) struct { x: f64, y: f64 } {
+    if (collapsesBorders(container, frame)) return .{ .x = 0, .y = 0 };
+    // Read as the two longhands Chrome splits the shorthand into, because that
+    // is what the cascade holds: `border-spacing: 7px 3px` in a style attribute
+    // is stored as a horizontal and a vertical one, and asking for the
+    // shorthand by name finds nothing. The UA sheet's own 2px for `<table>`
+    // comes through the same pair.
+    return .{
+        .x = spacingSide(container, frame, "-webkit-border-horizontal-spacing"),
+        .y = spacingSide(container, frame, "-webkit-border-vertical-spacing"),
+    };
+}
+
+fn spacingSide(container: *Element, frame: *Frame, name: []const u8) f64 {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const value = if (cascadedRawDeclaration(style_manager, container, name)) |declaration|
+        declaration.value
+    else
+        uaValue(container, name) orelse return 0;
+    const token = std.mem.trim(u8, value, &std.ascii.whitespace);
+    return @max(0, lengthOn(container, frame, name, token) orelse 0);
+}
+
+/// One length token resolved against an element's font, for a property whose
+/// percentages this engine does not model.
+fn lengthOn(element: *Element, frame: *Frame, property: []const u8, token: []const u8) ?f64 {
+    const parsed = units.parse(token) catch return null;
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    return switch (lengthFactor(style_manager, element, property, parsed.unit)) {
+        .verbatim => parsed.value,
+        .pixels => |factor| parsed.value * factor,
+        .unresolvable => null,
+    };
+}
+
+/// A table's columns and width, solved once and remembered. Null while the same
+/// table is already being solved, which is what a cell measured from inside the
+/// solve reads: its own intrinsic width, and not the column width that walk is
+/// on its way to producing.
+pub fn tableLayout(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
+    if (frame._table_layouts.get(container)) |cached| return cached;
+    if (frame._table_solving.contains(container)) return null;
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    frame._table_solving.put(frame.arena, container, {}) catch return null;
+    defer _ = frame._table_solving.remove(container);
+
+    const solved = solveTable(container, frame, depth) orelse return null;
+    frame._table_layouts.put(frame.arena, container, solved) catch {};
+    return solved;
+}
+
+fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
+    const spacing = tableSpacing(container, frame);
+    const collapsed = collapsesBorders(container, frame);
+
+    // The table's own width, if it declared one, is what a percentage cell
+    // width is a share of -- so it has to be known before the cells are asked.
+    const declared_width = declaredTableWidth(container, frame, depth, null);
+
+    // Every cell, placed and measured. Kept in a list because a cell covering
+    // more than one column can only be charged once the columns it covers have
+    // been sized by the cells that cover one.
+    const Measured = struct {
+        element: *Element,
+        cell: TableCell,
+        want: css_table.Column = .{},
+    };
+    var measured: std.ArrayListUnmanaged(Measured) = .empty;
+    // How far down the page each column is already taken, so a `rowspan` above
+    // pushes the next row's cells past it. The value is the row a column is
+    // free again from.
+    var taken_until: std.ArrayListUnmanaged(usize) = .empty;
+    var column_count: usize = 0;
+
+    var row_index: usize = 0;
+    var rows = TableRowIterator{ .container = container, .frame = frame };
+    while (rows.next()) |row| : (row_index += 1) {
+        var column_index: usize = 0;
+        var child = row.firstElementChild();
+        while (child) |cell| : (child = cell.nextElementSibling()) {
+            if (!isTableCell(cell, frame)) continue;
+            while (column_index < taken_until.items.len and
+                taken_until.items[column_index] > row_index) : (column_index += 1)
+            {}
+
+            const column_span = spanAttribute(cell, comptime .wrap("colspan"), frame);
+            const row_span = spanAttribute(cell, comptime .wrap("rowspan"), frame);
+            const placed: TableCell = .{
+                .column = column_index,
+                .column_span = column_span,
+                .row = row_index,
+                .row_span = row_span,
+            };
+            measured.append(frame.arena, .{ .element = cell, .cell = placed }) catch return null;
+
+            var covered = column_index;
+            while (covered < column_index + column_span) : (covered += 1) {
+                while (taken_until.items.len <= covered) {
+                    taken_until.append(frame.arena, 0) catch return null;
+                }
+                taken_until.items[covered] = row_index + row_span;
+            }
+            column_index += column_span;
+            column_count = @max(column_count, column_index);
+        }
+    }
+    if (column_count == 0) return null;
+    const row_count = row_index;
+
+    // A collapsed table has no border of its own and no border on any cell: two
+    // boxes either side of a grid line share ONE border, as wide as the wider
+    // of the two declarations, and each draws half of it. The merge is per
+    // SEGMENT and not per line -- `collapseRows` in scratch/s82 pins it: a
+    // 4px-bordered row above a 2px one leaves the second row's cells 1px of
+    // outer border where the line as a whole is 4 wide.
+    //
+    // The outermost lines are still taken whole, because they are what the
+    // table's own box is inset by: the same shape has its cells at x=2 and the
+    // table's border box starting at 0.
+    const v_lines = frame.arena.alloc(f64, column_count + 1) catch return null;
+    const h_lines = frame.arena.alloc(f64, row_count + 1) catch return null;
+    @memset(v_lines, 0);
+    @memset(h_lines, 0);
+    if (collapsed) {
+        if (!mergeCollapsedBorders(container, frame, measured.items, v_lines, h_lines)) return null;
+    }
+
+    // Measured only now, because what a collapsed cell adds to its column is
+    // the halves of the two borders it shares and not the one it wrote.
+    for (measured.items) |*entry| {
+        const outer_border = if (collapsed)
+            entry.cell.borders.left + entry.cell.borders.right
+        else
+            null;
+        entry.want = measureCell(entry.element, frame, depth, declared_width, outer_border);
+        frame._table_cells.put(frame.arena, entry.element, entry.cell) catch {};
+    }
+
+    var columns: std.ArrayListUnmanaged(css_table.Column) = .empty;
+    columns.appendNTimes(frame.arena, .{}, column_count) catch return null;
+    // The cells that cover one column decide it outright.
+    for (measured.items) |entry| {
+        if (entry.cell.column_span != 1) continue;
+        const column = &columns.items[entry.cell.column];
+        column.min = @max(column.min, entry.want.min);
+        column.max = @max(column.max, entry.want.max);
+        if (entry.want.fixed) |px| column.fixed = @max(column.fixed orelse 0, px);
+    }
+    // A cell that covers several is charged only with what they cannot already
+    // hold, shared out in proportion to what they hold. Measured on Chrome 153
+    // (scratch/s81/expr-tablerows.js, `colspan`): a 248.2969-wide cell over
+    // columns of 8.0625 and 8.9609 makes them 117.5938 and 130.7031, whose
+    // 109.53 and 121.74 of growth are in exactly the ratio 8.0625 : 8.9609.
+    for (measured.items) |entry| {
+        if (entry.cell.column_span == 1) continue;
+        const last = @min(entry.cell.column + entry.cell.column_span, column_count);
+        const covered = columns.items[entry.cell.column..last];
+        if (covered.len == 0) continue;
+        css_table.spreadOverSpan(covered, entry.want, Element.layoutUnit);
+    }
+
+    const columns_slice = columns.items;
+
+    // What the table's own edges take out of whatever room it has. A collapsed
+    // table's is HALF of each outer grid line, which is only knowable now --
+    // and it is knowable at all only because those lines come from the cells:
+    // a table that wrote no border of its own still has one, and reading the
+    // declared 0 made every collapsed table on a real page a border too wide.
+    var table_containing: ?f64 = null;
+    const table_edges = boxEdgesSharing(container, frame, &table_containing, depth);
+    const table_border_x: ?f64 = if (collapsed)
+        (v_lines[0] + v_lines[column_count]) / 2
+    else
+        null;
+    const table_outer = table_edges.padding_x + (table_border_x orelse table_edges.border_x);
+
+    const intrinsic = css_table.intrinsicWidths(columns_slice, spacing.x);
+    const shrunk_width = blk: {
+        if (declaredTableWidth(container, frame, depth, table_border_x)) |declared| {
+            break :blk @max(declared, intrinsic.min);
+        }
+        // Shrink to fit: as wide as it wants, unless that does not fit -- and
+        // never narrower than what its content cannot give up.
+        var containing: ?f64 = null;
+        const available = containingWidth(container, frame, &containing, depth) orelse
+            intrinsic.max + table_outer;
+        break :blk @max(intrinsic.min, @min(intrinsic.max, @max(0, available - table_outer)));
+    };
+
+    // A caption is as wide as the table's whole box, so a caption that cannot
+    // be made narrower makes the table wider: three unbreakable words over two
+    // one-letter columns give Chrome a 372.4453 table where the grid alone
+    // wanted 17.0234 (scratch/s82 `captionWide`).
+    const content_width = @max(shrunk_width, captionFloor(container, frame, depth));
+
+    const placed = if (isTableLayoutFixed(container, frame) and declared_width != null)
+        css_table.sizeFixedColumns(frame.arena, columns_slice, content_width, spacing.x, Element.layoutUnit) catch return null
+    else
+        css_table.sizeColumns(frame.arena, columns_slice, content_width, spacing.x, Element.layoutUnit) catch return null;
+
+    return .{
+        .columns = placed,
+        .content_width = content_width,
+        .spacing_x = spacing.x,
+        .spacing_y = spacing.y,
+        .collapsed = collapsed,
+        .v_lines = v_lines,
+        .h_lines = h_lines,
+    };
+}
+
+fn lineAtLeast(lines: []f64, index: usize, width: f64) void {
+    if (index >= lines.len) return;
+    lines[index] = @max(lines[index], width);
+}
+
+/// Work out what every cell of a collapsed table shares with its neighbours.
+///
+/// Fills each entry's `borders` with HALF of the widest declaration on each of
+/// its four edges -- the cell's own, whoever is on the other side of it, and
+/// the table's when the edge is an outer one -- and the two line arrays with
+/// the whole width of every grid line, which is what the table's own box is
+/// inset by.
+///
+/// `entries` is the solve's local list, so it comes in as anytype; false means
+/// the grid could not be allocated.
+fn mergeCollapsedBorders(
+    container: *Element,
+    frame: *Frame,
+    entries: anytype,
+    v_lines: []f64,
+    h_lines: []f64,
+) bool {
+    const columns = v_lines.len - 1;
+    const rows = h_lines.len - 1;
+    if (columns == 0 or rows == 0) return true;
+    if (columns * rows > MAX_TABLE_GRID) return false;
+
+    // Which cell covers each square, so a cell can ask what is beside it.
+    const squares = frame.call_arena.alloc(?usize, columns * rows) catch return false;
+    @memset(squares, null);
+    for (entries, 0..) |entry, index| {
+        const last_column = @min(entry.cell.column + entry.cell.column_span, columns);
+        const last_row = @min(entry.cell.row + entry.cell.row_span, rows);
+        var r = entry.cell.row;
+        while (r < last_row) : (r += 1) {
+            var c = entry.cell.column;
+            while (c < last_column) : (c += 1) squares[r * columns + c] = index;
+        }
+    }
+
+    const outer: CollapsedBorders = .{
+        .left = borderPx(container, "border-left", frame),
+        .right = borderPx(container, "border-right", frame),
+        .top = borderPx(container, "border-top", frame),
+        .bottom = borderPx(container, "border-bottom", frame),
+    };
+
+    for (entries, 0..) |*entry, index| {
+        const first_column = entry.cell.column;
+        const first_row = entry.cell.row;
+        const last_column = @min(first_column + entry.cell.column_span, columns);
+        const last_row = @min(first_row + entry.cell.row_span, rows);
+
+        var merged: CollapsedBorders = .{
+            .left = borderPx(entry.element, "border-left", frame),
+            .right = borderPx(entry.element, "border-right", frame),
+            .top = borderPx(entry.element, "border-top", frame),
+            .bottom = borderPx(entry.element, "border-bottom", frame),
+        };
+        if (first_column == 0) merged.left = @max(merged.left, outer.left);
+        if (last_column == columns) merged.right = @max(merged.right, outer.right);
+        if (first_row == 0) merged.top = @max(merged.top, outer.top);
+        if (last_row == rows) merged.bottom = @max(merged.bottom, outer.bottom);
+
+        var r = first_row;
+        while (r < last_row) : (r += 1) {
+            if (first_column > 0) {
+                if (neighbour(squares, entries, r * columns + first_column - 1, index)) |side| {
+                    merged.left = @max(merged.left, borderPx(side, "border-right", frame));
+                }
+            }
+            if (last_column < columns) {
+                if (neighbour(squares, entries, r * columns + last_column, index)) |side| {
+                    merged.right = @max(merged.right, borderPx(side, "border-left", frame));
+                }
+            }
+        }
+        var c = first_column;
+        while (c < last_column) : (c += 1) {
+            if (first_row > 0) {
+                if (neighbour(squares, entries, (first_row - 1) * columns + c, index)) |side| {
+                    merged.top = @max(merged.top, borderPx(side, "border-bottom", frame));
+                }
+            }
+            if (last_row < rows) {
+                if (neighbour(squares, entries, last_row * columns + c, index)) |side| {
+                    merged.bottom = @max(merged.bottom, borderPx(side, "border-top", frame));
+                }
+            }
+        }
+
+        lineAtLeast(v_lines, first_column, merged.left);
+        lineAtLeast(v_lines, last_column, merged.right);
+        lineAtLeast(h_lines, first_row, merged.top);
+        lineAtLeast(h_lines, last_row, merged.bottom);
+
+        entry.cell.borders = .{
+            .left = merged.left / 2,
+            .right = merged.right / 2,
+            .top = merged.top / 2,
+            .bottom = merged.bottom / 2,
+        };
+    }
+    return true;
+}
+
+fn neighbour(squares: []const ?usize, entries: anytype, at: usize, self_index: usize) ?*Element {
+    const index = squares[at] orelse return null;
+    if (index == self_index) return null;
+    return entries[index].element;
+}
+
+/// A cap on the squares a collapsed table's neighbour walk allocates, so a
+/// `rowspan="1000"` typo cannot ask for a million of them.
+const MAX_TABLE_GRID = 1 << 16;
+
+/// Half of each grid line an element of a collapsed table sits on -- which is
+/// the border it actually has. Null for anything that is not a cell or the
+/// table itself, and for a table that does not collapse.
+pub fn collapsedBorders(element: *Element, frame: *Frame, depth: u8) ?CollapsedBorders {
+    if (isTableContainer(element, frame)) {
+        const layout = tableLayout(element, frame, depth) orelse return null;
+        if (!layout.collapsed) return null;
+        if (layout.v_lines.len == 0 or layout.h_lines.len == 0) return null;
+        return .{
+            .left = layout.v_lines[0] / 2,
+            .right = layout.v_lines[layout.v_lines.len - 1] / 2,
+            .top = layout.h_lines[0] / 2,
+            .bottom = layout.h_lines[layout.h_lines.len - 1] / 2,
+        };
+    }
+    if (!isTableCell(element, frame)) return null;
+    const container = tableOf(element, frame) orelse return null;
+    const layout = tableLayout(container, frame, depth) orelse return null;
+    if (!layout.collapsed) return null;
+    const cell = frame._table_cells.get(element) orelse return null;
+    return cell.borders;
+}
+
+/// The narrowest content width a table's captions leave it: a caption fills the
+/// table's box, so one that cannot be made narrower holds the whole table open.
+/// Zero for a table with no caption.
+///
+/// The table's own border is read as declared rather than as collapsed, because
+/// the collapse is not solved yet when this is asked -- which can only make the
+/// floor too low by half a border, and a table whose caption decides its width
+/// is one whose grid had room to spare anyway.
+fn captionFloor(container: *Element, frame: *Frame, depth: u8) f64 {
+    var widest: f64 = 0;
+    var child = container.firstElementChild();
+    while (child) |caption| : (child = caption.nextElementSibling()) {
+        if (!isTableCaption(caption, frame)) continue;
+        var containing: ?f64 = null;
+        const edges = boxEdgesSharing(caption, frame, &containing, depth);
+        const min = caption.minContentWidthExact(frame) orelse continue;
+        widest = @max(widest, min + edges.padding_x + edges.border_x);
+    }
+    if (widest == 0) return 0;
+
+    var containing: ?f64 = null;
+    const table_edges = boxEdgesSharing(container, frame, &containing, depth);
+    return @max(0, widest - table_edges.padding_x - table_edges.border_x);
+}
+
+/// The width of the table box a caption fills, less its own padding and border.
+/// Null for anything that is not the caption of a table this engine laid out.
+pub fn tableCaptionWidth(caption: *Element, frame: *Frame, depth: u8, edges: BoxEdges) ?f64 {
+    if (!isTableCaption(caption, frame)) return null;
+    const container = caption.parentElement() orelse return null;
+    if (!isTableContainer(container, frame)) return null;
+    const outer = tableOuterWidth(container, frame, depth) orelse return null;
+    return @max(0, outer - edges.padding_x - edges.border_x);
+}
+
+/// A table's whole box width -- its columns plus its own padding and border,
+/// the latter collapsed when the table collapses. Null for anything that is
+/// not a table this engine laid out.
+pub fn tableOuterWidth(container: *Element, frame: *Frame, depth: u8) ?f64 {
+    const layout = tableLayout(container, frame, depth) orelse return null;
+    var containing: ?f64 = null;
+    const edges = boxEdgesSharing(container, frame, &containing, depth);
+    const border_x = if (collapsedBorders(container, frame, depth)) |merged|
+        merged.left + merged.right
+    else
+        edges.border_x;
+    return layout.content_width + edges.padding_x + border_x;
+}
+
+fn isTableLayoutFixed(container: *Element, frame: *Frame) bool {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const value = cascadedKeyword(style_manager, container, "table-layout") orelse return false;
+    return std.ascii.eqlIgnoreCase(value, "fixed");
+}
+
+/// The content width a table declared, or null for one that declared none.
+///
+/// `collapsed_border_x` is the border the table actually has when it collapses
+/// -- half of each outer grid line -- and null for one that does not, which
+/// keeps the border it wrote.
+fn declaredTableWidth(
+    container: *Element,
+    frame: *Frame,
+    depth: u8,
+    collapsed_border_x: ?f64,
+) ?f64 {
+    const declared = cascadedComputedLength(container, "width", frame) orelse return null;
+    var containing: ?f64 = null;
+    const edges = boxEdgesSharing(container, frame, &containing, depth);
+    const width = Element.layoutUnit(declared);
+    if (usesBorderBox(container, frame)) {
+        return @max(0, width - edges.padding_x - (collapsed_border_x orelse edges.border_x));
+    }
+    return width;
+}
+
+/// What one cell asks of its column: the three numbers css/table.zig sizes with.
+///
+/// All three are OUTER widths -- the cell's padding and border are part of the
+/// column, which scratch/s79 `padded` pins: a `padding:10px` cell holding an
+/// 8.0625-wide letter makes a 28.0625 column.
+fn measureCell(
+    cell: *Element,
+    frame: *Frame,
+    depth: u8,
+    table_width: ?f64,
+    /// The border a collapsed cell has, which is half of each of the two grid
+    /// lines it sits between and not the border it wrote. Null for a table
+    /// that keeps its cells' borders apart.
+    collapsed_border_x: ?f64,
+) css_table.Column {
+    var containing: ?f64 = null;
+    const edges = boxEdgesSharing(cell, frame, &containing, depth);
+    const outer = edges.padding_x + (collapsed_border_x orelse edges.border_x);
+
+    // Measured with no width to wrap in, which is the max-content width: a cell
+    // is not a box that fills its containing block (see `fillsAtDisplay`), so
+    // this is the same shrink-to-fit walk an inline-block takes.
+    const box = cell.dimensionsIn(frame, true, depth + 1, true, null);
+    const max = box.width + outer;
+    const min = (cell.minContentWidthExact(frame) orelse box.width) + outer;
+
+    const fixed = fixedCellWidth(cell, frame, depth, table_width, outer);
+    return .{ .min = @min(min, max), .max = max, .fixed = fixed };
+}
+
+/// A width the page put on the cell itself, as an OUTER width so it can be
+/// compared with the intrinsic pair. A percentage is a share of the table's
+/// width, which is only knowable when the table declared one.
+fn fixedCellWidth(cell: *Element, frame: *Frame, depth: u8, table_width: ?f64, outer: f64) ?f64 {
+    _ = depth;
+    const style_manager = &cell.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, cell, "width") orelse return null;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "auto")) return null;
+
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return null;
+        const width = table_width orelse return null;
+        const px = Element.layoutUnit(width * share / 100.0);
+        return if (usesBorderBox(cell, frame)) px else px + outer;
+    }
+    const px = Element.layoutUnit(lengthOn(cell, frame, "width", trimmed) orelse return null);
+    return if (usesBorderBox(cell, frame)) px else px + outer;
+}
+
+/// A table's rows, with `thead` / `tbody` / `tfoot` seen through.
+pub const TableRowIterator = struct {
+    container: *Element,
+    frame: *Frame,
+    child: ?*Element = null,
+    group: ?*Element = null,
+    in_group: ?*Element = null,
+    started: bool = false,
+
+    pub fn next(self: *TableRowIterator) ?*Element {
+        if (!self.started) {
+            self.started = true;
+            self.child = self.container.firstElementChild();
+        }
+        while (true) {
+            if (self.in_group) |row| {
+                self.in_group = row.nextElementSibling();
+                if (isTableRow(row, self.frame)) return row;
+                continue;
+            }
+            const el = self.child orelse return null;
+            self.child = el.nextElementSibling();
+            if (isTableRowGroup(el, self.frame)) {
+                self.in_group = el.firstElementChild();
+                self.group = el;
+                continue;
+            }
+            if (isTableRow(el, self.frame)) return el;
+        }
+    }
+};
+
+/// A `colspan` / `rowspan`, which is an HTML attribute and not a style. Absent,
+/// unreadable and zero all mean one cell, and the count is capped so a typo
+/// cannot ask for a row a million columns wide.
+fn spanAttribute(cell: *Element, name: String, frame: *Frame) usize {
+    _ = frame;
+    const raw = cell.getAttributeSafe(name) orelse return 1;
+    const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+    const parsed = std.fmt.parseUnsigned(usize, trimmed, 10) catch return 1;
+    return std.math.clamp(parsed, 1, MAX_TABLE_SPAN);
+}
+
+const MAX_TABLE_SPAN = 1000;
+
+/// A table's rows, sized and placed, or an empty list for anything that is not
+/// a table this engine laid out.
+///
+/// A row with no height of its own is as tall as its tallest cell, so filling
+/// this measures every cell in the table -- and guards against re-entry for the
+/// reason `gridRows` does: a cell asks how tall its row is in order to stretch
+/// into it, and that is this answer. A cell reached from inside the solve gets
+/// its own content height, which is the number the row is being sized from.
+pub fn tableRows(container: *Element, frame: *Frame, depth: u8) []const css_table.Placed {
+    if (frame._table_rows.get(container)) |cached| return cached;
+    if (frame._table_rows_solving.contains(container)) return &.{};
+    // The COLUMNS are still being solved, which is a cell being measured for
+    // its intrinsic width -- and that measurement asks how tall its row is.
+    // Answering would be circular, and remembering the empty answer would
+    // freeze it: the rows are solved for real once the columns are known.
+    if (frame._table_solving.contains(container)) return &.{};
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return &.{};
+    frame._table_rows_solving.put(frame.arena, container, {}) catch return &.{};
+    defer _ = frame._table_rows_solving.remove(container);
+
+    const solved = solveTableRows(container, frame, depth);
+    // An empty answer is a solve that could not run, not a table with no rows,
+    // so it is never the one remembered.
+    if (solved.len > 0) frame._table_rows.put(frame.arena, container, solved) catch {};
+    return solved;
+}
+
+fn solveTableRows(container: *Element, frame: *Frame, depth: u8) []const css_table.Placed {
+    const layout = tableLayout(container, frame, depth) orelse return &.{};
+
+    var heights: std.ArrayListUnmanaged(f64) = .empty;
+    // The cells that cover several rows, held back for a second pass: what
+    // they need is only knowable once the rows they cover have a height from
+    // the cells that cover one.
+    const Spanning = struct { row: usize, span: usize, height: f64 };
+    var spanning: std.ArrayListUnmanaged(Spanning) = .empty;
+
+    var row_index: usize = 0;
+    var rows = TableRowIterator{ .container = container, .frame = frame };
+    while (rows.next()) |row| : (row_index += 1) {
+        heights.append(frame.call_arena, 0) catch return &.{};
+        // A row may declare a height of its own, which is a floor under what
+        // its cells need: `<tr style="height:50px">` over one line of text is
+        // 50 tall in Chrome and its cells with it.
+        if (cascadedComputedLength(row, "height", frame)) |declared| {
+            heights.items[row_index] = @max(0, Element.layoutUnit(declared));
+        }
+
+        var child = row.firstElementChild();
+        while (child) |cell| : (child = cell.nextElementSibling()) {
+            if (!isTableCell(cell, frame)) continue;
+            const placed = frame._table_cells.get(cell) orelse continue;
+            const box = cell.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
+            const outer = box.height + box.padding_y + box.border_y;
+            if (placed.row_span == 1) {
+                heights.items[row_index] = @max(heights.items[row_index], outer);
+            } else {
+                spanning.append(frame.call_arena, .{
+                    .row = placed.row,
+                    .span = placed.row_span,
+                    .height = outer,
+                }) catch {};
+            }
+        }
+    }
+    if (heights.items.len == 0) return &.{};
+
+    // A cell taller than the rows it covers puts the difference on the LAST of
+    // them: the rows above it are sized by whatever else is on them.
+    for (spanning.items) |tall| {
+        const last = @min(tall.row + tall.span, heights.items.len);
+        if (last <= tall.row) continue;
+        var held: f64 = 0;
+        for (heights.items[tall.row..last], tall.row..last) |height, i| {
+            held += height + if (i > tall.row) layout.spacing_y else 0;
+        }
+        const short = tall.height - held;
+        if (short > 0) heights.items[last - 1] += short;
+    }
+
+    const placed = frame.arena.alloc(css_table.Placed, heights.items.len) catch return &.{};
+    var y: f64 = layout.spacing_y;
+    for (heights.items, placed) |height, *out| {
+        const size = Element.layoutUnit(@max(0, height));
+        out.* = .{ .start = y, .size = size };
+        y += size + layout.spacing_y;
+    }
+    return placed;
+}
+
+/// A cell's content height: its row's, less its own padding and border. Null
+/// for an element that is not a cell of a solved table, and for one reached
+/// from inside its own table's row solve.
+pub fn tableCellHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (!isTableCell(element, frame)) return null;
+    const container = tableOf(element, frame) orelse return null;
+    const rows = tableRows(container, frame, depth);
+    if (rows.len == 0) return null;
+    const cell = frame._table_cells.get(element) orelse return null;
+    if (cell.row >= rows.len) return null;
+    // A cell covering several rows is as tall as all of them together, plus
+    // the `border-spacing` between them.
+    const last = @min(cell.row + cell.row_span, rows.len) - 1;
+    return @max(0, rows[last].start + rows[last].size - rows[cell.row].start);
+}
+
+/// The content width a table box has: its columns', not its containing block's.
+/// Null for anything that is not a table.
+pub fn tableContentWidth(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (!isTableContainer(element, frame)) return null;
+    const layout = tableLayout(element, frame, depth) orelse return null;
+    return layout.content_width;
+}
+
+/// A cell's content width: its column's, less whatever the cell's own padding
+/// and border take out of it. Null for an element that is not in a solved
+/// table -- including a cell reached from inside its own table's solve, which
+/// is measured at its intrinsic width instead.
+pub fn tableCellWidth(element: *Element, frame: *Frame, depth: u8, edges: BoxEdges) ?f64 {
+    if (!isTableCell(element, frame)) return null;
+    const container = tableOf(element, frame) orelse return null;
+    const layout = tableLayout(container, frame, depth) orelse return null;
+    const cell = frame._table_cells.get(element) orelse return null;
+    if (cell.column >= layout.columns.len) return null;
+    // A cell covering several columns covers the `border-spacing` between them
+    // too, which is why this comes off the column EDGES and not off a sum of
+    // sizes.
+    const last = @min(cell.column + cell.column_span, layout.columns.len) - 1;
+    const covered = layout.columns[last].start + layout.columns[last].size -
+        layout.columns[cell.column].start;
+    return @max(0, covered - edges.padding_x - edges.border_x);
+}
+
+/// The table a cell belongs to: up through its row, and through a row group if
+/// there is one.
+pub fn tableOf(cell: *Element, frame: *Frame) ?*Element {
+    const row = cell.parentElement() orelse return null;
+    if (!isTableRow(row, frame)) return null;
+    const above = row.parentElement() orelse return null;
+    if (isTableContainer(above, frame)) return above;
+    if (!isTableRowGroup(above, frame)) return null;
+    const container = above.parentElement() orelse return null;
+    if (!isTableContainer(container, frame)) return null;
+    return container;
 }
 
 /// Whether a grid item fills its column rather than being placed in it.

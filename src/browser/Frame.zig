@@ -41,6 +41,7 @@ const Blob = @import("webapi/Blob.zig");
 const FileList = @import("webapi/FileList.zig");
 const MediaQueryList = @import("webapi/css/MediaQueryList.zig");
 const css_grid = @import("webapi/css/grid.zig");
+const css_table = @import("webapi/css/table.zig");
 const css_style_declaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const Node = @import("webapi/Node.zig");
 const Event = @import("webapi/Event.zig");
@@ -243,6 +244,29 @@ _grid_cells_done: std.AutoHashMapUnmanaged(*Element, void) = .empty,
 /// how tall the row it stretches into is, which is the answer being computed --
 /// so an item reached through here is measured at its own content height.
 _grid_rows_solving: std.AutoHashMapUnmanaged(*Element, void) = .empty,
+
+/// A table's solved columns and the content width they add up to, keyed by the
+/// table. Cleared with `_flex_lines`, and more than an optimisation here: every
+/// cell asks its table how wide its column is, and solving that measures every
+/// cell in the table.
+_table_layouts: std.AutoHashMapUnmanaged(*Element, css_style_declaration.TableLayout) = .empty,
+
+/// Which column and row each cell landed in, keyed by the cell. Filled by the
+/// same walk that solves the columns.
+_table_cells: std.AutoHashMapUnmanaged(*Element, css_style_declaration.TableCell) = .empty,
+
+/// A table's solved rows, keyed by the table. Costlier than the columns: a row
+/// with no height of its own is as tall as its tallest cell.
+_table_rows: std.AutoHashMapUnmanaged(*Element, []const css_table.Placed) = .empty,
+
+/// The tables whose rows are being solved right now, so a cell reached from
+/// inside the solve is measured at its own content height.
+_table_rows_solving: std.AutoHashMapUnmanaged(*Element, void) = .empty,
+
+/// The tables whose columns are being solved right now. A cell reached through
+/// here is measured at its own intrinsic width, because the column width it
+/// would otherwise take is the answer being computed.
+_table_solving: std.AutoHashMapUnmanaged(*Element, void) = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
