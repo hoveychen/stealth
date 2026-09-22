@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An inline box was placed off `placed`, the width of the words ALREADY PLACED on
+the line -- and a word can straddle an inline box, because `a<span>b</span>c` is
+one word with no break opportunity either side. So the cursor had not moved by
+the time the span ended, the recorder refused it a row, and the span fell
+through to `calculateSiblingPosition`: the node-count placeholder that answers
+the SAME number on both axes. `<div style="width:400px">a<span>Hamburg</span>b`
+read 1360,1360 in this engine where headed Chrome 153 says 8.0625,0.
+
+The ones that DID get a row got the cursor as of the last space, and none of
+them charged the box's own margin, border or padding to the line: the text
+after `<span style="padding:0 10px">` sat where the text inside it ended.
+
+Asserted as equalities BETWEEN this engine's own boxes rather than against
+Chrome's numbers, because every one of them is a text ADVANCE and the runner's
+page need not resolve the same face as the probe's. The shapes themselves were
+read on headed Chrome 153 with scratch/s74/expr-geom.js (`inline.padded`,
+`writing.rtl`) and matched byte for byte there.
+-->
+
+<script id=adjacent_inline_boxes_tile_along_the_line>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:16px Georgia';
+  host.innerHTML = '<span id=a>a</span><span id=b>Hamburgefonstiv</span><span id=c>b</span>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const a = box('a'), b = box('b'), c = box('c');
+  const base = host.getBoundingClientRect();
+
+  // The placeholder's signature: one number for both axes, five pixels per node.
+  testing.expectTrue(a.left !== a.top || a.left === 0);
+  testing.expectEqual(base.left, a.left);
+  testing.expectEqual(a.left + a.width, b.left);
+  testing.expectEqual(b.left + b.width, c.left);
+  // All three share one line.
+  testing.expectEqual(a.top, b.top);
+  testing.expectEqual(a.top, c.top);
+
+  host.remove();
+}
+</script>
+
+<script id=an_inline_box_charges_its_own_edges_to_the_line>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:16px Georgia';
+  host.innerHTML = '<span id=plain>Hamburgefonstiv</span>' +
+                   '<div><span id=lead>a</span>' +
+                   '<span id=padded style="padding:0 10px;border-left:3px solid;margin-left:7px">Hamburgefonstiv</span>' +
+                   '<span id=after>b</span></div>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const plain = box('plain'), lead = box('lead'), padded = box('padded'), after = box('after');
+
+  // padding-left + padding-right + border-left, on top of the same text.
+  testing.expectEqual(plain.width + 23, padded.width);
+  // margin-left moves the border box without widening it.
+  testing.expectEqual(lead.left + lead.width + 7, padded.left);
+  // And what follows starts past the far edge, margin-right being 0.
+  testing.expectEqual(padded.left + padded.width, after.left);
+
+  host.remove();
+}
+</script>
+
+<!--
+Where a box sits in its line is the line's own baseline less the box's, and the
+line's is a maximum over everything on it -- so it is not known until the line
+ends. Every inline box used to be recorded at the line's TOP instead, which is
+right only for the tallest thing on the line. The five spans of
+`inline.vertAlign` in scratch/s74/expr-geom.js all read y=0 where headed Chrome
+153 says 0, 11.6641, 2.1641, 7.1641 and 7.1641, and all six controls of
+`form.controls` read 0 where Chrome says 21.5, 23, 23, 20.5, 0 and 21.5.
+
+`super` and `sub` are functions of the font SIZE alone -- three families agree
+at every one of 43 sizes in scratch/s75/expr-valign.js -- and the ladders are
+`size/3 + 0.5` and `size/5 + 0.5`. Asserted here against the engine's own
+unshifted span, so the assertion is the shift and not the advance.
+-->
+
+<script id=vertical_align_moves_the_box_within_its_line>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:20px Georgia';
+  host.innerHTML = 'x<span id=sup style="vertical-align:super">s</span>' +
+                   '<span id=sub style="vertical-align:sub">s</span>' +
+                   '<span id=len style="vertical-align:5px">s</span>' +
+                   '<span id=base>s</span>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const sup = box('sup'), sub = box('sub'), len = box('len'), base = box('base');
+
+  // 20/3 + 0.5 and 20/5 + 0.5, on the layout grid.
+  testing.expectEqual(7.1640625, base.top - sup.top);
+  testing.expectEqual(-4.5, base.top - sub.top);
+  testing.expectEqual(5, base.top - len.top);
+  // The raised span is the top of the line, so the line grew by its own shift.
+  testing.expectEqual(host.getBoundingClientRect().top, sup.top);
+
+  host.remove();
+}
+</script>
+
+<script id=a_form_control_brings_its_own_baseline>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:16px Georgia';
+  host.innerHTML = '<div><input id=field><input id=check type=checkbox>' +
+                   '<textarea id=area></textarea></div>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const field = box('field'), check = box('check'), area = box('area');
+
+  // The textarea stands on its bottom edge and is the tallest box here, so it
+  // is the top of the line and the line's baseline is its own bottom.
+  testing.expectEqual(host.getBoundingClientRect().top, area.top);
+  const baseline = area.top + area.height;
+  // A checkbox stands on the baseline; a text field hangs its font's descent
+  // below it, so it is the lower of the two tops by exactly that descent.
+  testing.expectEqual(baseline, check.top + check.height);
+  testing.expectTrue(field.top + field.height > baseline);
+  testing.expectTrue(field.top < check.top);
+
+  host.remove();
+}
+</script>

@@ -2523,6 +2523,24 @@ const LineFlow = struct {
     /// The line being built, split at the baseline.
     line_above: f64 = 0,
     line_below: f64 = 0,
+    /// Boxes placed on the line being built, waiting for its baseline.
+    ///
+    /// Where a box sits in its line is `line_above - above`: how far the line's
+    /// own baseline is below its top, less how far the box's baseline is below
+    /// ITS top. `line_above` is a maximum over everything on the line, so it is
+    /// not known until the line ends -- a `vertical-align: super` span at the
+    /// end of a line lifts the line's top and moves every box already on it.
+    /// So the boxes are collected here and written out by `flushLine`.
+    ///
+    /// Before this, every inline box was recorded at the line's TOP, which is
+    /// right only when the box is the tallest thing on the line. The five spans
+    /// of `inline.vertAlign` in scratch/s74/expr-geom.js all read y=0 where
+    /// headed Chrome 153 says 0, 11.6641, 2.1641, 7.1641, 7.1641, and all six
+    /// controls of `form.controls` read 0 where Chrome says 21.5 down to 0.
+    deferred: std.ArrayListUnmanaged(DeferredBox) = .empty,
+    /// Where `flushLine` writes, and what it allocates from. Null for the
+    /// height-only callers, which place nothing.
+    sink: ?PositionSink = null,
     /// Whether any word landed in this segment. An empty last segment is the
     /// trailing break, and it is not a line.
     segment_has_word: bool = false,
@@ -2579,6 +2597,9 @@ const LineFlow = struct {
         self.word = 0;
         self.have_word = false;
         self.any = false;
+        // Anything still here has already been flushed by whoever ended the
+        // line; a run that restarts without one placed nothing.
+        self.deferred.clearRetainingCapacity();
     }
 
     /// The run's height, and a fresh run after it.
@@ -2694,6 +2715,46 @@ const LineFlow = struct {
     }
 
     /// Text is about to land on this line, so whatever is open around it counts.
+    /// A box on the line that is still waiting for the line's baseline. `above`
+    /// is its own baseline distance with its `vertical-align` shift already in
+    /// it, which is the same number that raised `line_above`.
+    const DeferredBox = struct {
+        element: *Element,
+        x: f64,
+        /// The block's content top: the line's own offset is added at flush.
+        base_y: f64,
+        width: f64,
+        height: f64,
+        above: f64,
+    };
+
+    const PositionSink = struct {
+        arena: std.mem.Allocator,
+        table: *PositionTable,
+        nodes: *usize,
+    };
+
+    fn defer_(self: *LineFlow, box: DeferredBox) void {
+        const sink = self.sink orelse return;
+        self.deferred.append(sink.arena, box) catch {};
+    }
+
+    /// Writes out the boxes of the line that is ending, now that `line_above`
+    /// has stopped growing.
+    fn flushLine(self: *LineFlow) void {
+        const sink = self.sink orelse return;
+        for (self.deferred.items) |box| {
+            sink.table.put(sink.arena, box.element, .{
+                .x = box.x,
+                .y = box.base_y + self.total + (self.line_above - box.above),
+                .width = box.width,
+                .height = box.height,
+            }) catch {};
+            sink.nodes.* += 1;
+        }
+        self.deferred.clearRetainingCapacity();
+    }
+
     fn raise(self: *LineFlow) void {
         if (self.open_above > self.line_above) self.line_above = self.open_above;
         if (self.open_below > self.line_below) self.line_below = self.open_below;
@@ -2744,6 +2805,7 @@ const LineFlow = struct {
 
     fn newLine(self: *LineFlow) void {
         self.recordWidth();
+        self.flushLine();
         self.total += self.line_above + self.line_below;
         self.line_above = @max(self.strut_above, self.open_above);
         self.line_below = @max(self.strut_below, self.open_below);
@@ -2763,16 +2825,53 @@ const LineFlow = struct {
         if (line > self.width) self.width = line;
     }
 
-    fn placeWord(self: *LineFlow) void {
-        if (!self.have_word) return;
-        // A collapsing run joins its words with exactly one space, which is the
-        // whole of what collapsing a run of them means. A preserving one has
-        // already placed the space it had, and adding another would count it
-        // twice.
-        const gap = if (self.collapses and self.placed > 0)
+    /// A collapsing run joins its words with exactly one space, which is the
+    /// whole of what collapsing a run of them means. A preserving one has
+    /// already placed the space it had, and adding another would count it
+    /// twice.
+    fn pendingGap(self: *const LineFlow) f64 {
+        return if (self.collapses and self.placed > 0)
             self.space.charged + self.space.word + self.spacePairs(self.word_first, self.word_joins)
         else
             0;
+    }
+
+    /// Where on the line the next character would land, the word still being
+    /// built included.
+    ///
+    /// `placed` alone is not that: it only moves when a word is PLACED, and a
+    /// word can straddle an inline box -- `a<span>b</span>c` is one word, with
+    /// no boundary either side of the span. So an inline box measured off
+    /// `placed` got the cursor as of the last space, which is why the recorder
+    /// below refused it a row entirely (the cursor had not moved) and every
+    /// such span kept the node-count fallback, where `x == y`.
+    fn cursor(self: *const LineFlow) f64 {
+        if (!self.have_word) return self.placed;
+        return self.placed + self.pendingGap() + self.word;
+    }
+
+    /// The same cursor for something that is ABOUT to put content on the line.
+    /// A collapsing run owes a space for the word that follows the one just
+    /// placed, and that space is charged when the next word lands -- so between
+    /// two words the cursor is still sitting before it. `a <span>b</span>` puts
+    /// the span at 11.9219 in Chrome and not at the 8.0625 `cursor` answers.
+    fn cursorBeforeContent(self: *const LineFlow) f64 {
+        return self.placed + self.pendingGap() + self.word;
+    }
+
+    /// An inline box's own horizontal edge -- its margin, border and padding --
+    /// added to the line without ending the word it may be inside. Chrome puts
+    /// the text after `<span style="padding:0 10px">` ten pixels further along,
+    /// and it does not open a break opportunity there.
+    fn addInlineEdge(self: *LineFlow, width: f64) void {
+        if (width == 0) return;
+        self.word += width;
+        self.have_word = true;
+    }
+
+    fn placeWord(self: *LineFlow) void {
+        if (!self.have_word) return;
+        const gap = self.pendingGap();
         const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
@@ -2825,6 +2924,7 @@ const LineFlow = struct {
     fn finish(self: *LineFlow) f64 {
         self.placeWord();
         self.recordWidth();
+        self.flushLine();
         // The last segment counts unless it is empty -- and an empty FIRST
         // segment still counts, because a box holding one preserved space is a
         // line.
@@ -2872,6 +2972,38 @@ const LineFlow = struct {
 fn lineBoxHeight(self: *Element, frame: *Frame, face: text_measure.Face, size: f64) f64 {
     const halves = self.lineBoxHalves(frame, face, size);
     return halves.above + halves.below;
+}
+
+/// How far `vertical-align` lifts an inline-level box off the baseline it would
+/// otherwise sit on. Positive is up, and it moves the box's own half-boxes with
+/// it: a raised box makes the line taller at the top and no deeper at the
+/// bottom.
+///
+/// `super` and `sub` are functions of the font SIZE alone and not of the family
+/// -- Georgia, Arial and Times give the same shift at every one of 43 sizes
+/// read off headed Chrome 153 (scratch/s75/expr-valign.js) -- and the two
+/// ladders are `size/3 + 0.5` and `size/5 + 0.5` on the layout grid. A
+/// percentage is of the box's own line box, which is what the spec says and
+/// what nine readings per family there agree with.
+///
+/// `text-top`, `text-bottom`, `top` and `bottom` answer 0. The first two are a
+/// shift only when the box's content area differs from its parent's, and the
+/// last two are measured against the FINISHED line, which is the one thing not
+/// known while it is being built. All four read exactly 0 in every same-font
+/// shape of the probe above, which is the case a page hits.
+fn verticalAlignShift(self: *Element, frame: *Frame, size: f64) f64 {
+    const declared = CSSStyleDeclaration.cascadedComputedValue(self, "vertical-align", frame) orelse return 0;
+    const value = std.mem.trim(u8, declared, " \t\r\n");
+    if (std.ascii.eqlIgnoreCase(value, "super")) return layoutUnit(size / 3 + 0.5);
+    if (std.ascii.eqlIgnoreCase(value, "sub")) return -layoutUnit(size / 5 + 0.5);
+    if (std.mem.endsWith(u8, value, "%")) {
+        const percent = std.fmt.parseFloat(f64, std.mem.trim(u8, value[0 .. value.len - 1], " ")) catch return 0;
+        const font = self.resolveFont(frame);
+        const halves = self.lineBoxHalves(frame, font.face, font.size);
+        return layoutUnit((halves.above + halves.below) * percent / 100);
+    }
+    const length = CSSStyleDeclaration.cascadedComputedLength(self, "vertical-align", frame) orelse return 0;
+    return layoutUnit(length);
 }
 
 /// A line box, split at the baseline — which is where two boxes on one line are
@@ -5257,8 +5389,16 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
         .open_above = strut.above,
         .open_below = strut.below,
         .measure_width = false,
+        .sink = if (pass) |p| .{ .arena = frame.arena, .table = p.table, .nodes = p.nodes } else null,
     };
     flow.restart();
+    // The pass's origin, unwrapped once: the deferred boxes carry an absolute
+    // position and the line they are on does not know about the pass.
+    const flow_x = if (pass) |p| p.x else 0;
+    const flow_y = if (pass) |p| p.y else 0;
+    // Atomic inlines whose own row is not written until their line ends, so
+    // their contents cannot be laid out until every line here has been.
+    var atomic_subtrees: std.ArrayListUnmanaged(*Element) = .empty;
 
     // Margins cannot be added as each child is reached, because the gap between
     // two blocks belongs to neither of them: it is what their two adjoining
@@ -5299,10 +5439,11 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             if (CSSStyleDeclaration.defaultDisplayIsInline(el) and CSSStyleDeclaration.isInlineBox(el, frame)) {
                 const child_font = el.resolveFont(frame);
                 const halves = el.lineBoxHalves(frame, child_font.face, child_font.size);
+                const shift = el.verticalAlignShift(frame, child_font.size);
                 const outer_above = flow.open_above;
                 const outer_below = flow.open_below;
-                flow.open_above = @max(outer_above, halves.above);
-                flow.open_below = @max(outer_below, halves.below);
+                flow.open_above = @max(outer_above, halves.above + shift);
+                flow.open_below = @max(outer_below, halves.below - shift);
                 // Where the line cursor stands on either side of this box is
                 // where the box is and how wide it is. An inline element gets no
                 // row otherwise -- the walk hands it to the line rather than
@@ -5310,18 +5451,55 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // position, which is the last place `x == y` survives. Chrome
                 // puts the `<a>` filling an `<h2>` at x=8 with the line's own
                 // 27.5 of height (scratch/b99/expr-bounding-rect-page.js).
-                const line_x = flow.placed;
+                //
+                // The cursor is `cursor()` and not `placed`: a word can
+                // straddle the box on either side, and `placed` does not move
+                // until one is placed. See LineFlow.cursor.
+                //
+                // The box's own horizontal edges are charged to the line here,
+                // because nothing else charges them: `flowInline` walks the
+                // box's CONTENT, so a span's margin, border and padding were
+                // worth nothing at all -- the text after
+                // `<span style="padding:0 10px">` sat where the text inside it
+                // ended. Chrome puts the span of
+                // `<div style="width:400px">a<span style="padding:0 10px;
+                // border-left:3px solid;margin-left:7px">Hamburgefonstiv</span>b</div>`
+                // at x=15.0625 and 147.1484 wide (scratch/s74/expr-geom.js,
+                // `inline.padded`).
+                var edge_containing: ?f64 = content_width;
+                const margin_left = el.marginPx("margin-left", frame, &edge_containing, depth);
+                const margin_right = el.marginPx("margin-right", frame, &edge_containing, depth);
+                const edge_left = CSSStyleDeclaration.blockEdgePx(el, "left", frame, &edge_containing, depth);
+                const edge_right = CSSStyleDeclaration.blockEdgePx(el, "right", frame, &edge_containing, depth);
                 const line_y = flow.total;
+                flow.addInlineEdge(margin_left);
+                const line_x = flow.cursorBeforeContent();
+                flow.addInlineEdge(edge_left);
                 el.flowInline(frame, &flow, child_font.face, child_font.size, 1);
-                if (pass) |p| {
+                flow.addInlineEdge(edge_right);
+                const line_end = flow.cursor();
+                flow.addInlineEdge(margin_right);
+                if (pass != null) {
                     // Only a box that stayed on its line: a wrapped inline is a
                     // union of line boxes and nothing here has measured one.
-                    if (flow.total == line_y and flow.placed > line_x) {
-                        p.record(frame, el, .{
-                            .x = p.x + line_x,
-                            .y = p.y + total + line_y,
-                            .width = flow.placed - line_x,
+                    //
+                    // Held until the line ends rather than written now, because
+                    // where it sits in the line is `line_above - above` and
+                    // `line_above` is still growing: a `vertical-align: super`
+                    // span later on this line lifts the line's top and moves
+                    // every box already on it. See LineFlow.deferred.
+                    if (flow.total == line_y) {
+                        flow.defer_(.{
+                            .element = el,
+                            .x = flow_x + line_x,
+                            .base_y = flow_y + total,
+                            // An empty span with no edges leaves the cursor
+                            // where it was, and the gap `line_x` anticipated is
+                            // then never charged: it is a zero-wide box, not a
+                            // negative one.
+                            .width = @max(0, line_end - line_x),
                             .height = halves.above + halves.below,
+                            .above = halves.above + shift,
                         });
                     }
                 }
@@ -5392,36 +5570,39 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
             }
             if (el.atomicInlineHalves(frame)) |halves| {
                 const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-                const at = flow.placeAtomic(halves.above, halves.below, box.width + box.padding_x + box.border_x);
+                const shift = el.verticalAlignShift(frame, el.resolveFont(frame).size);
+                const at = flow.placeAtomic(halves.above + shift, halves.below - shift, box.width + box.padding_x + box.border_x);
                 // An atomic inline shares a line, so its inline position is the
                 // line cursor before it was placed -- Chrome puts a pair of
                 // 80px inline-blocks at `d=0,0` and `d=80,0`. The block axis is
                 // where the run of lines has got to; only the single-line case
                 // is in the matrix, so that is the only one measured.
-                if (pass) |p| {
-                    const at_x = p.x + at.inline_at;
-                    const at_y = p.y + total + at.block_at;
-                    p.record(frame, el, .{
-                        .x = at_x,
-                        .y = at_y,
+                if (pass != null) {
+                    // Down from the line's top by as much as the line's own
+                    // baseline is deeper than this box's: an `<input>` beside a
+                    // `<textarea>` is 21.5 below the top of its line in Chrome
+                    // and not 0 (`form.controls` in scratch/s74/expr-geom.js).
+                    // That is the line's final baseline, so like an inline box
+                    // this one waits for the line to end.
+                    flow.defer_(.{
+                        .element = el,
+                        .x = flow_x + at.inline_at,
+                        .base_y = flow_y + total,
                         .width = box.width + box.padding_x + box.border_x,
                         .height = box.height + box.padding_y + box.border_y,
+                        .above = halves.above + shift,
                     });
-                    // And what is INSIDE it. The walk recorded the atomic box
-                    // and went no further, so every descendant of an
-                    // inline-block or an inline-flex kept the node-count
-                    // position the table falls back to -- three children of an
-                    // `inline-flex` read 62,62 / 67,67 / 72,72, where the same
-                    // three under `display:flex` read 0,0 / 60,0 / 120,0. The
-                    // box is atomic to the LINE, not to the tree.
+                    // And what is INSIDE it, once this element's own row is in
+                    // the table -- see the loop at the end of this walk. The
+                    // walk used to record the atomic box and go no further, so
+                    // every descendant of an inline-block or an inline-flex
+                    // kept the node-count position the table falls back to:
+                    // three children of an `inline-flex` read 62,62 / 67,67 /
+                    // 72,72, where the same three under `display:flex` read
+                    // 0,0 / 60,0 / 120,0. The box is atomic to the LINE, not to
+                    // the tree.
                     if (depth < MAX_CONTAINING_BLOCK_DEPTH) {
-                        _ = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, .{
-                            .table = p.table,
-                            .static_table = p.static_table,
-                            .nodes = p.nodes,
-                            .x = at_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
-                            .y = at_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
-                        });
+                        atomic_subtrees.append(frame.arena, el) catch {};
                     }
                 }
                 continue;
@@ -5587,6 +5768,25 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     // it leaves through the bottom edge on the same terms the first one came in
     // through the top.
     if (!escapes.bottom) total += group.gap() else escaped_bottom = group;
+
+    // Now that every line here has closed, each atomic inline has its own row,
+    // so its contents can be laid out from where it actually ended up. Reading
+    // the row back is the same call `getBoundingClientRect` makes, so the box
+    // and what is inside it cannot disagree about where the subtree starts.
+    if (pass) |p| {
+        for (atomic_subtrees.items) |el| {
+            const origin = p.table.get(el) orelse continue;
+            const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+            var inner_containing: ?f64 = content_width;
+            _ = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, .{
+                .table = p.table,
+                .static_table = p.static_table,
+                .nodes = p.nodes,
+                .x = origin.x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &inner_containing, depth),
+                .y = origin.y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &inner_containing, depth),
+            });
+        }
+    }
     return .{ .total = total, .escaped_top = escaped_top, .escaped_bottom = escaped_bottom };
 }
 
@@ -5620,12 +5820,53 @@ fn atomicInlineHalves(self: *Element, frame: *Frame) ?struct { above: f64, below
 
     const dims = self.getElementDimensions(frame);
     const height = dims.height + dims.padding_y + dims.border_y;
-    if (replaced or !self.hasInlineBaseline(frame, 0)) {
-        return .{ .above = height, .below = 0 };
+    // A form control brings a baseline from the line it would edit or label
+    // even when that line holds nothing -- and it keeps it through its own
+    // `overflow: clip`, which is why this is asked before the cut-off below.
+    if (!self.hasEditingBaseline()) {
+        // An `overflow` other than `visible` cuts the box off from the line it
+        // is on: it stands on its bottom margin edge and brings no baseline,
+        // whatever it holds. Chrome puts a 40x30 `inline-block` with
+        // `overflow:hidden` and a letter in it at the top of its line, where
+        // the same box without the overflow sits 3.5 lower (`inline.baseline`
+        // in scratch/s74/expr-geom.js).
+        if (self.clipsItsOwnContent(frame) or replaced or !self.hasInlineBaseline(frame, 0)) {
+            return .{ .above = height, .below = 0 };
+        }
     }
     const font = self.resolveFont(frame);
     const below = @min(height, font_metrics.layoutBox(font.face.family, font.size).descent);
     return .{ .above = height - below, .below = below };
+}
+
+/// Whether an `overflow` other than `visible` is in force, which is what cuts
+/// an atomic inline off from the line it is on. Asked of the two axes, because
+/// either one alone is enough: `overflow-y` is what a page usually writes and
+/// the shorthand sets both.
+fn clipsItsOwnContent(self: *Element, frame: *Frame) bool {
+    for ([_][]const u8{ "overflow-x", "overflow-y" }) |axis| {
+        const declared = CSSStyleDeclaration.cascadedComputedValue(self, axis, frame) orelse continue;
+        if (!std.ascii.eqlIgnoreCase(std.mem.trim(u8, declared, " \t\r\n"), "visible")) return true;
+    }
+    return false;
+}
+
+/// Whether this control has a line of its own even when it holds no text: the
+/// editable area of a text field, the label area of a button, the closed value
+/// of a `<select>`. Chrome gives all three a real baseline -- an empty
+/// `<input>` beside a 60px spacer sits 14.5 above the line's baseline, not 18 --
+/// while a checkbox, a radio, a range and a `<textarea>` stand on their bottom
+/// edge like a replaced box (scratch/s75/expr-control-baseline.js, headed
+/// Chrome 153, all seventeen input types).
+fn hasEditingBaseline(self: *Element) bool {
+    return switch (self.getTag()) {
+        .button, .select => true,
+        .input => blk: {
+            const input_type = self.inputTypeForBox() orelse break :blk false;
+            break :blk fixedInputBox(input_type) == null;
+        },
+        else => false,
+    };
 }
 
 /// Whether this box has a line of its own for its baseline to come from, which
