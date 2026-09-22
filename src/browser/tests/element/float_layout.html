@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Floats were not laid out at all. A `float: left` box kept the position the flow
+had reached and every other float was given the same one -- so `float: right`
+sat at x=0 rather than at the far edge, two floats stacked on top of each other
+rather than beside each other, the lines next to a float were never shortened,
+`clear` pushed nothing down, and an `overflow: hidden` box around a float was 0
+tall.
+
+The four readings the layout sweep took (`float.*` in scratch/s74/expr-geom.js)
+plus eleven more, measured on headed Chrome 153 against www.scrapingcourse.com
+with scratch/s77/expr-float.js. This engine answered 2 of 15 before and answers
+15 of 15 now.
+
+The one piece deliberately NOT modelled is a float escaping a plain block into a
+later part of the document during a height-only measure: the layout pass carries
+the context everywhere, but a measure that starts at one element carries it only
+once a float is already down, because working out where each child sits costs a
+margin walk per block and a page with no floats must not pay for it.
+-->
+
+<script id=a_float_goes_to_the_edge_of_its_band>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  // Every box pins its own `box-sizing`: a page-level `* { border-box }` would
+  // otherwise decide the answer, and the two arms would not be reading the
+  // same shape at all.
+  const CB = 'box-sizing:content-box;';
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top, b.width, b.height]);
+    }
+    d.remove();
+    return out;
+  };
+
+  // A left float is at the near edge of the line and a right one at the far
+  // edge of its own containing block -- 300 wide inside an 800px host, so 240
+  // and not 740.
+  testing.expectEqual('0,0,80,40', String(boxes(
+    `<div style="${CB}width:300px"><div class=p style="${CB}float:left;width:80px;height:40px"></div></div>`)[0]));
+  testing.expectEqual('240,0,60,20', String(boxes(
+    `<div style="${CB}width:300px"><div class=p style="${CB}float:right;width:60px;height:20px"></div></div>`)[0]));
+
+  // Two left floats share the line; each starts where the one before it ended.
+  testing.expectEqual('0,0,100,30|100,0,120,50', boxes(
+    `<div style="${CB}width:300px"><div class=p style="${CB}float:left;width:100px;height:30px"></div>` +
+    `<div class=p style="${CB}float:left;width:120px;height:50px"></div></div>`).join('|'));
+
+  // One that does not fit beside them drops past the shallowest of them.
+  testing.expectEqual('0,0,200,30|0,30,150,20', boxes(
+    `<div style="${CB}width:300px"><div class=p style="${CB}float:left;width:200px;height:30px"></div>` +
+    `<div class=p style="${CB}float:left;width:150px;height:20px"></div></div>`).join('|'));
+
+  // The MARGIN box is what takes the room: the second float starts at 100, not
+  // at the first one's border edge of 90.
+  testing.expectEqual('10,5,80,40|100,0,80,40', boxes(
+    `<div style="${CB}width:300px"><div class=p style="${CB}float:left;width:80px;height:40px;margin:5px 10px"></div>` +
+    `<div class=p style="${CB}float:left;width:80px;height:40px"></div></div>`).join('|'));
+
+  // A float is shrink-to-fit, and a right one is at the far edge of that.
+  const shrink = boxes(`<div style="${CB}width:300px"><div class=p style="${CB}float:right">Hamburgefonstiv</div></div>`)[0];
+  testing.expectEqual(300, shrink[0] + shrink[2]);
+
+  host.remove();
+}
+</script>
+
+<script id=lines_beside_a_float_are_shortened>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const T = 'Hamburgefonstiv';
+  const height = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const h = d.querySelector('.p').getBoundingClientRect().height;
+    d.remove();
+    return h;
+  };
+
+  // The band narrows and widens as the floats end: 160 of room for the first
+  // line, 220 for the second once the right float has stopped, and 220 again
+  // for the third -- one word each, so three lines and not the two the whole
+  // 300 would take.
+  testing.expectEqual(54, height(
+    `<div style="${CB}width:300px"><div style="${CB}float:left;width:80px;height:40px"></div>` +
+    `<div style="${CB}float:right;width:60px;height:20px"></div>` +
+    `<div class=p>${T} ${T} ${T}</div></div>`));
+
+  // A line whose first word does not fit beside the float starts BELOW it
+  // instead of overflowing: 20 of float and then one full-width line of two
+  // words, which is 38 and not the 36 two shortened lines would be.
+  testing.expectEqual(38, height(
+    `<div style="${CB}width:300px"><div style="${CB}float:left;width:200px;height:20px"></div>` +
+    `<div class=p>${T} ${T}</div></div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=clear_starts_a_box_below_the_floats_it_names>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const T = 'Hamburgefonstiv';
+  const top = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const b = d.querySelector('.p').getBoundingClientRect();
+    const t = b.top - d.getBoundingClientRect().top;
+    d.remove();
+    return t;
+  };
+
+  const LEFT = `<div style="${CB}float:left;width:80px;height:40px"></div>`;
+  const RIGHT = `<div style="${CB}float:right;width:60px;height:70px"></div>`;
+
+  testing.expectEqual(40, top(`<div style="${CB}width:300px">${LEFT}<div class=p style="clear:left">${T}</div></div>`));
+  // A side with no float on it clears nothing, so the box stays where the
+  // stack put it.
+  testing.expectEqual(0, top(`<div style="${CB}width:300px">${LEFT}<div class=p style="clear:right">${T}</div></div>`));
+  // `both` takes the deeper of the two.
+  testing.expectEqual(70, top(`<div style="${CB}width:300px">${LEFT}${RIGHT}<div class=p style="clear:both">${T}</div></div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=only_a_formatting_root_grows_to_hold_a_float>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const height = (style) => {
+    const d = document.createElement('div');
+    d.innerHTML = `<div class=p style="${CB}${style}">` +
+      `<div style="${CB}float:left;width:80px;height:40px"></div></div>`;
+    host.appendChild(d);
+    const h = d.querySelector('.p').getBoundingClientRect().height;
+    d.remove();
+    return h;
+  };
+
+  testing.expectEqual(40, height('overflow:hidden;width:300px'));
+  testing.expectEqual(40, height('display:flow-root;width:300px'));
+  // A plain block does not: that is exactly what the float escaping it means,
+  // and what `clear` exists to work around.
+  testing.expectEqual(0, height('width:300px'));
+
+  host.remove();
+}
+</script>

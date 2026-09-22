@@ -2482,6 +2482,140 @@ const SpaceCost = struct {
     }
 };
 
+/// One float's margin box, in the coordinates of the block formatting context
+/// that holds it: x from the context's content-box left edge, y from its top.
+const FloatBox = struct {
+    left: f64,
+    right: f64,
+    top: f64,
+    bottom: f64,
+    side: CSSStyleDeclaration.FloatSide,
+};
+
+/// The floats of one block formatting context, seen from a block INSIDE it.
+///
+/// A float is taken out of its parent's flow but not out of the page: the lines
+/// beside it are shortened, a box that `clear`s it starts below it, and the
+/// context's own root grows to hold it. None of that is the floated box's own
+/// business, so the three readings all come from here.
+///
+/// The list belongs to whichever ancestor established the context -- floats
+/// escape a plain block but not a `flow-root`, an `overflow: hidden` box or a
+/// flex container -- and the boxes in it are in THAT box's coordinates. `ox`
+/// and `oy` are where the block asking sits inside it, so a local offset is a
+/// context one plus these and back again. `width` is the context root's content
+/// width, which is where a right float's outer edge is.
+const FloatContext = struct {
+    boxes: *std.ArrayListUnmanaged(FloatBox),
+    ox: f64,
+    oy: f64,
+    width: f64,
+
+    const Band = struct { left: f64, right: f64 };
+
+    /// What is left of the line at this height, in context coordinates. A float
+    /// occupies its own band down to its margin-box bottom; the probe is a
+    /// point rather than the line's full height, which is what a line whose
+    /// height is not settled yet can ask.
+    fn bandAt(self: FloatContext, y: f64) Band {
+        var band: Band = .{ .left = 0, .right = self.width };
+        for (self.boxes.items) |box| {
+            if (y < box.top or y >= box.bottom) continue;
+            switch (box.side) {
+                .left => band.left = @max(band.left, box.right),
+                .right => band.right = @min(band.right, box.left),
+            }
+        }
+        if (band.right < band.left) band.right = band.left;
+        return band;
+    }
+
+    /// The first height below `y` at which some float stops, or null when none
+    /// does -- which is what says a box that does not fit has nowhere lower to
+    /// go and must overflow the band it is in.
+    fn nextBottomBelow(self: FloatContext, y: f64) ?f64 {
+        var out: ?f64 = null;
+        for (self.boxes.items) |box| {
+            if (box.bottom <= y) continue;
+            if (out == null or box.bottom < out.?) out = box.bottom;
+        }
+        return out;
+    }
+
+    /// How far down a box that clears these sides has to start, in context
+    /// coordinates.
+    fn clearanceAt(self: FloatContext, sides: CSSStyleDeclaration.ClearSides, y: f64) f64 {
+        var out = y;
+        for (self.boxes.items) |box| {
+            const wanted = switch (box.side) {
+                .left => sides.left,
+                .right => sides.right,
+            };
+            if (wanted and box.bottom > out) out = box.bottom;
+        }
+        return out;
+    }
+
+    /// The deepest point any float reaches, which is what the context's own
+    /// root has to grow to: an `overflow: hidden` box holding nothing but a
+    /// 40px float is 40 tall in Chrome where the stack alone says 0.
+    fn lowestBottom(self: FloatContext) f64 {
+        var out: f64 = 0;
+        for (self.boxes.items) |box| out = @max(out, box.bottom);
+        return out;
+    }
+
+    /// Where a float of this outer size goes, given everything already placed.
+    /// It starts at the height the flow had reached and walks down past the
+    /// floats it cannot fit beside, which is the rule that stacks two left
+    /// floats side by side and drops the third onto its own row.
+    /// The same band, cut down to the block the float is a child of. A float's
+    /// containing block is its parent, not the context root: the `float: right`
+    /// box of a 300px block inside an 800px one is at 240 and not at 740, even
+    /// though the exclusion it dodges is the 800px box's.
+    fn bandIn(self: FloatContext, y: f64, block_width: f64) Band {
+        var band = self.bandAt(y);
+        band.left = @max(band.left, self.ox);
+        band.right = @min(band.right, self.ox + block_width);
+        if (band.right < band.left) band.right = band.left;
+        return band;
+    }
+
+    fn place(
+        self: FloatContext,
+        side: CSSStyleDeclaration.FloatSide,
+        width: f64,
+        height: f64,
+        top: f64,
+        block_width: f64,
+    ) FloatBox {
+        var y = top;
+        var guard: u8 = 0;
+        while (guard < MAX_FLOAT_DESCENTS) : (guard += 1) {
+            const band = self.bandIn(y, block_width);
+            if (band.right - band.left >= width) break;
+            y = self.nextBottomBelow(y) orelse break;
+        }
+        const band = self.bandIn(y, block_width);
+        const left = switch (side) {
+            .left => band.left,
+            .right => @max(band.left, band.right - width),
+        };
+        return .{
+            .left = left,
+            .right = left + width,
+            .top = y,
+            .bottom = y + height,
+            .side = side,
+        };
+    }
+};
+
+/// How many rows of floats one more float will step down past before it gives
+/// up and overflows the last of them. A bound rather than a rule: the loop
+/// terminates on its own, and this only keeps a pathological page cheap.
+const MAX_FLOAT_DESCENTS = 64;
+
 const LineFlow = struct {
     keeps_newlines: bool,
     /// Whether a run of document white space renders as one space. It is what
@@ -2505,6 +2639,20 @@ const LineFlow = struct {
     /// Whether the width of the text is wanted at all: the height-only callers
     /// skip a measure per text node by saying no.
     measure_width: bool,
+    /// The floats this block's lines have to fit beside, or null when there are
+    /// none to fit beside -- which is every block on a page without floats, and
+    /// what keeps `applyBand` off the hot path.
+    floats: ?FloatContext = null,
+    /// The whole content width, which is what `box` is when no float reaches
+    /// the line: `box` itself is the band and shrinks line by line.
+    full_box: f64 = 0,
+    /// Where in the block's content box the run being built starts. The run's
+    /// own `total` is measured from here, and the two together are the height
+    /// at which the current line asks the floats what is left of it.
+    base: f64 = 0,
+    /// How far in from the content box's left edge the current line starts,
+    /// which is where a left float pushed it.
+    line_left: f64 = 0,
     /// `text-transform: capitalize`'s word start, for the same reason
     /// CollapsedRun has one: a word can straddle two text nodes.
     at_word_start: bool = true,
@@ -2600,6 +2748,23 @@ const LineFlow = struct {
         // Anything still here has already been flushed by whoever ended the
         // line; a run that restarts without one placed nothing.
         self.deferred.clearRetainingCapacity();
+        self.applyBand();
+    }
+
+    /// Narrows the line about to be built to what the floats leave of it.
+    ///
+    /// Called wherever a line begins, because that is where the answer can
+    /// change: a 300px block beside an 80px left float and a 60px right one
+    /// wraps at 160 for as long as both reach the line, at 220 once the shorter
+    /// one has ended, and at 300 below them both. That ladder is the whole of
+    /// why `float.basic` in scratch/s74/expr-geom.js is 54 tall in Chrome and
+    /// was 36 here: three lines of one word, not two of one and a half.
+    fn applyBand(self: *LineFlow) void {
+        const floats = self.floats orelse return;
+        const band = floats.bandAt(floats.oy + self.base + self.total);
+        self.line_left = @max(0, band.left - floats.ox);
+        const right = @min(self.full_box, band.right - floats.ox);
+        self.box = @max(0, right - self.line_left);
     }
 
     /// The run's height, and a fresh run after it.
@@ -2771,6 +2936,7 @@ const LineFlow = struct {
 
     fn placeAtomic(self: *LineFlow, above: f64, below: f64, width: f64) Placed {
         self.placeWord();
+        if (self.wraps) self.descendPastFloats(width);
         if (above > self.line_above) self.line_above = above;
         if (below > self.line_below) self.line_below = below;
         var inline_at = self.placed;
@@ -2809,6 +2975,7 @@ const LineFlow = struct {
         self.total += self.line_above + self.line_below;
         self.line_above = @max(self.strut_above, self.open_above);
         self.line_below = @max(self.strut_below, self.open_below);
+        self.applyBand();
     }
 
     /// The line that is ending is a candidate for the box's width, which is the
@@ -2869,8 +3036,27 @@ const LineFlow = struct {
         self.have_word = true;
     }
 
+    /// A line that cannot fit its first word beside a float starts BELOW that
+    /// float rather than overflowing it: `lines.oneFloat` in
+    /// scratch/s77/expr-float.js is 38 tall in Chrome -- a 20px float and then
+    /// one full-width line -- and not the 36 two shortened lines would be. Only
+    /// an empty line may move; once a word is down the line is where it is.
+    fn descendPastFloats(self: *LineFlow, need: f64) void {
+        const floats = self.floats orelse return;
+        if (need <= self.box or need > self.full_box) return;
+        if (self.placed > 0 or self.deferred.items.len > 0) return;
+        var guard: u8 = 0;
+        while (guard < MAX_FLOAT_DESCENTS) : (guard += 1) {
+            const next = floats.nextBottomBelow(floats.oy + self.base + self.total) orelse return;
+            self.total = next - floats.oy - self.base;
+            self.applyBand();
+            if (need <= self.box) return;
+        }
+    }
+
     fn placeWord(self: *LineFlow) void {
         if (!self.have_word) return;
+        if (self.wraps) self.descendPastFloats(self.word);
         const gap = self.pendingGap();
         const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
@@ -5083,7 +5269,12 @@ fn clientHeightOf(self: *Element, frame: *Frame, dims: Dimensions, visibility_ca
     // box and 80 from this `@max`. The bounds have to be applied to whatever
     // this branch lands on, which is why they are applied twice rather than
     // once at the source.
-    const content = @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total);
+    var content = @max(dims.height, self.contentHeight(frame, visibility_cache, .in_flow, dims.width, 0, null).total);
+    // The measure above cannot see a float outside this box, and a float
+    // outside it is what decides how many lines the text inside it takes. The
+    // pass can see them, so it leaves its answer for this one reader; null on
+    // every page without a float. See Frame.float_heights.
+    if (frame.floatHeightOf(self)) |beside| content = @max(content, beside);
     return CSSStyleDeclaration.clampHeight(self, frame, content, .{
         .border_box = CSSStyleDeclaration.usesBorderBox(self, frame),
         .padding_y = dims.padding_y,
@@ -5122,6 +5313,11 @@ pub fn boundingClientRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMR
 /// an ancestor's transform turns about the ancestor's own untransformed box, so
 /// asking for its rect instead would compose that ancestor's transform twice.
 fn layoutRectValuesAt(self: *Element, frame: *Frame, depth: u8) DOMRect.Data {
+    // The origin at the end of this function comes out of the pass's table, so
+    // the pass is going to run either way; asking for the position first means
+    // the height below can consult what the pass saw of the floats around this
+    // box (Frame.float_heights) on the FIRST read and not only the second.
+    _ = frame.positionOf(self);
     const dims = self.getElementDimensions(frame);
 
     // getBoundingClientRect is the BORDER box, the same box offsetWidth
@@ -5457,6 +5653,14 @@ pub fn layoutPassPositionedSubtrees(
 // Both measured at dpr 2 with
 // tools/fingerprint/scratch/expr-inline-content-lines.js.
 fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
+    return self.contentHeightIn(frame, visibility_cache, extent, content_width, depth, pass, null);
+}
+
+/// The same walk, told which floats are already down around it. Only
+/// `blockContent` has anything to say to them, and only it passes one on: a
+/// flex line, a column strip and a table are each their own formatting context,
+/// so a float outside them stops at their edge.
+fn contentHeightIn(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass, floats: ?FloatContext) ContentHeight {
     // A flex ROW puts its items beside one another, so the walk below -- which
     // stacks -- is the wrong one for it. Nothing had ever placed a flex line:
     // three 60x20 children of a `display:flex` container sat at 0,0 / 0,20 /
@@ -5479,12 +5683,12 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     if (self.multiColumnContent(frame, visibility_cache, extent, content_width, depth, pass)) |columns| {
         return columns;
     }
-    return self.blockContent(frame, visibility_cache, extent, content_width, depth, pass);
+    return self.blockContent(frame, visibility_cache, extent, content_width, depth, pass, floats);
 }
 
 /// The stack itself: every content height that is not a flex line or a column
 /// strip lands here.
-fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
+fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass, outer_floats: ?FloatContext) ContentHeight {
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -5498,6 +5702,36 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     // `group` at the moment a pay-out is SKIPPED.
     var escaped_top: MarginGroup = .{};
     var escaped_bottom: MarginGroup = .{};
+
+    // The floats this block's own children go into, used only when this box is
+    // the one that established the context. An ordinary block passes its
+    // parent's list down instead, which is what lets a float laid down beside
+    // one sibling shorten the lines of the next.
+    var own_floats: std.ArrayListUnmanaged(FloatBox) = .empty;
+    // A scrollable extent stacks floats like any other child (see Extent.counts)
+    // and so must not also push them sideways, or the same box is counted twice.
+    // A width-less measure has no band to cut, either.
+    const floats: ?FloatContext = blk: {
+        const width = content_width orelse break :blk null;
+        if (extent.counts(.floated)) break :blk null;
+        if (outer_floats) |outer| {
+            if (!CSSStyleDeclaration.establishesBlockFormattingContext(self, frame)) break :blk outer;
+        }
+        break :blk .{ .boxes = &own_floats, .ox = 0, .oy = 0, .width = width };
+    };
+    // Whether this box has to grow to hold what floated inside it. Only a box
+    // that really established the context does: a plain block does NOT, which
+    // is exactly what a float escaping it means and what `clear` exists to work
+    // around. `hold.plainBlock` in scratch/s77/expr-float.js is 0 tall around a
+    // 40px float in Chrome where `hold.bfc` beside it is 40.
+    //
+    // Not the same test as owning the list: a measure that starts partway down
+    // the tree has no context handed to it and makes one so the floats below
+    // have somewhere to go, without that making the box a formatting root.
+    const owns_floats = if (floats) |f|
+        f.boxes == &own_floats and CSSStyleDeclaration.establishesBlockFormattingContext(self, frame)
+    else
+        false;
 
     const font = self.resolveFont(frame);
     const strut = self.lineBoxHalves(frame, font.face, font.size);
@@ -5514,6 +5748,8 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
         .open_below = strut.below,
         .measure_width = false,
         .sink = if (pass) |p| .{ .arena = frame.arena, .table = p.table, .nodes = p.nodes } else null,
+        .floats = floats,
+        .full_box = content_width orelse 0,
     };
     flow.restart();
     // The pass's origin, unwrapped once: the deferred boxes carry an absolute
@@ -5554,6 +5790,14 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
 
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
+        // Where the run being built starts, which is what the lines in it add
+        // their own offset to when they ask the floats for a band. `total` only
+        // moves between runs -- a flush, a block child -- so the top of the
+        // loop is every place it can have changed since the flow last looked.
+        if (flow.base != total) {
+            flow.base = total;
+            flow.applyBand();
+        }
         if (node.is(Element)) |el| {
             if (el.getTag() == .br) {
                 flow.placeWord();
@@ -5615,7 +5859,7 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                     if (flow.total == line_y) {
                         flow.defer_(.{
                             .element = el,
-                            .x = flow_x + line_x,
+                            .x = flow_x + flow.line_left + line_x,
                             .base_y = flow_y + total,
                             // An empty span with no edges leaves the cursor
                             // where it was, and the gap `line_x` anticipated is
@@ -5640,19 +5884,76 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                 // `scratch/b74/expr-inflow-position-matrix.js`. So it takes a
                 // position and does not advance `total`.
                 //
+                // Where ALONG the line it goes is the float context's answer
+                // and not `staticInlineOffset`'s: a `float: right` box is at
+                // the far edge of the band, and a second `float: left` one sits
+                // beside the first rather than on top of it. Placed here rather
+                // than in the pass, because the floats have to be on the list
+                // whether or not anyone is recording positions -- the lines of
+                // the siblings that follow are shortened by them either way.
+                var float_box: ?PlacedBox = null;
+                if (kind == .floated) {
+                    if (floats) |f| {
+                        const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                        const margin_left = el.marginPx("margin-left", frame, &margin_containing, depth);
+                        const margin_right = el.marginPx("margin-right", frame, &margin_containing, depth);
+                        const margins = el.verticalMargins(frame, &margin_containing, depth);
+                        // A float's own height is not the whole of it: an
+                        // auto-height float is as tall as what it holds, which
+                        // is the same correction the in-flow branch below makes
+                        // for a block child.
+                        var inner = box.height;
+                        if (!box.explicit_height and depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                            inner = @max(inner, el.contentHeight(
+                                frame,
+                                visibility_cache,
+                                extent,
+                                box.width,
+                                depth + 1,
+                                null,
+                            ).total);
+                        }
+                        const border_w = box.width + box.padding_x + box.border_x;
+                        const border_h = inner + box.padding_y + box.border_y;
+                        const at = f.place(
+                            CSSStyleDeclaration.floatSide(el, frame) orelse .left,
+                            border_w + margin_left + margin_right,
+                            border_h + margins.top + margins.bottom,
+                            f.oy + total + flow.total,
+                            content_width orelse 0,
+                        );
+                        f.boxes.append(frame.arena, at) catch {};
+                        float_box = .{
+                            .x = at.left - f.ox + margin_left,
+                            .y = at.top - f.oy + margins.top,
+                            .width = border_w,
+                            .height = border_h,
+                        };
+                        // The line being built now has less of the band than it
+                        // did, and so does every line after it.
+                        flow.applyBand();
+                    }
+                }
                 if (pass) |p| {
-                    const out_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
-                    const at: PlacedBox = .{
-                        .x = p.x + el.staticInlineOffset(
-                            frame,
-                            content_width,
-                            out_box.width + out_box.padding_x + out_box.border_x,
-                            &margin_containing,
-                            depth,
-                        ),
-                        .y = p.y + total,
-                        .width = out_box.width + out_box.padding_x + out_box.border_x,
-                        .height = out_box.height + out_box.padding_y + out_box.border_y,
+                    const at: PlacedBox = if (float_box) |box| .{
+                        .x = p.x + box.x,
+                        .y = p.y + box.y,
+                        .width = box.width,
+                        .height = box.height,
+                    } else blk: {
+                        const out_box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                        break :blk .{
+                            .x = p.x + el.staticInlineOffset(
+                                frame,
+                                content_width,
+                                out_box.width + out_box.padding_x + out_box.border_x,
+                                &margin_containing,
+                                depth,
+                            ),
+                            .y = p.y + total,
+                            .width = out_box.width + out_box.padding_x + out_box.border_x,
+                            .height = out_box.height + out_box.padding_y + out_box.border_y,
+                        };
                     };
                     // A float leaves the block flow but still starts where the
                     // flow had got to, which is what Chrome reports: the float
@@ -5668,7 +5969,25 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                     // 23,63 behind a 40px sibling in a host whose content box
                     // starts at 23,23 (scratch/h86/expr-h86-offsetparent.js).
                     switch (kind) {
-                        .floated => p.record(frame, el, at),
+                        .floated => {
+                            p.record(frame, el, at);
+                            // And what is INSIDE it. Without this every
+                            // descendant of a float kept the node-count
+                            // fallback, where x == y -- the same hole the
+                            // atomic inlines had. A float establishes its own
+                            // formatting context, so nothing outside reaches in.
+                            if (float_box != null and depth < MAX_CONTAINING_BLOCK_DEPTH) {
+                                const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
+                                var inner_containing: ?f64 = content_width;
+                                _ = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, .{
+                                    .table = p.table,
+                                    .static_table = p.static_table,
+                                    .nodes = p.nodes,
+                                    .x = at.x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &inner_containing, depth),
+                                    .y = at.y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &inner_containing, depth),
+                                });
+                            }
+                        },
                         .positioned => {
                             // Its own block-axis margin moves it from there.
                             // The inline axis already carried one --
@@ -5710,7 +6029,7 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                     // this one waits for the line to end.
                     flow.defer_(.{
                         .element = el,
-                        .x = flow_x + at.inline_at,
+                        .x = flow_x + flow.line_left + at.inline_at,
                         .base_y = flow_y + total,
                         .width = box.width + box.padding_x + box.border_x,
                         .height = box.height + box.padding_y + box.border_y,
@@ -5740,6 +6059,30 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                 group = .{};
                 total += lines;
                 placed = true;
+            }
+
+            // A box that `clear`s starts below every float on the sides it
+            // names, which is the whole of what clearance is: the `clear: left`
+            // block of `float.clear` in scratch/s74/expr-geom.js is at y=40 in
+            // Chrome, under a 40px left float, where the stack alone puts it at
+            // 0. Asked only of a box that declares one, and only when there is
+            // a float for it to clear.
+            if (floats) |f| {
+                if (f.boxes.items.len > 0) {
+                    const sides = CSSStyleDeclaration.clearSides(el, frame);
+                    if (sides.any()) {
+                        const cleared = f.clearanceAt(sides, f.oy + total) - f.oy;
+                        if (cleared > total) {
+                            // Clearance is not a margin: it absorbs the gap
+                            // that would have gone here rather than adding to
+                            // it, so the group is spent and the box starts at
+                            // the float's bottom edge.
+                            total = cleared;
+                            group = .{};
+                            placed = true;
+                        }
+                    }
+                }
             }
 
             const box = el.dimensionsIn(frame, true, depth + 1, true, content_width);
@@ -5781,7 +6124,20 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
             // self-collapsing branch below must not pay it -- the payout at the
             // end of this block computes the identical value.
             var child_pass: ?PositionPass = null;
-            if (pass) |p| {
+            // The same floats, seen from inside this child: a float laid down
+            // beside one sibling shortens the lines of the next, and of the
+            // next one's children, until a box that establishes its own
+            // formatting context stops it.
+            var child_floats: ?FloatContext = null;
+            // Both of those need the same two numbers -- where the child's
+            // content box starts, on each axis -- and finding them costs a
+            // margin walk, so they are found once and only when someone wants
+            // them. A float that has not been laid down yet cannot reach a box
+            // this walk has already passed, so an empty list is worth nothing
+            // to a child; the document-wide pass is computing these anyway.
+            const wants_offsets = pass != null or
+                (if (floats) |f| f.boxes.items.len > 0 else false);
+            if (wants_offsets) {
                 // `containerMarginPx` and not `marginPx`: the two differ on
                 // exactly one element, `<body>`, whose UA margin is a fallback
                 // the cascade cannot answer for. The stacking walk asks
@@ -5799,27 +6155,40 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
                 // the position is written, which is before the walk descends.
                 placement.joinGroup(el.escapedTopMargin(frame, &margin_containing, depth));
                 const gap = if (placed or !escapes.top) placement.gap() else 0;
-                const child_y = p.y + total + gap;
-                const child_x = p.x + el.staticInlineOffset(
+                const inline_at = el.staticInlineOffset(
                     frame,
                     content_width,
                     box.width + box.padding_x + box.border_x,
                     &margin_containing,
                     depth,
                 );
-                p.record(frame, el, .{
-                    .x = child_x,
-                    .y = child_y,
-                    .width = box.width + box.padding_x + box.border_x,
-                    .height = box.height + box.padding_y + box.border_y,
-                });
-                child_pass = .{
-                    .table = p.table,
-                    .static_table = p.static_table,
-                    .nodes = p.nodes,
-                    .x = child_x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth),
-                    .y = child_y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth),
-                };
+                const edge_left = CSSStyleDeclaration.blockEdgePx(el, "left", frame, &margin_containing, depth);
+                const edge_top = CSSStyleDeclaration.blockEdgePx(el, "top", frame, &margin_containing, depth);
+                if (pass) |p| {
+                    const child_y = p.y + total + gap;
+                    const child_x = p.x + inline_at;
+                    p.record(frame, el, .{
+                        .x = child_x,
+                        .y = child_y,
+                        .width = box.width + box.padding_x + box.border_x,
+                        .height = box.height + box.padding_y + box.border_y,
+                    });
+                    child_pass = .{
+                        .table = p.table,
+                        .static_table = p.static_table,
+                        .nodes = p.nodes,
+                        .x = child_x + edge_left,
+                        .y = child_y + edge_top,
+                    };
+                }
+                if (floats) |f| {
+                    child_floats = .{
+                        .boxes = f.boxes,
+                        .ox = f.ox + inline_at + edge_left,
+                        .oy = f.oy + total + gap + edge_top,
+                        .width = f.width,
+                    };
+                }
             }
 
             var inner = box.height;
@@ -5835,7 +6204,14 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
             // auto-height part of the tree and the cost it reports is not the
             // cost of laying the document out.
             if (depth < MAX_CONTAINING_BLOCK_DEPTH and (!box.explicit_height or child_pass != null)) {
-                held = el.contentHeight(frame, visibility_cache, extent, box.width, depth + 1, child_pass);
+                held = el.contentHeightIn(frame, visibility_cache, extent, box.width, depth + 1, child_pass, child_floats);
+                // A box beside a float cannot re-derive this height on its own
+                // -- how many lines it takes depends on a box outside its
+                // subtree -- so the pass leaves the answer where the isolated
+                // measure can find it. See Frame.float_heights.
+                if (child_pass != null and child_floats != null) {
+                    frame.recordFloatHeight(el, held.total);
+                }
                 if (!box.explicit_height) inner = @max(inner, held.total) else held = .{};
             }
             // The height the child ENDS UP with, now that the walk knows what it
@@ -5892,6 +6268,15 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     // it leaves through the bottom edge on the same terms the first one came in
     // through the top.
     if (!escapes.bottom) total += group.gap() else escaped_bottom = group;
+
+    // A box that established the context grows to hold what floated inside it:
+    // an `overflow: hidden` box whose only child is a 40px left float is 40 tall
+    // in Chrome where the stack alone says 0 (`float.bfc` in
+    // scratch/s74/expr-geom.js). A plain block does NOT -- that is exactly what
+    // the float escaping it means, and what `clear` exists to work around.
+    if (owns_floats) {
+        if (floats) |f| total = @max(total, f.lowestBottom());
+    }
 
     // Now that every line here has closed, each atomic inline has its own row,
     // so its contents can be laid out from where it actually ended up. Reading
@@ -6561,7 +6946,7 @@ fn multiColumnContent(
     const available = content_width orelse return null;
     const tracks = self.columnTracks(frame, available) orelse return null;
 
-    const strip = self.blockContent(frame, visibility_cache, extent, tracks.width, depth, pass);
+    const strip = self.blockContent(frame, visibility_cache, extent, tracks.width, depth, pass, null);
     var share = strip.total / tracks.count;
 
     // A line box is the one thing a column break cannot land inside, so a strip

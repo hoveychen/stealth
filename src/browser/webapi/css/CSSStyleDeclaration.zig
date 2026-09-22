@@ -3383,6 +3383,51 @@ pub fn flowKind(element: *Element, frame: *Frame) FlowKind {
     return .in_flow;
 }
 
+/// Which side a float is pulled to, or null when the box does not float.
+///
+/// `flowKind` above already says THAT a box floats; this says which way, which
+/// is what decides where along the line it lands. The logical keywords are
+/// resolved as if the writing mode were horizontal-tb and the direction ltr,
+/// which is what every page the sweep visits actually is.
+pub const FloatSide = enum { left, right };
+
+pub fn floatSide(element: *Element, frame: *Frame) ?FloatSide {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    if (cascadedKeyword(style_manager, element, "position")) |position| {
+        if (std.ascii.eqlIgnoreCase(position, "absolute") or
+            std.ascii.eqlIgnoreCase(position, "fixed")) return null;
+    }
+    const float = cascadedKeyword(style_manager, element, "float") orelse return null;
+    if (std.ascii.eqlIgnoreCase(float, "left") or
+        std.ascii.eqlIgnoreCase(float, "inline-start")) return .left;
+    if (std.ascii.eqlIgnoreCase(float, "right") or
+        std.ascii.eqlIgnoreCase(float, "inline-end")) return .right;
+    return null;
+}
+
+/// The sides this box refuses to sit beside a float on. Both false is the
+/// common answer -- `clear` is `none` on all but a handful of boxes -- so the
+/// caller can skip the walk that finds the floats entirely.
+pub const ClearSides = struct {
+    left: bool = false,
+    right: bool = false,
+
+    pub fn any(self: ClearSides) bool {
+        return self.left or self.right;
+    }
+};
+
+pub fn clearSides(element: *Element, frame: *Frame) ClearSides {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const value = cascadedKeyword(style_manager, element, "clear") orelse return .{};
+    if (std.ascii.eqlIgnoreCase(value, "both")) return .{ .left = true, .right = true };
+    if (std.ascii.eqlIgnoreCase(value, "left") or
+        std.ascii.eqlIgnoreCase(value, "inline-start")) return .{ .left = true };
+    if (std.ascii.eqlIgnoreCase(value, "right") or
+        std.ascii.eqlIgnoreCase(value, "inline-end")) return .{ .right = true };
+    return .{};
+}
+
 /// Where an element's children go relative to one another, for the one
 /// question that needs it: how much a box's children can put to the right of
 /// its own edge.
