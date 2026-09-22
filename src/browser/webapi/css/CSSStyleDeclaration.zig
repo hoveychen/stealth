@@ -3972,6 +3972,30 @@ pub fn whiteSpaceCollapse(element: *Element, frame: *Frame) []const u8 {
     return cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse "collapse";
 }
 
+/// Whether this element's lines run down the page rather than across it, which
+/// swaps which physical axis is the block one: a `writing-mode: vertical-rl`
+/// box stacks its line boxes horizontally, so its `width` is the block extent
+/// its content decides and its `height` is the inline extent its lines wrap in.
+/// Measured on Chrome 153 (scratch/s74/expr-geom.js, `writing.vertRl`):
+/// `<div style="writing-mode:vertical-rl;height:200px">Hamburgefonstiv</div>`
+/// in an 800px host is 18 wide and 200 tall -- one column of 16px Georgia --
+/// where this engine filled the host and answered 800.
+///
+/// `sideways-lr` / `sideways-rl` turn the glyphs rather than the lines, but the
+/// axes they swap are the same ones. The legacy SVG spellings `tb` and `tb-rl`
+/// are vertical too; `lr`, `lr-tb`, `rl` and `rl-tb` are the horizontal ones
+/// (chrome_keywords.zig has the accepted set).
+pub fn writesVertically(element: *Element, frame: *Frame) bool {
+    const name = "writing-mode";
+    const mode = cascadedOrUaInherited(element, frame, name, comptime .wrap(name)) orelse
+        cascadedOrUaInherited(element, frame, "-webkit-writing-mode", .wrap("-webkit-writing-mode")) orelse
+        return false;
+    inline for (.{ "vertical-rl", "vertical-lr", "sideways-rl", "sideways-lr", "tb", "tb-rl" }) |vertical| {
+        if (std.ascii.eqlIgnoreCase(mode, vertical)) return true;
+    }
+    return false;
+}
+
 /// The `white-space-collapse` this element DECLARES -- its own cascade, then the
 /// UA stylesheet -- or null when it has none of its own and inherits one.
 ///

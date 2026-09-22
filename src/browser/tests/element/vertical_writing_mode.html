@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A vertical writing mode was not laid out at all. `writing-mode: vertical-rl`
+stacks its line boxes ACROSS the page, so the box's width is the block extent
+its content decides and its height is the inline extent its lines wrap in --
+and this engine kept the horizontal model, filling its containing block:
+`<div style="writing-mode:vertical-rl;height:200px">Hamburgefonstiv</div>` in
+an 800px host measured 800 wide where Chrome makes it 18, one column of 16px
+Georgia.
+
+Measured on headed Chrome 153 against www.example.com
+(scratch/s85/expr-vwm.js, all thirteen readings).
+
+What is modelled here is the axis swap and the two rules that hang off it: a
+vertical box fills its containing block's HEIGHT while that block writes the
+same way, and a horizontal box inside a vertical one has no width to fill and
+takes its content's. Turning the line boxes themselves is not -- the inline
+positions inside a vertical box are still the horizontal ones.
+-->
+
+<script id=lines_stack_across_a_vertical_box>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  // Every box pins its own `box-sizing`: a page-level `* { border-box }` would
+  // otherwise decide the answer, and the two arms would not be reading the
+  // same shape at all.
+  const CB = 'box-sizing:content-box;';
+  const box = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const b = d.querySelector('.p').getBoundingClientRect();
+    d.remove();
+    return b.width + ',' + b.height;
+  };
+  const T = 'Hamburgefonstiv';
+  const vertical = (extra, content) => box(
+    `<div class=p style="${CB}writing-mode:vertical-rl;${extra}">${content ?? T}</div>`);
+
+  // One column of text in the 200px the author gave: 18 of line box across,
+  // 200 of column down.
+  testing.expectEqual('18,200', vertical('height:200px'));
+
+  // `vertical-lr` and `sideways-rl` turn the same axes -- which side the
+  // columns start from is not a length either reading can see -- and the
+  // `-webkit-` spelling is the same property.
+  testing.expectEqual('18,200', box(
+    `<div class=p style="${CB}writing-mode:vertical-lr;height:200px">${T}</div>`));
+  testing.expectEqual('18,200', box(
+    `<div class=p style="${CB}writing-mode:sideways-rl;height:200px">${T}</div>`));
+  testing.expectEqual('18,200', box(
+    `<div class=p style="${CB}-webkit-writing-mode:vertical-rl;height:200px">${T}</div>`));
+
+  // Text too long for the column wraps into a second one, and the box widens
+  // by a line box rather than lengthening.
+  testing.expectEqual('36,60', vertical('height:60px', T + ' ' + T));
+
+  // It does NOT wrap while the column is long enough for it, which is the
+  // reading that says the wrap is measured against the height.
+  testing.expectEqual('18,130', vertical('height:130px'));
+
+  // No height of its own and a horizontal parent: nothing to fill, so the
+  // inline axis is the text's own advance.
+  testing.expectEqual('18,124.1484375', vertical(''));
+
+  // Both axes declared: neither the fill nor the text walk has anything left
+  // to say.
+  testing.expectEqual('50,200', vertical('width:50px;height:200px'));
+
+  // The padding and the border land on the physical axes they name, not on the
+  // logical ones: `padding:10px 4px;border:3px solid` is 8 + 6 across the 18
+  // and 20 + 6 down the 200.
+  testing.expectEqual('32,226', vertical('height:200px;padding:10px 4px;border:3px solid'));
+
+  // An empty box has no line box at all, so the block axis is 0 -- the same
+  // answer an empty horizontal box gives on the other axis.
+  testing.expectEqual('0,200', vertical('height:200px', ''));
+
+  // The horizontal control: the ordinary fill is untouched.
+  testing.expectEqual('800,200', box(`<div class=p style="${CB}height:200px">${T}</div>`));
+
+  host.remove();
+}
+</script>
+
+<script id=an_orthogonal_child_has_no_axis_to_fill>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const box = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const b = d.querySelector('.p').getBoundingClientRect();
+    d.remove();
+    return b.width + ',' + b.height;
+  };
+  const T = 'Hamburgefonstiv';
+
+  // `writing-mode` inherits, and a vertical box inside a vertical one fills its
+  // containing block's height the way an ordinary block fills its width: 200,
+  // not the 124.1484 of its own text.
+  testing.expectEqual('18,200', box(
+    `<div style="${CB}writing-mode:vertical-rl;height:200px"><div class=p>${T}</div></div>`));
+
+  // A HORIZONTAL box inside a vertical one crosses it: the width it would fill
+  // is not a length its containing block has, so it takes its content's.
+  testing.expectEqual('124.1484375,18', box(
+    `<div style="${CB}writing-mode:vertical-rl;height:200px">` +
+    `<div class=p style="${CB}writing-mode:horizontal-tb">${T}</div></div>`));
+
+  host.remove();
+}
+</script>
