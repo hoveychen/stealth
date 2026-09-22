@@ -41,6 +41,7 @@ const Blob = @import("webapi/Blob.zig");
 const FileList = @import("webapi/FileList.zig");
 const MediaQueryList = @import("webapi/css/MediaQueryList.zig");
 const css_grid = @import("webapi/css/grid.zig");
+const css_style_declaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const Node = @import("webapi/Node.zig");
 const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
@@ -229,6 +230,14 @@ _grid_tracks: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .emp
 /// The same for the rows, which cost more: a row with no size of its own is as
 /// tall as its tallest item, so filling this measures every item on the grid.
 _grid_rows: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
+
+/// Where each grid item was placed, keyed by the item. Filled one container at
+/// a time by CSSStyleDeclaration.gridCells.
+_grid_cells: std.AutoHashMapUnmanaged(*Element, css_style_declaration.GridCell) = .empty,
+
+/// The containers whose items have been placed, so the walk runs once per
+/// container and not once per item asking where it went.
+_grid_cells_done: std.AutoHashMapUnmanaged(*Element, void) = .empty,
 
 /// The containers whose rows are being solved right now. Measuring an item asks
 /// how tall the row it stretches into is, which is the answer being computed --

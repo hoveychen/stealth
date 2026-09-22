@@ -4574,6 +4574,8 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             frame._flex_lines.clearRetainingCapacity();
             frame._grid_tracks.clearRetainingCapacity();
             frame._grid_rows.clearRetainingCapacity();
+            frame._grid_cells.clearRetainingCapacity();
+            frame._grid_cells_done.clearRetainingCapacity();
             frame._flex_lines_dom_version = dom_version;
         }
     }
@@ -6899,13 +6901,36 @@ fn gridContent(
     if (placed_rows.len == 0) return null;
 
     var line_width: ?f64 = content_width;
-    for (items.items, 0..) |item, index| {
-        const column = columns[index % columns.len];
-        const row_index = index / columns.len;
-        if (row_index >= placed_rows.len) break;
-        const row = placed_rows[row_index];
-        const x = column.start + item.margin_left;
-        const y = row.start + item.margin_top;
+    for (items.items) |item| {
+        const cell = CSSStyleDeclaration.gridCellOf(item.el, frame, depth) orelse continue;
+        if (cell.column >= columns.len or cell.row >= placed_rows.len) continue;
+        const last_column = @min(cell.column + cell.column_span, columns.len) - 1;
+        const last_row = @min(cell.row + cell.row_span, placed_rows.len) - 1;
+        const column: css_grid.Placed = .{
+            .start = columns[cell.column].start,
+            .size = columns[last_column].start + columns[last_column].size - columns[cell.column].start,
+        };
+        const row: css_grid.Placed = .{
+            .start = placed_rows[cell.row].start,
+            .size = placed_rows[last_row].start + placed_rows[last_row].size - placed_rows[cell.row].start,
+        };
+
+        // An item the page placed rather than stretched sits somewhere inside
+        // its cell: `justify-items: end` on a 200px column puts an 8.0625-wide
+        // word at x=191.9375, and `align-items: center` in a 120px-tall row
+        // puts an 18px line at y=51 (scratch/s74/expr-geom.js, `grid.place`).
+        const inline_offset = switch (CSSStyleDeclaration.gridInlineAlign(item.el, self, frame)) {
+            .stretch, .start => 0,
+            .center => @max(0, (column.size - item.outer_width) / 2),
+            .end => @max(0, column.size - item.outer_width),
+        };
+        const block_offset = switch (CSSStyleDeclaration.flexCrossAlign(item.el, self, frame)) {
+            .stretch, .start => 0,
+            .center => @max(0, (row.size - item.outer_height) / 2),
+            .end => @max(0, row.size - item.outer_height),
+        };
+        const x = column.start + inline_offset + item.margin_left;
+        const y = row.start + block_offset + item.margin_top;
         if (pass) |p| {
             p.record(frame, item.el, .{
                 .x = p.x + x,

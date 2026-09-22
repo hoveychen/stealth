@@ -194,6 +194,110 @@ item's column. Row sizing beyond "as tall as the tallest item", `minmax()`,
 }
 </script>
 
+<script id=spans_and_placement_move_an_item_off_the_cursor>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top, b.width, b.height]);
+    }
+    d.remove();
+    return out;
+  };
+
+  // `span 2` covers two tracks, the item after it takes the next free one,
+  // and `2 / 5` keeps its columns and drops to the first row where all three
+  // of them are free -- which is the second, since 2 and 3 are taken.
+  testing.expectEqual('0,0,120,18|120,0,60,18|60,18,180,18', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(4, 60px)">` +
+    `<div class=p style="${CB}grid-column:span 2">a</div><div class=p>b</div>` +
+    `<div class=p style="${CB}grid-column:2/5">c</div></div>`).join('|'));
+
+  // A span covers the GAPS between its tracks too.
+  testing.expectEqual('0,0,130,18', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(3, 60px);gap:10px">` +
+    `<div class=p style="${CB}grid-column:span 2">a</div></div>`).join('|'));
+
+  // A span wider than the grid is clamped to it, and an item that does not fit
+  // on the rest of a row starts the next one.
+  testing.expectEqual('0,0,60,18|0,18,120,18', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(2, 60px)">` +
+    `<div class=p>a</div><div class=p style="${CB}grid-column:span 2">b</div></div>`).join('|'));
+
+  // A named row puts the item in row 3 -- which sits at y=18 and not y=36,
+  // because the implicit row 2 it skipped holds nothing and so is 0 tall.
+  testing.expectEqual('0,0,60,18|0,18,60,18', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:60px">` +
+    `<div class=p>a</div><div class=p style="${CB}grid-row:3">b</div></div>`).join('|'));
+
+  // An item spanning rows fills all of them: 30 + 40 is 70, and the rows are
+  // sized by the items that do NOT span them.
+  testing.expectEqual('0,0,60,70|60,0,60,30|60,30,60,40', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:60px 60px">` +
+    `<div class=p style="${CB}grid-row:span 2">a</div>` +
+    `<div class=p style="${CB}height:30px"></div>` +
+    `<div class=p style="${CB}height:40px"></div></div>`).join('|'));
+
+  host.remove();
+}
+</script>
+
+<script id=place_items_puts_an_item_inside_its_cell>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const box = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const b = d.querySelector('.p').getBoundingClientRect();
+    d.remove();
+    return [b.left - base.left, b.top - base.top, b.width, b.height];
+  };
+
+  const cell = (extra) => box(
+    `<div style="${CB}display:grid;grid-template-columns:200px;height:120px;${extra}">` +
+    `<div class=p>a</div></div>`);
+
+  // Nothing declared: the item stretches across its column and down its row,
+  // and the single row takes the container's whole definite height.
+  testing.expectEqual('0,0,200,120', String(cell('')));
+
+  // `justify-items` takes the stretch off the inline axis, so the item is as
+  // wide as its content and is placed in the column instead.
+  testing.expectEqual('191.9375,51,8.0625,18', String(
+    cell('align-items:center;justify-items:end')));
+  testing.expectEqual('95.96875,0,8.0625,18', String(
+    cell('align-items:start;justify-items:center')));
+  testing.expectEqual('0,102,8.0625,18', String(
+    cell('align-items:end;justify-items:start')));
+
+  // The item's own `justify-self` wins over the container's `justify-items`.
+  testing.expectEqual('191.9375,0,8.0625,18', String(box(
+    `<div style="${CB}display:grid;grid-template-columns:200px;height:120px;` +
+    `align-items:start;justify-items:start">` +
+    `<div class=p style="${CB}justify-self:end">a</div></div>`)));
+
+  host.remove();
+}
+</script>
+
 <script id=a_grid_is_as_tall_as_its_rows>
 {
   const host = document.createElement('div');
