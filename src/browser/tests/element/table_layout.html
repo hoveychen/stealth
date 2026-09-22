@@ -295,6 +295,7 @@ shapes of that probe match Chrome box for box.
   };
 
   const W = 'Hamburgefonstiv';
+  const LONG = 'alpha beta gamma delta epsilon zeta eta theta iota kappa';
   const td = (extra, text) => `<td class=p style="${RESET}${extra || ''}">${text}</td>`;
 
   // Two cells either side of one 1px border draw half of it each, so each is
@@ -329,6 +330,22 @@ shapes of that probe match Chrome box for box.
     '0,0,148.2109375,34|0,4,12.0625,26|12.0625,4,132.1484375,26',
     boxes(`<table class=p style="${C}"><tr>` +
       td('', 'a') + td('border:8px solid', W) + '</tr></table>'));
+
+  // The table's own box has to fit the room it is in, so what the columns get
+  // is the room LESS half of each outer line: the host here is 800 wide and
+  // the columns come out 796.5 between them.
+  testing.expectEqual(
+    '0,0,800,46|1,2.5,523.0546875,41|524.0546875,2.5,273.4453125,41',
+    boxes(`<table class=p style="${C}"><tr>` +
+      td('border:2px solid', LONG + ' ' + LONG) + td('border:5px solid', LONG) +
+      '</tr></table>'));
+
+  // `box-sizing: border-box` with a declared width: the halves come out of the
+  // 400 rather than being added to it.
+  testing.expectEqual(
+    '0,0,400,30|1,3,33.5859375,24|34.5859375,3,362.4140625,24',
+    boxes(`<table class=p style="${C}box-sizing:border-box;width:400px"><tr>` +
+      td('border:2px solid', 'a') + td('border:6px solid', W) + '</tr></table>'));
 
   // A declared width is the distance between the middles of the outer lines,
   // so the box it produces is 400 plus half of each of them.

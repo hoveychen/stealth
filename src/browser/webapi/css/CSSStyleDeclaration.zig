@@ -5473,7 +5473,7 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
 
     // The table's own width, if it declared one, is what a percentage cell
     // width is a share of -- so it has to be known before the cells are asked.
-    const declared_width = declaredTableWidth(container, frame, depth);
+    const declared_width = declaredTableWidth(container, frame, depth, null);
 
     // Every cell, placed and measured. Kept in a list because a cell covering
     // more than one column can only be charged once the columns it covers have
@@ -5579,14 +5579,30 @@ fn solveTable(container: *Element, frame: *Frame, depth: u8) ?TableLayout {
 
     const columns_slice = columns.items;
 
+    // What the table's own edges take out of whatever room it has. A collapsed
+    // table's is HALF of each outer grid line, which is only knowable now --
+    // and it is knowable at all only because those lines come from the cells:
+    // a table that wrote no border of its own still has one, and reading the
+    // declared 0 made every collapsed table on a real page a border too wide.
+    var table_containing: ?f64 = null;
+    const table_edges = boxEdgesSharing(container, frame, &table_containing, depth);
+    const table_border_x: ?f64 = if (collapsed)
+        (v_lines[0] + v_lines[column_count]) / 2
+    else
+        null;
+    const table_outer = table_edges.padding_x + (table_border_x orelse table_edges.border_x);
+
     const intrinsic = css_table.intrinsicWidths(columns_slice, spacing.x);
     const shrunk_width = blk: {
-        if (declared_width) |declared| break :blk @max(declared, intrinsic.min);
+        if (declaredTableWidth(container, frame, depth, table_border_x)) |declared| {
+            break :blk @max(declared, intrinsic.min);
+        }
         // Shrink to fit: as wide as it wants, unless that does not fit -- and
         // never narrower than what its content cannot give up.
         var containing: ?f64 = null;
-        const available = containingWidth(container, frame, &containing, depth) orelse intrinsic.max;
-        break :blk @max(intrinsic.min, @min(intrinsic.max, available));
+        const available = containingWidth(container, frame, &containing, depth) orelse
+            intrinsic.max + table_outer;
+        break :blk @max(intrinsic.min, @min(intrinsic.max, @max(0, available - table_outer)));
     };
 
     // A caption is as wide as the table's whole box, so a caption that cannot
@@ -5806,13 +5822,22 @@ fn isTableLayoutFixed(container: *Element, frame: *Frame) bool {
 }
 
 /// The content width a table declared, or null for one that declared none.
-fn declaredTableWidth(container: *Element, frame: *Frame, depth: u8) ?f64 {
+///
+/// `collapsed_border_x` is the border the table actually has when it collapses
+/// -- half of each outer grid line -- and null for one that does not, which
+/// keeps the border it wrote.
+fn declaredTableWidth(
+    container: *Element,
+    frame: *Frame,
+    depth: u8,
+    collapsed_border_x: ?f64,
+) ?f64 {
     const declared = cascadedComputedLength(container, "width", frame) orelse return null;
     var containing: ?f64 = null;
     const edges = boxEdgesSharing(container, frame, &containing, depth);
     const width = Element.layoutUnit(declared);
     if (usesBorderBox(container, frame)) {
-        return @max(0, width - edges.padding_x - edges.border_x);
+        return @max(0, width - edges.padding_x - (collapsed_border_x orelse edges.border_x));
     }
     return width;
 }
