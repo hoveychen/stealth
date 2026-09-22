@@ -5122,6 +5122,77 @@ pub fn layoutPassPositions(
     return nodes;
 }
 
+/// How many times the second phase looks for newly-discovered out-of-flow
+/// boxes. An overlay inside an overlay inside a drawer is three; beyond that
+/// the remaining boxes keep the fallback position, which is what they had
+/// before this phase existed.
+const MAX_POSITIONED_ROUNDS = 4;
+
+/// Fill in what is INSIDE an out-of-flow box, once the flow pass has placed
+/// everything it can.
+///
+/// The flow pass steps OVER an absolutely or fixed positioned box: it records
+/// where the box would have stood -- `recordStatic`, the answer an `auto` inset
+/// resolves to -- and then goes on to the next sibling without descending. So
+/// every descendant of such a box was missing from the table, and
+/// `boxOrigin` fell through to `calculateSiblingPosition`, which is a
+/// placeholder that counts nodes in preorder and answers the SAME number for x
+/// and y. A 100x20 div in a `position:absolute; left:0; top:0` host read
+/// 1345,1345 where Chrome says 0,0, and its next sibling 1350,1350 where Chrome
+/// says 40,20 -- neither the sibling's height nor its margin entered.
+///
+/// It is a second phase rather than a branch in the walk because the box's own
+/// origin is not knowable while the walk is running: it is the containing
+/// block's origin plus the box's insets, and the containing block's origin is a
+/// row of the table the walk is in the middle of filling. Once the walk is done
+/// the table answers, so `boxOrigin` here is the same call every reader makes.
+///
+/// Rounds, because descending into one out-of-flow box records the static
+/// positions of any out-of-flow boxes IT contains, which are then themselves
+/// subtrees to fill.
+pub fn layoutPassPositionedSubtrees(
+    frame: *Frame,
+    table: *PositionTable,
+    static_table: *PositionTable,
+) void {
+    var nodes: usize = 0;
+    var visibility_cache: VisibilityCache = .{};
+    var done: std.AutoHashMapUnmanaged(*Element, void) = .empty;
+    // Collected before descending rather than walked from the iterator: the
+    // descent writes into `static_table`, and a hash map may not be grown
+    // while one of its iterators is live.
+    var pending: std.ArrayListUnmanaged(*Element) = .empty;
+
+    var round: u8 = 0;
+    while (round < MAX_POSITIONED_ROUNDS) : (round += 1) {
+        pending.clearRetainingCapacity();
+        var it = static_table.iterator();
+        while (it.next()) |entry| {
+            const el = entry.key_ptr.*;
+            if (done.contains(el)) continue;
+            pending.append(frame.arena, el) catch continue;
+        }
+        if (pending.items.len == 0) return;
+
+        for (pending.items) |el| {
+            done.put(frame.arena, el, {}) catch {};
+            // The same call `getBoundingClientRect` makes, which is the point:
+            // the box's position is already right and only its contents were
+            // not, so the two cannot disagree about where the subtree starts.
+            const origin = el.boxOrigin(frame, 0);
+            const dims = el.getElementDimensions(frame);
+            var containing: ?f64 = null;
+            _ = el.contentHeight(frame, &visibility_cache, .in_flow, dims.width, 0, .{
+                .table = table,
+                .static_table = static_table,
+                .nodes = &nodes,
+                .x = origin.x + CSSStyleDeclaration.blockEdgePx(el, "left", frame, &containing, 0),
+                .y = origin.y + CSSStyleDeclaration.blockEdgePx(el, "top", frame, &containing, 0),
+            });
+        }
+    }
+}
+
 // The height of the direct child elements stacked vertically, the counterpart
 // of contentWidth.
 //
