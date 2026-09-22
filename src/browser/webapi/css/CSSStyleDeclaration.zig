@@ -1957,6 +1957,25 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
             // takes its half from the block the span sits in. Chrome answers
             // 952 on the 1904px line, measured -- and asking the span instead
             // was a closed loop, because the span's own ink is the div's box.
+            // An out-of-flow box is not contained by that block at all: it takes
+            // its share of its positioned ancestor's PADDING box, which is the
+            // same rule `containingHeightForPercentage` already applies on the
+            // other axis. `width:50%` inside `width:300px;padding:10px;
+            // position:relative` is 160 in Chrome 153 -- half of 320 -- where
+            // this answered 150, and the percentage paddings and margins beside
+            // it were short by the same tenth (scratch/s76/expr-abspct.js).
+            //
+            // The offsets were already right: `outOfFlowPosition` adds the
+            // ancestor's `padding_x` to the box it measures `left: 10%` against,
+            // so a box could sit at 32 and then be sized as if the block it sat
+            // in were 300 wide.
+            if (flowKind(element, frame) == .positioned) {
+                const anchor = positionedAncestor(element, frame) orelse break :blk .{
+                    .pixels = @as(f64, @floatFromInt(element.ownerFrame(frame)._page.getViewport().width)) / 100.0,
+                };
+                const box = anchor.getElementDimensions(frame);
+                break :blk .{ .pixels = (box.width + box.padding_x) / 100.0 };
+            }
             const parent = element.containingBlock(frame) orelse break :blk .unresolvable;
             break :blk .{ .pixels = parent.getElementDimensions(frame).width / 100.0 };
         } else if (percentageOfContainingBlockHeight(property_name)) blk: {
@@ -3639,6 +3658,24 @@ pub fn establishesBlockFormattingContext(element: *Element, frame: *Frame) bool 
     }) |name| {
         if (std.mem.eql(u8, display, name)) return true;
     }
+
+    // A multi-column container is one too, so no margin passes through its
+    // edges: four 20px blocks with 5px margins inside a `column-count: 3` box
+    // measure 35 in Chrome 153 and not the 31.67 a third of the strip is once
+    // the outermost 5s have escaped (scratch/s76/expr-multicol2.js).
+    return isMultiColumnContainer(element, frame);
+}
+
+/// Does this element cut its content into columns? True as soon as either
+/// `column-count` or `column-width` names something other than `auto`.
+pub fn isMultiColumnContainer(element: *Element, frame: *Frame) bool {
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    inline for (.{ "column-count", "column-width" }) |name| {
+        if (cascadedKeyword(style_manager, element, name)) |value| {
+            const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+            if (trimmed.len != 0 and !std.ascii.eqlIgnoreCase(trimmed, "auto")) return true;
+        }
+    }
     return false;
 }
 
@@ -3703,6 +3740,22 @@ fn declaredEitherSpelling(style_manager: *StyleManager, element: *Element, name:
 pub fn containingWidth(element: *Element, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
     if (containing.*) |width| return width;
     if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    // An out-of-flow box is contained by its positioned ancestor's PADDING box.
+    // The same rule as the one in `lengthFactor`'s percentage branch, and it has
+    // to be here too because a percentage padding and a percentage margin come
+    // through this helper rather than through that one: an absolute box with
+    // `width:50%;padding-left:10%;margin-left:10%` inside a
+    // `width:300px;padding:10px` ancestor measured 190 wide at 30 in this engine
+    // against Chrome 153's 192 at 32 -- the width had been fixed and its two
+    // edges were still a tenth of 300 (scratch/s76/expr-abspct.js).
+    if (flowKind(element, frame) == .positioned) {
+        const anchor = positionedAncestor(element, frame) orelse
+            return @floatFromInt(element.ownerFrame(frame)._page.getViewport().width);
+        const box = anchor.getElementDimensions(frame);
+        const width = box.width + box.padding_x;
+        containing.* = width;
+        return width;
+    }
     // The same ancestor the fill branch measures -- Element.containingBlock,
     // which walks past an inline one -- so the two share a number rather than
     // each measuring a different element.
@@ -3915,6 +3968,47 @@ pub fn wrapsText(element: *Element, frame: *Frame) bool {
     const name = "text-wrap-mode";
     const mode = cascadedOrUaInherited(element, frame, name, .wrap(name)) orelse return true;
     return !std.ascii.eqlIgnoreCase(mode, "nowrap");
+}
+
+/// The `aspect-ratio` the cascade gives this element, as width divided by
+/// height. Null when the box has none.
+///
+/// `auto` is none, and so is a DEGENERATE ratio: `aspect-ratio: 2 / 0` measures
+/// 0px tall on Chrome 153, which is what a box with no ratio and no content
+/// measures too, and a negative one is rejected by the parser and computes back
+/// as `auto` (scratch/s76/expr-aspect.js).
+///
+/// An `auto <ratio>` pair means "the intrinsic ratio if there is one, this
+/// otherwise", so it is the ratio for every non-replaced element and is refused
+/// for the two replaced ones that carry a ratio of their own.
+pub fn aspectRatio(element: *Element, frame: *Frame) ?f64 {
+    const declared = cascadedComputedValue(element, "aspect-ratio", frame) orelse return null;
+    var rest = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(rest, "auto")) {
+        return null;
+    }
+    if (rest.len > 4 and std.ascii.eqlIgnoreCase(rest[0..4], "auto") and std.ascii.isWhitespace(rest[4])) {
+        if (element.hasIntrinsicRatio()) {
+            return null;
+        }
+        rest = std.mem.trim(u8, rest[4..], &std.ascii.whitespace);
+    }
+
+    var parts = std.mem.splitScalar(u8, rest, '/');
+    const width = std.fmt.parseFloat(f64, std.mem.trim(u8, parts.first(), &std.ascii.whitespace)) catch return null;
+    // A lone number is the ratio against 1 -- `aspect-ratio: 0.5` is a box
+    // twice as tall as it is wide, measured.
+    var height: f64 = 1;
+    if (parts.next()) |text| {
+        height = std.fmt.parseFloat(f64, std.mem.trim(u8, text, &std.ascii.whitespace)) catch return null;
+    }
+    if (parts.next() != null) {
+        return null;
+    }
+    if (!(width > 0) or !(height > 0)) {
+        return null;
+    }
+    return width / height;
 }
 
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
@@ -6212,6 +6306,21 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
         }
         try buf.writer.writeByte(c);
         i += 1;
+    }
+
+    // An `aspect-ratio` is a PAIR however the author wrote it: Chrome answers
+    // `1 / 1` for `aspect-ratio: 1` and `0.5 / 1` for `0.5`, and completes the
+    // `auto <number>` form the same way. Measured on Chrome 153,
+    // scratch/s76/expr-aspect.js. Only a bare `auto` escapes it -- that is not
+    // a ratio at all.
+    if (std.mem.eql(u8, property_name, "aspect-ratio")) {
+        const written = std.mem.trimEnd(u8, if (changed) buf.written() else value, &std.ascii.whitespace);
+        if (written.len != 0 and
+            std.mem.indexOfScalar(u8, written, '/') == null and
+            !std.ascii.eqlIgnoreCase(written, "auto"))
+        {
+            return std.fmt.allocPrint(arena, "{s} / 1", .{written});
+        }
     }
 
     // Most values carry no capital at all, so the copy is thrown away far more

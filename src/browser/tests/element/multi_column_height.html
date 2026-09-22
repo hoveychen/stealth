@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`column-count` cut nothing: a `column-count: 3` box was as tall as all of its
+content. Wrong in both directions -- six short words in a 300px box measured 54
+in this engine where headed Chrome 153 says 36, and a paragraph measured 216
+where Chrome says 288, because the narrow column wraps the text into more lines
+than the full width does and the cut then takes a third of them.
+
+Twenty-five cases read on headed Chrome 153 against www.scrapingcourse.com with
+scratch/s76/expr-multicol.js and expr-multicol2.js -- counts, widths, both
+together, the default gap, text and fixed-height blocks, margins between them.
+This engine answered 5 of 25 before and answers 25 of 25 now.
+
+The fixed-height numbers below are Chrome's own; the text ones are asserted as
+ratios against the same text's unbroken height, because a line count depends on
+a face the runner's page need not resolve the way the probe's did.
+-->
+
+<script id=columns_share_the_strip_out>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (style, inner) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div id=c style="box-sizing:content-box;' + style + '">' + inner + '</div>';
+    host.appendChild(d);
+    const r = d.querySelector('#c').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+  // Six blocks of a height nothing can disagree about.
+  const blocks = (n) => Array.from({ length: n },
+    () => '<div style="box-sizing:content-box;height:20px"></div>').join('');
+
+  // An exact share, for the counts that divide the stack evenly.
+  testing.expectEqual(20, box('width:300px;column-count:3;column-gap:20px', blocks(3)).height);
+  testing.expectEqual(40, box('width:300px;column-count:3;column-gap:20px', blocks(6)).height);
+  testing.expectEqual(50, box('width:300px;column-count:2;column-gap:20px', blocks(5)).height);
+
+  // And an inexact one: Chrome FRAGMENTS a block across the break rather than
+  // rounding the column up to hold it whole, so two 20px blocks over three
+  // columns are 40/3 and not 20. The grid step rounds that UP -- 13.3333 * 128
+  // is 1706.67 and the box is 1707/128.
+  testing.expectEqual(13.3359375, box('width:300px;column-count:3;column-gap:20px', blocks(2)).height);
+  testing.expectEqual(6.671875, box('width:300px;column-count:3;column-gap:20px', blocks(1)).height);
+  testing.expectEqual(46.671875, box('width:300px;column-count:3;column-gap:20px', blocks(7)).height);
+
+  // One column is no columns.
+  testing.expectEqual(120, box('width:300px;column-count:1;column-gap:20px', blocks(6)).height);
+
+  // A declared height is the height; the columns do not shrink it.
+  testing.expectEqual(200, box('width:300px;height:200px;column-count:3;column-gap:20px', blocks(6)).height);
+
+  host.remove();
+}
+</script>
+
+<script id=column_count_comes_from_both_properties>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (style) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div id=c style="box-sizing:content-box;' + style + '">' +
+      Array.from({ length: 6 }, () => '<div style="box-sizing:content-box;height:20px"></div>').join('') +
+      '</div>';
+    host.appendChild(d);
+    const r = d.querySelector('#c').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+
+  // `column-width: 90px` in 300px with a 20px gap is two columns of 140, not
+  // three of 86.7: a column is at LEAST the width asked for.
+  testing.expectEqual(60, box('width:300px;column-width:90px;column-gap:20px').height);
+  // And the count is a bound on top of that, so the two together stay at two.
+  testing.expectEqual(60, box('width:300px;column-width:90px;column-count:2;column-gap:20px').height);
+  // A count that asks for more columns than the width allows loses: the two are
+  // a minimum, so four-of-90 in 300px is still two.
+  testing.expectEqual(60, box('width:300px;column-width:90px;column-count:4;column-gap:20px').height);
+  // And a count that asks for fewer wins, because the width is only a floor.
+  testing.expectEqual(60, box('width:300px;column-width:40px;column-count:2;column-gap:20px').height);
+
+  // `column-gap: normal` is one em, not zero: at a 16px font it leaves room for
+  // two columns of 90 where a zero gap would fit three.
+  testing.expectEqual(60, box('width:300px;column-width:90px;column-gap:normal').height);
+  testing.expectEqual(40, box('width:300px;column-width:90px;column-gap:0').height);
+
+  host.remove();
+}
+</script>
+
+<script id=a_column_break_does_not_land_inside_a_line>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const text = 'Hamburgefonstiv Hamburgefonstiv Hamburgefonstiv ' +
+    'Hamburgefonstiv Hamburgefonstiv Hamburgefonstiv';
+  const box = (style) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div id=c style="box-sizing:content-box;' + style + '">' + text + '</div>';
+    host.appendChild(d);
+    const r = d.querySelector('#c').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+
+  // The strip is measured one COLUMN wide, so it wraps into more lines than the
+  // full width does -- and the cut then takes a third of those. Getting only
+  // one of those two halves is how the height came out wrong in BOTH directions
+  // before, so both are asserted, against a strip this page measures for itself:
+  // 320 less two 25px gaps over three columns is exactly 90, so the same text in
+  // a 90px box wraps the way one column does whatever face resolves here.
+  const one = box('width:320px;column-count:1;column-gap:25px');
+  testing.expectEqual(box('width:320px').height, one.height);
+
+  const strip = box('width:90px').height;
+  const line = box('width:1000px').height;
+  testing.expectTrue(line > 0);
+  testing.expectTrue(strip > one.height);
+
+  const three = box('width:320px;column-count:3;column-gap:25px');
+  testing.expectEqual(Math.ceil(strip / 3 / line) * line, three.height);
+  // Whole lines: a column break cannot land inside one.
+  testing.expectEqual(0, three.height % line);
+
+  host.remove();
+}
+</script>
+
+<script id=no_margin_escapes_a_multi_column_container>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const d = document.createElement('div');
+  d.innerHTML = '<div id=c style="box-sizing:content-box;width:300px;column-count:3;column-gap:20px">' +
+    Array.from({ length: 4 },
+      () => '<div style="box-sizing:content-box;height:20px;margin:5px 0"></div>').join('') +
+    '</div>';
+  host.appendChild(d);
+
+  // The container is a block formatting context, so the first child's top
+  // margin and the last child's bottom margin stay inside: the strip is
+  // 5+20+5+20+5+20+5+20+5 and the columns take a third of the 105, not of 95.
+  testing.expectEqual(35, d.querySelector('#c').getBoundingClientRect().height);
+
+  d.remove();
+  host.remove();
+}
+</script>

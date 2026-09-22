@@ -3333,6 +3333,24 @@ pub fn intrinsicImageSize(self: *const Element) ?IntrinsicBox {
     };
 }
 
+/// Does this element size itself off a ratio it brought with it?
+///
+/// Only two do. A `<canvas>` takes its ratio from the buffer -- the branch in
+/// `dimensionsIn` that scales one axis off the other is the measurement -- and
+/// an `<img>` whose bytes declared a size takes it from the picture. Neither a
+/// `<video>`, an `<object>` nor an `<svg>` has one: each keeps its 300 or its
+/// 150 when the other axis is declared, measured in
+/// tools/fingerprint/scratch/expr-replaced-intrinsic.js.
+///
+/// Asked by `aspect-ratio`'s `auto <ratio>` form, which is the intrinsic ratio
+/// wherever there is one and the written ratio everywhere else.
+pub fn hasIntrinsicRatio(self: *const Element) bool {
+    if (self.getTag() == .canvas) {
+        return true;
+    }
+    return self.intrinsicImageSize() != null;
+}
+
 /// `width` and `height` are the CONTENT box. What a page reads is one of three
 /// boxes and the edges are how they are told apart: clientWidth is content +
 /// padding, offsetWidth and getBoundingClientRect add the border, and a
@@ -4329,6 +4347,23 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// property lookups, and it goes away with the prototype.
 pub var measure_entries: u64 = 0;
 
+/// One axis of an `aspect-ratio` box across the ratio, in CONTENT lengths.
+///
+/// `ratio` multiplies: the inline axis of a `w / h` box is `h * (w/h)` and its
+/// block axis is `w * (h/w)`. Under `border-box` the ratio spans the border box,
+/// so the edges of the axis being measured FROM join it and the edges of the
+/// one being measured TO come back off; under `content-box` neither does.
+fn acrossRatio(from: f64, ratio: f64, box: struct {
+    from_outer: f64,
+    to_outer: f64,
+    border_box: bool,
+}) f64 {
+    if (!box.border_box) {
+        return @max(0, from * ratio);
+    }
+    return @max(0, (from + box.from_outer) * ratio - box.to_outer);
+}
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
     measure_entries += 1;
     // A backstop the `depth` parameter cannot be: not every path down carries
@@ -4556,6 +4591,52 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
                         edges.border_y - edges.padding_y);
                     dims.explicit_height = true;
                 }
+            }
+        }
+    }
+
+    // `aspect-ratio` gives the box whichever axis the author left open, sized
+    // off the one they gave. The ratio is measured across the box `box-sizing`
+    // names: `width:100px;padding:10px;aspect-ratio:2/1` is 120 by 70 as a
+    // content box -- 50 of content height plus its own padding -- and 100 by 50
+    // under `border-box`, where the padding is inside the measured square.
+    // Measured on Chrome 153, scratch/s76/expr-aspect.js.
+    const aspect_ratio: ?f64 = if (width == null or height == null)
+        CSSStyleDeclaration.aspectRatio(self, frame)
+    else
+        null;
+    // The edges the ratio spans under `border-box`, and whether it does. Asked
+    // for here rather than read off `dims` because the y-only path never fills
+    // them -- the same reason the inset branch above asks. Behind the ratio
+    // being there at all, so `getElementHeight` pays for neither on the
+    // overwhelming majority of elements that declare no ratio.
+    const aspect_edges: CSSStyleDeclaration.BoxEdges = if (aspect_ratio == null)
+        .{}
+    else if (comptime measure_text_width)
+        .{
+            .padding_x = dims.padding_x,
+            .padding_y = dims.padding_y,
+            .border_x = dims.border_x,
+            .border_y = dims.border_y,
+        }
+    else
+        CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+    const aspect_border_box = aspect_ratio != null and
+        (if (comptime measure_text_width) border_box else CSSStyleDeclaration.usesBorderBox(self, frame));
+
+    // The INLINE axis, before the branches below: a block-level box with a
+    // definite height takes its width from the ratio rather than stretching
+    // across its containing block. `height:50px;aspect-ratio:2/1` in a 300px
+    // parent measures 100 wide in Chrome, not 300.
+    if (aspect_ratio) |ratio| {
+        if (width == null) {
+            if (height) |h| {
+                width = acrossRatio(h, ratio, .{
+                    .from_outer = aspect_edges.padding_y + aspect_edges.border_y,
+                    .to_outer = aspect_edges.padding_x + aspect_edges.border_x,
+                    .border_box = aspect_border_box,
+                });
+                dims.explicit_width = true;
             }
         }
     }
@@ -4789,6 +4870,26 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     // A declared width already answers the only question the measurement is
     // for, so it also gates the walk over the text -- not just the caller's
     // opt-out above.
+    // And the BLOCK axis, now that a stretched or intrinsic width is known: an
+    // `aspect-ratio:2/1` box with nothing else declared fills its 300px parent
+    // and is 150 tall.
+    //
+    // Not marked explicit, unlike the width above. Chrome floors a ratio's
+    // height with the box's content -- a 100px-wide `2/1` holding seven lines
+    // of text measures 126 and not 50 -- and that floor is the `@max` in
+    // clientHeightOf, which only runs while the height is not a declared one.
+    if (aspect_ratio) |ratio| {
+        if (height == null) {
+            if (width) |w| {
+                height = acrossRatio(w, 1 / ratio, .{
+                    .from_outer = aspect_edges.padding_x + aspect_edges.border_x,
+                    .to_outer = aspect_edges.padding_y + aspect_edges.border_y,
+                    .border_box = aspect_border_box,
+                });
+            }
+        }
+    }
+
     const wants_text_width = measure_text_width and width == null;
     if (wants_text_width or height == null) {
         // The width the text has to wrap in is this box's CONTENT width, which is
@@ -4803,7 +4904,19 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         // calculateDocumentPosition -- and not a reading a page can make.
         if (self.textLayout(frame, wants_text_width, width, measure_text_width)) |text| {
             if (wants_text_width) width = text.width;
-            if (height == null) height = text.height;
+            // A multi-column container's own text is NOT one strip at this
+            // width: it wraps one column wide and is then cut into columns, so
+            // the height here would both over- and under-state it. Left open
+            // for `multiColumnContent`, which clientHeightOf reaches through
+            // the content fallback a box with no height of its own takes.
+            //
+            // Without this the cut was invisible on exactly the shape the sweep
+            // reads: six words in a `column-count: 3` box measured 54, the
+            // text's own height at the full width, where Chrome says 36 -- the
+            // columns had been worked out and then thrown away by the `@max`.
+            if (height == null and !CSSStyleDeclaration.isMultiColumnContainer(self, frame)) {
+                height = text.height;
+            }
         }
     }
 
@@ -5360,7 +5473,18 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
     if (self.flexColumnContent(frame, visibility_cache, content_width, depth, pass)) |flexed| {
         return flexed;
     }
+    // A MULTI-COLUMN container stacks its content too -- into a strip one
+    // column wide -- and then cuts the strip into columns side by side, so its
+    // height is a share of the stack and not the whole of it.
+    if (self.multiColumnContent(frame, visibility_cache, extent, content_width, depth, pass)) |columns| {
+        return columns;
+    }
+    return self.blockContent(frame, visibility_cache, extent, content_width, depth, pass);
+}
 
+/// The stack itself: every content height that is not a flex line or a column
+/// strip lands here.
+fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass) ContentHeight {
     var total: f64 = 0;
     // The margins that LEAVE through this box's two block edges. They are not
     // part of its height -- that is what escaping means -- but they are part of
@@ -6398,6 +6522,131 @@ fn flexColumnContent(
     }
 
     return .{ .total = cursor };
+}
+
+/// A multi-column container's content height: the stack of its content,
+/// measured one column wide, shared out over the columns it has.
+///
+/// Nothing had ever cut the strip, so a `column-count: 3` box was as tall as
+/// all of its content -- 54 against Chrome's 36 on the six-word probe in
+/// scratch/s74/expr-geom.js (`columns.count`), and 216 against 288 on a
+/// paragraph, wrong in BOTH directions because the narrow column wraps the text
+/// into more lines than the full width does and the cut then takes a third of
+/// them.
+///
+/// The share is exact and the columns are not rounded up to fit a whole box:
+/// Chrome FRAGMENTS across the break, and three 20px blocks in three columns
+/// measure 20 while two of them measure 13.3359 -- the second block is cut in
+/// half and half of it sits at the top of the second column. Measured over
+/// eleven counts and content shapes on headed Chrome 153,
+/// scratch/s76/expr-multicol2.js.
+///
+/// What is NOT done here is placing the boxes: the walk below records them
+/// stacked, one column wide, so a page reading a rect inside a multicol
+/// container still gets the strip's coordinate rather than the column's. The
+/// height is what every reading of the container itself -- its rect, its
+/// clientHeight, its scrollHeight -- is built from, and it is the reading the
+/// two-arm sweep makes.
+fn multiColumnContent(
+    self: *Element,
+    frame: *Frame,
+    visibility_cache: *VisibilityCache,
+    extent: Extent,
+    content_width: ?f64,
+    depth: u8,
+    pass: ?PositionPass,
+) ?ContentHeight {
+    // No width, no columns: the count divides a space, and a shrink-to-fit box
+    // has not been given one to divide.
+    const available = content_width orelse return null;
+    const tracks = self.columnTracks(frame, available) orelse return null;
+
+    const strip = self.blockContent(frame, visibility_cache, extent, tracks.width, depth, pass);
+    var share = strip.total / tracks.count;
+
+    // A line box is the one thing a column break cannot land inside, so a strip
+    // made ONLY of lines is shared out in whole lines: eight lines over three
+    // columns measure 54 in Chrome and not the 48 an exact third is. A strip
+    // with a block child in it has no such floor -- Chrome cuts the block --
+    // which is why this asks whether the container holds any elements at all
+    // rather than trying to find the breaks.
+    if (self.firstElementChild() == null) {
+        const font = self.resolveFont(frame);
+        const strut = self.lineBoxHalves(frame, font.face, font.size);
+        const line = strut.above + strut.below;
+        if (line > 0) {
+            share = @ceil(share / line - grid_epsilon) * line;
+        }
+    }
+
+    return .{
+        .total = ceilLayoutUnit(share),
+        .escaped_top = strip.escaped_top,
+        .escaped_bottom = strip.escaped_bottom,
+    };
+}
+
+/// A share that is a whole number of lines in arithmetic can land a bit above
+/// it after the division, and rounding that up adds a line nobody asked for.
+/// Small enough that no real line height is inside it.
+const grid_epsilon: f64 = 1e-9;
+
+const ColumnTracks = struct {
+    /// How many columns the content is shared out over, as a float because that
+    /// is the only thing done with it.
+    count: f64,
+    /// One column's width, which is the width the content is measured at.
+    width: f64,
+};
+
+/// The columns `column-count` and `column-width` ask for, or null when this
+/// element is not a multi-column container.
+///
+/// The two properties are a request and a bound: a count alone is the count, a
+/// width alone is as many columns of at least that width as fit, and together
+/// the smaller wins. `column-width: 90px` in a 300px box with a 20px gap is two
+/// columns of 140 and not three of 86.7, and adding `column-count: 2` leaves it
+/// at two -- measured on Chrome 153, scratch/s76/expr-multicol.js, where both
+/// answer the same 270px box.
+fn columnTracks(self: *Element, frame: *Frame, available: f64) ?ColumnTracks {
+    const declared_count: ?f64 = blk: {
+        const text = CSSStyleDeclaration.cascadedComputedValue(self, "column-count", frame) orelse break :blk null;
+        const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+        break :blk std.fmt.parseFloat(f64, trimmed) catch null;
+    };
+    const declared_width = CSSStyleDeclaration.cascadedComputedLength(self, "column-width", frame);
+    if (declared_count == null and declared_width == null) {
+        return null;
+    }
+
+    // `column-gap: normal` is one em here, not the zero it is between grid
+    // tracks. The cascade reports the keyword, so the em is resolved against
+    // this element's own font.
+    const gap = CSSStyleDeclaration.cascadedComputedLength(self, "column-gap", frame) orelse
+        self.resolveFont(frame).size;
+
+    var count: f64 = declared_count orelse std.math.inf(f64);
+    if (declared_width) |wanted| {
+        if (wanted + gap > 0) {
+            count = @min(count, @floor((available + gap) / (wanted + gap)));
+        }
+    }
+    count = @max(1, @floor(count));
+    if (!std.math.isFinite(count)) {
+        return null;
+    }
+    return .{
+        .count = count,
+        .width = @max(0, (available - (count - 1) * gap) / count),
+    };
+}
+
+/// `layoutUnit`, upwards. A balanced column height is the one grid step that
+/// HOLDS the share rather than the one beneath it: one 20px block over three
+/// columns measures 6.671875 in Chrome, which is 854/128 and not 853/128.
+fn ceilLayoutUnit(px: f64) f64 {
+    const narrowed: f64 = @as(f32, @floatCast(px));
+    return @ceil(narrowed * LAYOUT_GRID_STEPS) / LAYOUT_GRID_STEPS;
 }
 
 const ContentHeight = struct {
