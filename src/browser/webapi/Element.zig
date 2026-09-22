@@ -2763,16 +2763,53 @@ const LineFlow = struct {
         if (line > self.width) self.width = line;
     }
 
-    fn placeWord(self: *LineFlow) void {
-        if (!self.have_word) return;
-        // A collapsing run joins its words with exactly one space, which is the
-        // whole of what collapsing a run of them means. A preserving one has
-        // already placed the space it had, and adding another would count it
-        // twice.
-        const gap = if (self.collapses and self.placed > 0)
+    /// A collapsing run joins its words with exactly one space, which is the
+    /// whole of what collapsing a run of them means. A preserving one has
+    /// already placed the space it had, and adding another would count it
+    /// twice.
+    fn pendingGap(self: *const LineFlow) f64 {
+        return if (self.collapses and self.placed > 0)
             self.space.charged + self.space.word + self.spacePairs(self.word_first, self.word_joins)
         else
             0;
+    }
+
+    /// Where on the line the next character would land, the word still being
+    /// built included.
+    ///
+    /// `placed` alone is not that: it only moves when a word is PLACED, and a
+    /// word can straddle an inline box -- `a<span>b</span>c` is one word, with
+    /// no boundary either side of the span. So an inline box measured off
+    /// `placed` got the cursor as of the last space, which is why the recorder
+    /// below refused it a row entirely (the cursor had not moved) and every
+    /// such span kept the node-count fallback, where `x == y`.
+    fn cursor(self: *const LineFlow) f64 {
+        if (!self.have_word) return self.placed;
+        return self.placed + self.pendingGap() + self.word;
+    }
+
+    /// The same cursor for something that is ABOUT to put content on the line.
+    /// A collapsing run owes a space for the word that follows the one just
+    /// placed, and that space is charged when the next word lands -- so between
+    /// two words the cursor is still sitting before it. `a <span>b</span>` puts
+    /// the span at 11.9219 in Chrome and not at the 8.0625 `cursor` answers.
+    fn cursorBeforeContent(self: *const LineFlow) f64 {
+        return self.placed + self.pendingGap() + self.word;
+    }
+
+    /// An inline box's own horizontal edge -- its margin, border and padding --
+    /// added to the line without ending the word it may be inside. Chrome puts
+    /// the text after `<span style="padding:0 10px">` ten pixels further along,
+    /// and it does not open a break opportunity there.
+    fn addInlineEdge(self: *LineFlow, width: f64) void {
+        if (width == 0) return;
+        self.word += width;
+        self.have_word = true;
+    }
+
+    fn placeWord(self: *LineFlow) void {
+        if (!self.have_word) return;
+        const gap = self.pendingGap();
         const joined = self.placed + gap + self.word;
         // The break goes BEFORE the word that does not fit, and never inside one:
         // a word wider than the whole box overflows instead, which is why
@@ -5310,17 +5347,46 @@ fn contentHeight(self: *Element, frame: *Frame, visibility_cache: *VisibilityCac
                 // position, which is the last place `x == y` survives. Chrome
                 // puts the `<a>` filling an `<h2>` at x=8 with the line's own
                 // 27.5 of height (scratch/b99/expr-bounding-rect-page.js).
-                const line_x = flow.placed;
+                //
+                // The cursor is `cursor()` and not `placed`: a word can
+                // straddle the box on either side, and `placed` does not move
+                // until one is placed. See LineFlow.cursor.
+                //
+                // The box's own horizontal edges are charged to the line here,
+                // because nothing else charges them: `flowInline` walks the
+                // box's CONTENT, so a span's margin, border and padding were
+                // worth nothing at all -- the text after
+                // `<span style="padding:0 10px">` sat where the text inside it
+                // ended. Chrome puts the span of
+                // `<div style="width:400px">a<span style="padding:0 10px;
+                // border-left:3px solid;margin-left:7px">Hamburgefonstiv</span>b</div>`
+                // at x=15.0625 and 147.1484 wide (scratch/s74/expr-geom.js,
+                // `inline.padded`).
+                var edge_containing: ?f64 = content_width;
+                const margin_left = el.marginPx("margin-left", frame, &edge_containing, depth);
+                const margin_right = el.marginPx("margin-right", frame, &edge_containing, depth);
+                const edge_left = CSSStyleDeclaration.blockEdgePx(el, "left", frame, &edge_containing, depth);
+                const edge_right = CSSStyleDeclaration.blockEdgePx(el, "right", frame, &edge_containing, depth);
                 const line_y = flow.total;
+                flow.addInlineEdge(margin_left);
+                const line_x = flow.cursorBeforeContent();
+                flow.addInlineEdge(edge_left);
                 el.flowInline(frame, &flow, child_font.face, child_font.size, 1);
+                flow.addInlineEdge(edge_right);
+                const line_end = flow.cursor();
+                flow.addInlineEdge(margin_right);
                 if (pass) |p| {
                     // Only a box that stayed on its line: a wrapped inline is a
                     // union of line boxes and nothing here has measured one.
-                    if (flow.total == line_y and flow.placed > line_x) {
+                    if (flow.total == line_y) {
                         p.record(frame, el, .{
                             .x = p.x + line_x,
                             .y = p.y + total + line_y,
-                            .width = flow.placed - line_x,
+                            // An empty span with no edges leaves the cursor
+                            // where it was, and the gap `line_x` anticipated is
+                            // then never charged: it is a zero-wide box, not a
+                            // negative one.
+                            .width = @max(0, line_end - line_x),
                             .height = halves.above + halves.below,
                         });
                     }
