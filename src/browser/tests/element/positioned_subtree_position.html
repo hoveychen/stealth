@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+The flow pass steps OVER an out-of-flow box and never descends into it, so
+everything INSIDE an absolutely or fixed positioned element was missing from
+the position table and fell through to `calculateSiblingPosition` -- a
+placeholder that counts nodes in preorder and answers the same number on both
+axes. A 100x20 div in a `position:absolute; left:0; top:0` host read 1345,1345
+where Chrome says 0,0, and its next sibling 1350,1350 where Chrome says 40,20:
+neither the sibling's height nor its margin entered, and `left === top` for
+every box in the subtree.
+
+`left === top` on an ordinary page is the shape of the tell -- nothing a real
+browser lays out produces it -- and the host itself was always right, so a
+guard comparing a positioned wrapper with its own child saw the two disagree.
+
+Measured against headed Chrome 153 (scratch/s74/expr-geom.js): a 46-construct
+geometry sweep went from 2 of 46 readings identical to 23.
+
+Asserted against Chrome's numbers directly here, because these are placements
+and not advances: a box at `left:0` in a host at `left:0` is at 0 in any font.
+Every number below was read off headed Chrome 153 with /tmp-free probe
+scratch/s74/expr-subtree.js, and this engine now answers all four shapes
+byte-identically.
+-->
+
+<script id=a_positioned_host_places_its_children>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:800px';
+  host.innerHTML = '<div id=a style="width:100px;height:20px"></div>' +
+                   '<div id=b style="width:100px;height:30px;margin-left:40px"></div>';
+  document.body.appendChild(host);
+
+  const rect = (id) => {
+    const r = host.querySelector('#' + id).getBoundingClientRect();
+    return [r.left, r.top, r.width, r.height];
+  };
+
+  const wrong = [];
+  const is = (what, got, want) => {
+    if (JSON.stringify(got) !== JSON.stringify(want)) wrong.push(what + ': ' + JSON.stringify(got));
+  };
+
+  // The first child starts at the host's own content origin, and the second
+  // below it by the first's height, moved right by its own margin.
+  is('first child', rect('a'), [0, 0, 100, 20]);
+  is('second child', rect('b'), [40, 20, 100, 30]);
+  // `offsetLeft`/`offsetTop` come off the same origin, so they have to agree.
+  const a = host.querySelector('#a'), b = host.querySelector('#b');
+  is('offsets', [a.offsetLeft, a.offsetTop, b.offsetLeft, b.offsetTop], [0, 0, 40, 20]);
+  host.remove();
+
+  // The host's own placement carries into the subtree: a host at 50,30 puts
+  // its first child at 50,30 and not at 0,0.
+  const moved = document.createElement('div');
+  moved.style.cssText = 'position:absolute;left:50px;top:30px;width:800px';
+  moved.innerHTML = '<div class=c style="width:10px;height:20px"></div><div class=c style="width:10px;height:5px"></div>';
+  document.body.appendChild(moved);
+  const cs = [...moved.querySelectorAll('.c')].map((el) => {
+    const r = el.getBoundingClientRect();
+    return [r.left, r.top];
+  });
+  is('moved host', cs, [[50, 30], [50, 50]]);
+  moved.remove();
+
+  // A fixed box is placed against the viewport, and its subtree follows it
+  // there just the same.
+  const fixed = document.createElement('div');
+  fixed.style.cssText = 'position:fixed;left:10px;top:20px;width:400px';
+  fixed.innerHTML = '<div id=f style="width:10px;height:10px"></div>';
+  document.body.appendChild(fixed);
+  const fr = fixed.querySelector('#f').getBoundingClientRect();
+  is('fixed host', [fr.left, fr.top], [10, 20]);
+  fixed.remove();
+
+  // Nested: a positioned box inside a positioned box is reached too, which is
+  // what the rounds in `layoutPassPositionedSubtrees` are for. The inner host
+  // is placed against the outer one -- its containing block -- and its child
+  // against the inner one.
+  const outer = document.createElement('div');
+  outer.style.cssText = 'position:absolute;left:100px;top:200px;width:400px;height:300px';
+  outer.innerHTML = '<div id=inner style="position:absolute;left:5px;top:7px;width:200px">' +
+                    '<div id=leaf style="width:10px;height:10px"></div></div>';
+  document.body.appendChild(outer);
+  const ir = outer.querySelector('#inner').getBoundingClientRect();
+  const lr = outer.querySelector('#leaf').getBoundingClientRect();
+  is('inner host', [ir.left, ir.top], [105, 207]);
+  is('leaf', [lr.left, lr.top], [105, 207]);
+  outer.remove();
+
+  testing.expectEqual([], wrong);
+}
+</script>

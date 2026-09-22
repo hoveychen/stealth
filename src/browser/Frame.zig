@@ -2044,7 +2044,6 @@ fn fillPositionTables(self: *Frame) bool {
     if (!self.position_table_filled or self.position_table_version != version) {
         const root = self.document.getDocumentElement() orelse return false;
         self.position_table_building = true;
-        defer self.position_table_building = false;
         self.position_table = .empty;
         self.static_position_table = .empty;
         self.offset_parent_edges = .empty;
@@ -2052,6 +2051,15 @@ fn fillPositionTables(self: *Frame) bool {
         _ = Element.layoutPassPositions(root, self, &self.position_table, &self.static_position_table);
         self.position_table_version = version;
         self.position_table_filled = true;
+        // The flow pass is over, so the tables may be READ now -- which is what
+        // the second phase needs: where an out-of-flow box actually sits is its
+        // containing block's origin plus its own insets, and both of those come
+        // out of the table the first phase just filled. Clearing the flag before
+        // it is therefore deliberate and not a missing `defer`: re-entering
+        // `fillPositionTables` from inside the second phase finds the table
+        // filled at this version and returns without rebuilding.
+        self.position_table_building = false;
+        Element.layoutPassPositionedSubtrees(self, &self.position_table, &self.static_position_table);
     }
     return true;
 }
