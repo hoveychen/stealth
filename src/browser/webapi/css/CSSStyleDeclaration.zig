@@ -4952,18 +4952,141 @@ fn solveGridColumns(container: *Element, frame: *Frame, content_width: f64, dept
 
     const tracks = frame.arena.alloc(grid.Track, specs.len) catch return &.{};
     for (specs, tracks) |spec, *track| {
-        track.* = switch (spec) {
-            .flex => |factor| .{ .flex = factor },
-            .auto => .{ .auto = true },
-            .length => |token| if (trackLengthPx(container, frame, token, content_width)) |px|
-                .{ .base = Element.layoutUnit(px) }
-            else
-                .{ .auto = true },
-        };
+        track.* = resolveTrack(container, frame, spec, content_width);
     }
 
     const gap = gridGapPx(container, frame, "column-gap", content_width);
     return grid.sizeTracks(frame.arena, tracks, content_width, gap, Element.layoutUnit) catch &.{};
+}
+
+/// One parsed track entry with its lengths resolved against `available`, the
+/// container's content size on that axis.
+///
+/// A `minmax()` is its MAX with the min as a floor: `minmax(50px,100px) auto`
+/// in an 800px container is 100 and 700 in Chrome, so the fixed side takes its
+/// upper bound and the `auto` beside it absorbs the rest. A `minmax()` whose
+/// max is a `<flex>` flexes with that floor under it, and one whose max is a
+/// keyword this engine does not measure behaves as `auto` from the floor up.
+fn resolveTrack(container: *Element, frame: *Frame, spec: grid.TrackSpec, available: f64) grid.Track {
+    return switch (spec) {
+        .flex => |factor| .{ .flex = factor },
+        .auto => .{ .auto = true },
+        .length => |token| if (trackLengthPx(container, frame, token, available)) |px|
+            .{ .base = Element.layoutUnit(px) }
+        else
+            .{ .auto = true },
+        .minmax => |bounds| blk: {
+            const floor = if (trackLengthPx(container, frame, bounds.min, available)) |px|
+                Element.layoutUnit(px)
+            else
+                0;
+            var track = resolveTrack(container, frame, grid.parseTrackToken(bounds.max), available);
+            track.min = floor;
+            break :blk track;
+        },
+    };
+}
+
+/// The same, for a caller that has only the container: the content width every
+/// track is a share of is the container's own, measured here.
+pub fn gridColumnsOf(container: *Element, frame: *Frame, depth: u8) []const grid.Placed {
+    if (frame._grid_tracks.get(container)) |cached| return cached;
+    const content_width = container.dimensionsAt(frame, true, depth + 1, true).width;
+    return gridColumns(container, frame, content_width, depth);
+}
+
+/// The container's rows, sized and placed. Empty when it is not a grid with a
+/// template, which is the caller's signal that the block walk is right.
+///
+/// A row that declares no size of its own is as tall as its tallest item, which
+/// is why this measures them -- and why it guards against re-entry: measuring an
+/// item asks how tall the row it stretches into is, and that is this answer.
+/// An item measured while its own rows are being solved gets no stretch and
+/// falls back to its content, which is the height the row is being sized from.
+pub fn gridRows(container: *Element, frame: *Frame, depth: u8) []const grid.Placed {
+    if (frame._grid_rows.get(container)) |cached| return cached;
+    if (frame._grid_rows_solving.contains(container)) return &.{};
+    frame._grid_rows_solving.put(frame.arena, container, {}) catch return &.{};
+    defer _ = frame._grid_rows_solving.remove(container);
+
+    const solved = solveGridRows(container, frame, depth);
+    frame._grid_rows.put(frame.arena, container, solved) catch {};
+    return solved;
+}
+
+fn solveGridRows(container: *Element, frame: *Frame, depth: u8) []const grid.Placed {
+    const columns = gridColumnsOf(container, frame, depth);
+    if (columns.len == 0) return &.{};
+
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const template: []grid.TrackSpec = if (cascadedRawDeclaration(style_manager, container, "grid-template-rows")) |declared|
+        grid.parseTrackList(frame.call_arena, declared.value) catch &.{}
+    else
+        &.{};
+    // `grid-auto-rows` sizes every row the template did not name, which on a
+    // grid with no `grid-template-rows` at all is all of them: `grid-auto-rows:
+    // 40px` makes each of the four cells of a two-column grid 40 tall, where
+    // the content alone would have made them 18.
+    const auto_rows: ?grid.TrackSpec = if (cascadedRawDeclaration(style_manager, container, "grid-auto-rows")) |declared| blk: {
+        var it: grid.TokenIterator = .{ .text = declared.value };
+        break :blk if (it.next()) |token| grid.parseTrackToken(token) else null;
+    } else null;
+
+    // What each row's items need, for the rows nothing else sizes.
+    var measured: std.ArrayListUnmanaged(f64) = .empty;
+    var index: usize = 0;
+    var child = container.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!isGridItem(el, frame)) continue;
+        const row = index / columns.len;
+        while (measured.items.len <= row) {
+            measured.append(frame.call_arena, 0) catch return &.{};
+        }
+        const box = el.dimensionsAt(frame, true, depth + 1, true);
+        const outer = box.height + box.padding_y + box.border_y +
+            el.placedMarginPx(frame, .top, "margin-top") +
+            el.placedMarginPx(frame, .bottom, "margin-bottom");
+        measured.items[row] = @max(measured.items[row], outer);
+        index += 1;
+    }
+    if (measured.items.len == 0) return &.{};
+
+    const tracks = frame.call_arena.alloc(grid.Track, measured.items.len) catch return &.{};
+    for (tracks, measured.items, 0..) |*track, needed, row| {
+        const spec: ?grid.TrackSpec = if (row < template.len) template[row] else auto_rows;
+        track.* = if (spec) |declared| resolveTrack(container, frame, declared, 0) else .{};
+        // A row with nothing definite about it -- `auto`, or no declaration at
+        // all -- is its content's height. Nothing stretches a row here: the
+        // container has no definite height to share out in the shapes measured.
+        if (track.flex == 0 and track.base == 0) track.base = @max(needed, track.min);
+        track.auto = false;
+        track.flex = 0;
+    }
+
+    const gap = gridGapPx(container, frame, "row-gap", 0);
+    var stacked: f64 = gap * @as(f64, @floatFromInt(tracks.len - 1));
+    for (tracks) |track| stacked += track.base;
+    return grid.sizeTracks(frame.arena, tracks, stacked, gap, Element.layoutUnit) catch &.{};
+}
+
+/// The height a grid item is stretched to: its row's, less its own margins and
+/// edges, which the caller takes off. Null when the item is not stretched --
+/// `align-self` or the container's `align-items` said otherwise -- or when its
+/// rows are being solved and its own content is the answer being looked for.
+pub fn gridItemHeight(element: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    if (!isGridContainer(parent, frame)) return null;
+    if (!isGridItem(element, frame)) return null;
+    if (flexCrossAlign(element, parent, frame) != .stretch) return null;
+
+    const columns = gridColumnsOf(parent, frame, depth);
+    if (columns.len == 0) return null;
+    const rows = gridRows(parent, frame, depth);
+    if (rows.len == 0) return null;
+    const cell = gridCellOf(element, frame, columns.len) orelse return null;
+    if (cell.row >= rows.len) return null;
+    return rows[cell.row].size;
 }
 
 /// A grid item's width is its column's, the way a flex item's is its share of
@@ -4983,19 +5106,21 @@ pub fn gridItemWidth(element: *Element, frame: *Frame, depth: u8, edges: BoxEdge
     const columns = gridColumns(parent, frame, content_width, depth);
     if (columns.len == 0) return null;
 
-    const column = gridColumnOf(element, frame, columns.len) orelse return null;
-    return @max(0, columns[column].size - edges.padding_x - edges.border_x);
+    const cell = gridCellOf(element, frame, columns.len) orelse return null;
+    return @max(0, columns[cell.column].size - edges.padding_x - edges.border_x);
 }
 
-/// Which column an item lands in. An auto-placed grid fills its rows in order,
-/// so the nth item of a three-column grid is in column n mod 3.
-fn gridColumnOf(element: *Element, frame: *Frame, columns: usize) ?usize {
+/// Which cell an item lands in. An auto-placed grid fills its rows in order, so
+/// the nth item of a three-column grid is in column n mod 3 and row n div 3.
+pub const GridCell = struct { column: usize, row: usize };
+
+pub fn gridCellOf(element: *Element, frame: *Frame, columns: usize) ?GridCell {
     const parent = element.parentElement() orelse return null;
     var index: usize = 0;
     var child = parent.firstElementChild();
     while (child) |el| : (child = el.nextElementSibling()) {
         if (!isGridItem(el, frame)) continue;
-        if (el == element) return index % columns;
+        if (el == element) return .{ .column = index % columns, .row = index / columns };
         index += 1;
     }
     return null;

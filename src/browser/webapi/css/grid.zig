@@ -42,6 +42,10 @@ pub const TrackSpec = union(enum) {
     /// `auto`, `min-content`, `max-content` and anything else this engine does
     /// not model: a track with no size of its own.
     auto,
+    /// `minmax(<min>, <max>)`: two tokens, each of which is one of the above.
+    /// The max is what the track grows to and the min is the floor it is never
+    /// squeezed under.
+    minmax: struct { min: []const u8, max: []const u8 },
 };
 
 /// How many tracks one `repeat()` may expand to. A page may write
@@ -68,13 +72,22 @@ pub fn parseTrackList(arena: Allocator, value: []const u8) Allocator.Error![]Tra
             try expandRepeat(arena, &specs, body);
             continue;
         }
-        try specs.append(arena, parseTrack(token));
+        try specs.append(arena, parseTrackToken(token));
     }
     return specs.items;
 }
 
-/// One track, which is one token: a length, a flex factor, or a keyword.
-fn parseTrack(token: []const u8) TrackSpec {
+/// One track, which is one token: a length, a flex factor, a keyword, or a
+/// `minmax()` of two of those. Public so a caller can parse one bound of a
+/// `minmax()` on its own.
+pub fn parseTrackToken(token: []const u8) TrackSpec {
+    if (callOf(token, "minmax")) |body| {
+        const comma = std.mem.indexOfScalar(u8, body, ',') orelse return .auto;
+        return .{ .minmax = .{
+            .min = std.mem.trim(u8, body[0..comma], &std.ascii.whitespace),
+            .max = std.mem.trim(u8, body[comma + 1 ..], &std.ascii.whitespace),
+        } };
+    }
     if (token.len > 2 and std.ascii.endsWithIgnoreCase(token, "fr")) {
         const number = std.fmt.parseFloat(f64, token[0 .. token.len - 2]) catch return .auto;
         return .{ .flex = @max(0, number) };
@@ -148,6 +161,9 @@ pub const Track = struct {
     /// Whether the track takes a share of the leftover when nothing flexes.
     /// `auto` does; a length does not.
     auto: bool = false,
+    /// The floor a `minmax()` puts under the track: it may grow past this and
+    /// is never sized below it.
+    min: f64 = 0,
 };
 
 /// Where one track starts and how wide it is, both on the layout grid.
@@ -197,6 +213,7 @@ pub fn sizeTracks(arena: Allocator, tracks: []const Track, available: f64, gap: 
         } else if (auto_count > 0 and track.auto) {
             size = free / auto_count;
         }
+        size = @max(size, track.min);
         const start = snap(edge);
         placed.* = .{ .start = start, .size = @max(0, snap(edge + size) - start) };
         edge += size + gap;

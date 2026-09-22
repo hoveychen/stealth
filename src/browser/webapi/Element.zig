@@ -4573,6 +4573,7 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         if (dom_version != frame._flex_lines_dom_version) {
             frame._flex_lines.clearRetainingCapacity();
             frame._grid_tracks.clearRetainingCapacity();
+            frame._grid_rows.clearRetainingCapacity();
             frame._flex_lines_dom_version = dom_version;
         }
     }
@@ -4734,6 +4735,21 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     //
     // After the cascade, because a declared height wins: `stretch` only fills
     // an axis the item left auto.
+    // A grid item with no height of its own is stretched to fill its ROW, the
+    // same `align-items: stretch` default a flex item takes -- so a
+    // `grid-auto-rows: 40px` cell holding one line of text is 40 tall and not
+    // 18. Before the flex branch cannot matter: an element is an item of one
+    // container or the other, never both.
+    if (height == null) {
+        if (CSSStyleDeclaration.gridItemHeight(self, frame, depth)) |row_cross| {
+            var cross_containing: ?f64 = containing_width;
+            const margins = self.verticalMargins(frame, &cross_containing, depth);
+            height = @max(0, row_cross - margins.top - margins.bottom -
+                dims.padding_y - dims.border_y);
+            dims.explicit_height = true;
+        }
+    }
+
     if (height == null) {
         if (CSSStyleDeclaration.flexItemHeight(self, frame, depth)) |line_cross| {
             // The MARGIN box fills the line, so the item's own parts come out
@@ -6876,34 +6892,18 @@ fn gridContent(
     }
     if (items.items.len == 0) return .{ .total = 0 };
 
-    // The rows, sized to their tallest item. A row's height is a `.base` track
-    // and nothing flexes, so `sizeTracks` places them on the same snapped edges
-    // the columns sit on.
-    const row_count = (items.items.len + columns.len - 1) / columns.len;
-    const rows = frame.call_arena.alloc(css_grid.Track, row_count) catch return null;
-    for (rows) |*row| row.* = .{ .base = 0 };
-    for (items.items, 0..) |item, index| {
-        const row = index / columns.len;
-        const outer = item.margin_top + item.outer_height +
-            item.el.placedMarginPx(frame, .bottom, "margin-bottom");
-        rows[row].base = @max(rows[row].base, outer);
-    }
-    const row_gap = CSSStyleDeclaration.gridGapPx(self, frame, "row-gap", 0);
-    var stacked: f64 = 0;
-    for (rows) |row| stacked += row.base;
-    stacked += row_gap * @as(f64, @floatFromInt(row_count - 1));
-    const placed_rows = css_grid.sizeTracks(
-        frame.call_arena,
-        rows,
-        stacked,
-        row_gap,
-        layoutUnit,
-    ) catch return null;
+    // The rows, solved where a stretching item can find the same answer:
+    // `gbcr` takes an item's height from its own measurement and not from this
+    // walk, so the row a cell belongs to has to be knowable from the item.
+    const placed_rows = CSSStyleDeclaration.gridRows(self, frame, depth);
+    if (placed_rows.len == 0) return null;
 
     var line_width: ?f64 = content_width;
     for (items.items, 0..) |item, index| {
         const column = columns[index % columns.len];
-        const row = placed_rows[index / columns.len];
+        const row_index = index / columns.len;
+        if (row_index >= placed_rows.len) break;
+        const row = placed_rows[row_index];
         const x = column.start + item.margin_left;
         const y = row.start + item.margin_top;
         if (pass) |p| {
@@ -7547,7 +7547,7 @@ fn insetSideOf(comptime name: []const u8) InsetSide {
 /// space, or the declared length. Asked for the `auto` share only where the
 /// cascade actually says `auto`, which is what keeps `usedAutoMarginPx`'s own
 /// measurement off the path of every positioned box that declares a length.
-fn placedMarginPx(self: *Element, frame: *Frame, side: InsetSide, comptime name: []const u8) f64 {
+pub fn placedMarginPx(self: *Element, frame: *Frame, side: InsetSide, comptime name: []const u8) f64 {
     if (self.marginIsAuto(name, frame)) {
         return self.usedAutoMarginPx(frame, side) orelse 0;
     }

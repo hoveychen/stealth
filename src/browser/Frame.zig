@@ -225,6 +225,15 @@ _flex_lines_dom_version: usize = 0,
 /// one grid asks for the same track list, and parsing it once per item is the
 /// only cost the cache exists to avoid.
 _grid_tracks: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
+
+/// The same for the rows, which cost more: a row with no size of its own is as
+/// tall as its tallest item, so filling this measures every item on the grid.
+_grid_rows: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
+
+/// The containers whose rows are being solved right now. Measuring an item asks
+/// how tall the row it stretches into is, which is the answer being computed --
+/// so an item reached through here is measured at its own content height.
+_grid_rows_solving: std.AutoHashMapUnmanaged(*Element, void) = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
