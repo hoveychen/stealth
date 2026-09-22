@@ -4662,7 +4662,17 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     }
 
     if (comptime measure_text_width) {
-        const edges = CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+        var edges = CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+        // A cell of a collapsed table -- and the table itself -- does not have
+        // the border it wrote: the two boxes on either side of a grid line
+        // share one border, half each, and the widest declaration on that line
+        // is the one that decides. A `border:1px` cell beside another is
+        // 9.0625 wide in Chrome where its own border would have made it
+        // 10.0625.
+        if (CSSStyleDeclaration.collapsedBorders(self, frame, depth)) |merged| {
+            edges.border_x = merged.left + merged.right;
+            edges.border_y = merged.top + merged.bottom;
+        }
         dims.padding_x = edges.padding_x;
         dims.padding_y = edges.padding_y;
         dims.border_x = edges.border_x;

@@ -18,7 +18,8 @@ What is modelled here is the whole of the box grid: column widths and the x
 they put a cell at, row heights and the y, the stretch that leaves no cell
 shorter than its row, and `colspan` / `rowspan`. All 28 readings of
 scratch/s79/expr-table.js and all 33 of scratch/s81/expr-tablerows.js match
-Chrome 153. `border-collapse: collapse` and `<caption>` are not here.
+Chrome 153. `border-collapse: collapse` is here too, in the fourth block, measured with
+scratch/s82/expr-tablecap.js; `<caption>` is not.
 -->
 
 <script id=columns_are_as_wide_as_their_widest_cell>
@@ -259,6 +260,81 @@ Chrome 153. `border-collapse: collapse` and `<caption>` are not here.
     boxes(`<table style="${T}">
       <tr><td class=p rowspan=2 style="${RESET}">a</td>${td('padding:10px', 'b')}</tr>
       <tr>${td('', 'c')}</tr></table>`));
+
+  host.remove();
+}
+</script>
+
+<script id=collapsed_borders_are_shared_half_each>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const RESET = 'box-sizing:content-box;border:0;padding:0;margin:0;' +
+    'width:auto;min-width:0;max-width:none;height:auto;font:16px Georgia;' +
+    'line-height:normal;white-space:normal;text-align:left;vertical-align:top;';
+  const C = 'border-collapse:collapse;' + RESET;
+
+  // The table itself is measured too, because half of the outermost border is
+  // what its own box is inset by.
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top, b.width, b.height]);
+    }
+    d.remove();
+    return out.map((p) => p.join(',')).join('|');
+  };
+
+  const W = 'Hamburgefonstiv';
+  const td = (extra, text) => `<td class=p style="${RESET}${extra || ''}">${text}</td>`;
+
+  // Two cells either side of one 1px border draw half of it each, so each is
+  // 1 wider than its text and not 2. Separated, the same pair is 10.0625 and
+  // 126.1484 in a 136.2109 table.
+  testing.expectEqual(
+    '0,0,135.2109375,20|0.5,0.5,9.0625,19|9.5625,0.5,125.1484375,19',
+    boxes(`<table class=p style="${C}"><tr>` +
+      td('border:1px solid', 'a') + td('border:1px solid', W) + '</tr></table>'));
+
+  // The table's own border is on the outer lines, and the wider declaration
+  // wins: a 10px table around 2px cells puts the first cell at 5.
+  testing.expectEqual(
+    '0,0,154.2109375,38|5,5,14.0625,28|19.0625,5,130.1484375,28',
+    boxes(`<table class=p style="${C}border:10px solid"><tr>` +
+      td('border:2px solid', 'a') + td('border:2px solid', W) + '</tr></table>'));
+
+  // The merge is per SEGMENT, not per line: the second row's cells keep their
+  // own 1px of outer border where the line between the rows is 4 wide.
+  testing.expectEqual(
+    '0,0,144.2109375,46|2,2,12.0625,22|14.0625,2,128.1484375,22|' +
+    '2,24,12.0625,21|14.0625,24,128.1484375,21',
+    boxes(`<table class=p style="${C}">` +
+      '<tr>' + td('border:4px solid', 'a') + td('border:4px solid', W) + '</tr>' +
+      '<tr>' + td('border:2px solid', 'b') + td('border:2px solid', 'c') + '</tr>' +
+      '</table>'));
+
+  // A cell that declared no border at all still sits on the line its
+  // neighbour asked for, and keeps none of the half on the side where there
+  // is nothing.
+  testing.expectEqual(
+    '0,0,148.2109375,34|0,4,12.0625,26|12.0625,4,132.1484375,26',
+    boxes(`<table class=p style="${C}"><tr>` +
+      td('', 'a') + td('border:8px solid', W) + '</tr></table>'));
+
+  // A declared width is the distance between the middles of the outer lines,
+  // so the box it produces is 400 plus half of each of them.
+  testing.expectEqual(
+    '0,0,406,30|3,3,34.40625,24|37.40625,3,365.59375,24',
+    boxes(`<table class=p style="${C}width:400px;border:6px solid"><tr>` +
+      td('border:2px solid', 'a') + td('border:2px solid', W) + '</tr></table>'));
 
   host.remove();
 }
