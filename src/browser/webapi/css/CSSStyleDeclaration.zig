@@ -50,6 +50,7 @@ const shorthand = @import("shorthand.zig");
 const supports = @import("supports.zig");
 const font_metrics = @import("../../font_metrics.zig");
 const text_measure = @import("../../text_measure.zig");
+const grid = @import("grid.zig");
 const transform = @import("transform.zig");
 const animation_timing = @import("animation_timing.zig");
 const typed_om = @import("typed_om.zig");
@@ -4877,6 +4878,127 @@ fn fillsAtDisplay(display: []const u8) bool {
         if (std.mem.eql(u8, display, name)) return true;
     }
     return false;
+}
+
+/// Whether this element lays its children out on a grid.
+pub fn isGridContainer(element: *Element, frame: *Frame) bool {
+    const display = resolvedDisplay(element, frame);
+    return std.mem.eql(u8, display, "grid") or std.mem.eql(u8, display, "inline-grid");
+}
+
+/// Whether a child of a grid container is one of its items. The same two
+/// exclusions a flex item has: an out-of-flow box is not placed in a cell, and
+/// a `display:none` one is not laid out at all.
+pub fn isGridItem(element: *Element, frame: *Frame) bool {
+    return isFlexItem(element, frame);
+}
+
+/// The `gap` between two tracks on one axis, in px. The same rule the flex
+/// gaps follow -- `normal` and an unresolvable length are no gap, and a
+/// percentage is a share of the container's own size on that axis.
+pub fn gridGapPx(container: *Element, frame: *Frame, name: []const u8, container_size: f64) f64 {
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declaration = cascadedRawDeclaration(style_manager, container, name) orelse return 0;
+    const trimmed = std.mem.trim(u8, declaration.value, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(trimmed, "normal")) return 0;
+    if (std.mem.endsWith(u8, trimmed, "%")) {
+        const share = std.fmt.parseFloat(f64, trimmed[0 .. trimmed.len - 1]) catch return 0;
+        return @max(0, container_size * share / 100.0);
+    }
+    const parsed = units.parse(trimmed) catch return 0;
+    if (parsed.unit != .px) return 0;
+    return @max(0, parsed.value);
+}
+
+/// One `<length-percentage>` out of a track list, in px. A percentage is a
+/// share of the container's content size on that axis, which is the number the
+/// caller already has; everything else goes through the same unit table a
+/// declared length does.
+fn trackLengthPx(element: *Element, frame: *Frame, token: []const u8, available: f64) ?f64 {
+    if (std.mem.endsWith(u8, token, "%")) {
+        const share = std.fmt.parseFloat(f64, token[0 .. token.len - 1]) catch return null;
+        return available * share / 100.0;
+    }
+    const parsed = units.parse(token) catch return null;
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    return switch (lengthFactor(style_manager, element, "width", parsed.unit)) {
+        .verbatim => parsed.value,
+        .pixels => |factor| parsed.value * factor,
+        .unresolvable => null,
+    };
+}
+
+/// The container's columns, sized and placed, or an empty list when it declares
+/// no `grid-template-columns` this engine can make sense of.
+///
+/// Solved once per container for the length of one top-level measurement, the
+/// way a flex line is: every item on the grid asks for the same answer, and
+/// the walk that produces it measures nothing, so the cache is only here to
+/// keep an n-item grid from parsing its track list n times.
+pub fn gridColumns(container: *Element, frame: *Frame, content_width: f64, depth: u8) []const grid.Placed {
+    if (frame._grid_tracks.get(container)) |cached| return cached;
+    const solved = solveGridColumns(container, frame, content_width, depth);
+    frame._grid_tracks.put(frame.arena, container, solved) catch {};
+    return solved;
+}
+
+fn solveGridColumns(container: *Element, frame: *Frame, content_width: f64, depth: u8) []const grid.Placed {
+    _ = depth;
+    const style_manager = &container.ownerFrame(frame)._style_manager;
+    const declared = cascadedRawDeclaration(style_manager, container, "grid-template-columns") orelse
+        return &.{};
+    const specs = grid.parseTrackList(frame.arena, declared.value) catch return &.{};
+    if (specs.len == 0) return &.{};
+
+    const tracks = frame.arena.alloc(grid.Track, specs.len) catch return &.{};
+    for (specs, tracks) |spec, *track| {
+        track.* = switch (spec) {
+            .flex => |factor| .{ .flex = factor },
+            .auto => .{ .auto = true },
+            .length => |token| if (trackLengthPx(container, frame, token, content_width)) |px|
+                .{ .base = Element.layoutUnit(px) }
+            else
+                .{ .auto = true },
+        };
+    }
+
+    const gap = gridGapPx(container, frame, "column-gap", content_width);
+    return grid.sizeTracks(frame.arena, tracks, content_width, gap, Element.layoutUnit) catch &.{};
+}
+
+/// A grid item's width is its column's, the way a flex item's is its share of
+/// the line: the track was sized before anything looked at the item, and a
+/// declared width on the item does not change the track.
+///
+/// Null when this element is not a grid item, or when its container declares no
+/// template -- an implicit single-column grid stretches its items the way a
+/// block does, which is what the box already had.
+pub fn gridItemWidth(element: *Element, frame: *Frame, depth: u8, edges: BoxEdges) ?f64 {
+    if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    const parent = element.parentElement() orelse return null;
+    if (!isGridContainer(parent, frame)) return null;
+    if (!isGridItem(element, frame)) return null;
+
+    const content_width = parent.dimensionsAt(frame, true, depth + 1, true).width;
+    const columns = gridColumns(parent, frame, content_width, depth);
+    if (columns.len == 0) return null;
+
+    const column = gridColumnOf(element, frame, columns.len) orelse return null;
+    return @max(0, columns[column].size - edges.padding_x - edges.border_x);
+}
+
+/// Which column an item lands in. An auto-placed grid fills its rows in order,
+/// so the nth item of a three-column grid is in column n mod 3.
+fn gridColumnOf(element: *Element, frame: *Frame, columns: usize) ?usize {
+    const parent = element.parentElement() orelse return null;
+    var index: usize = 0;
+    var child = parent.firstElementChild();
+    while (child) |el| : (child = el.nextElementSibling()) {
+        if (!isGridItem(el, frame)) continue;
+        if (el == element) return index % columns;
+        index += 1;
+    }
+    return null;
 }
 
 /// The cascaded keyword for a property whose value is one, skipping everything

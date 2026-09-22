@@ -40,6 +40,7 @@ const referrer = @import("referrer.zig");
 const Blob = @import("webapi/Blob.zig");
 const FileList = @import("webapi/FileList.zig");
 const MediaQueryList = @import("webapi/css/MediaQueryList.zig");
+const css_grid = @import("webapi/css/grid.zig");
 const Node = @import("webapi/Node.zig");
 const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
@@ -218,6 +219,12 @@ _flex_lines: Element.FlexLineLookup = .empty,
 /// The `Page.dom_version` `_flex_lines` was filled under; every entry is stale
 /// at once when that moves, the same rule StyleManager's cascade caches use.
 _flex_lines_dom_version: usize = 0,
+
+/// Grid column tracks solved for the document as it stands, keyed by the
+/// container. Cleared with `_flex_lines` and under the same rule: every item on
+/// one grid asks for the same track list, and parsing it once per item is the
+/// only cost the cache exists to avoid.
+_grid_tracks: std.AutoHashMapUnmanaged(*Element, []const css_grid.Placed) = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,

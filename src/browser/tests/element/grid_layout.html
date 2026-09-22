@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+Grid was not laid out at all. A `display: grid` container stacked its children
+the way a block does, and each of them filled the container's whole width -- so
+three children of a `grid-template-columns: 100px 1fr 2fr` container sat at
+0,0 / 0,18 / 0,36 and measured 800 wide each, where Chrome puts them side by
+side at 0 / 110 / 346.6641 and 100 / 226.6641 / 453.3359 wide.
+
+Measured on headed Chrome 153 against www.scrapingcourse.com
+(scratch/s74/expr-geom.js, the `grid.*` family).
+
+What is modelled here is track sizing and column placement: a `<length>`, a
+`<flex>` and an `auto` track, `repeat()`, the column gap, and an auto-placed
+item's column. Row sizing beyond "as tall as the tallest item", `minmax()`,
+`grid-column`/`grid-row` spans and `place-items` are not.
+-->
+
+<script id=tracks_take_their_size_and_the_leftover>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  // Every box pins its own `box-sizing`: a page-level `* { border-box }` would
+  // otherwise decide the answer, and the two arms would not be reading the
+  // same shape at all.
+  const CB = 'box-sizing:content-box;';
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.width]);
+    }
+    d.remove();
+    return out;
+  };
+
+  const grid = (columns, extra, items) => boxes(
+    `<div style="${CB}display:grid;grid-template-columns:${columns};${extra}">` +
+    items + '</div>');
+
+  // The leftover after the fixed track goes to the two flex ones in
+  // proportion, and it lands on the 1/128 grid by the tracks' POSITIONS: the
+  // three sizes add up to exactly 680 and none of them is a grid step of
+  // 680/3.
+  testing.expectEqual('0,100|110,226.6640625|346.6640625,453.3359375', grid(
+    '100px 1fr 2fr', 'gap:10px',
+    `<div class=p>a</div><div class=p>b</div><div class=p>c</div>`).join('|'));
+
+  // Two equal flex tracks with a 5px gap split what is left of 800.
+  testing.expectEqual('0,397.5|402.5,397.5', grid(
+    '1fr 1fr', 'gap:5px', `<div class=p>a</div><div class=p>b</div>`).join('|'));
+
+  // `repeat()` is written out, and fixed tracks keep their own size in a
+  // container wider than they are: the row does not stretch to fill it.
+  testing.expectEqual('0,60|60,60|120,60|180,60', grid(
+    'repeat(4, 60px)', '',
+    `<div class=p>a</div><div class=p>b</div><div class=p>c</div><div class=p>d</div>`).join('|'));
+
+  // An `auto` track takes the leftover when nothing flexes.
+  testing.expectEqual('0,100|100,700', grid(
+    '100px auto', '', `<div class=p>a</div><div class=p>b</div>`).join('|'));
+
+  // A percentage track is a share of the container's content width.
+  testing.expectEqual('0,200|200,600', grid(
+    '25% 75%', '', `<div class=p>a</div><div class=p>b</div>`).join('|'));
+
+  // A width declared on the ITEM does not change the track it sits in: the
+  // column was sized before anything looked at the item.
+  testing.expectEqual('0,100|100,700', grid(
+    '100px auto', '',
+    `<div class=p style="${CB}width:40px">a</div><div class=p style="${CB}width:40px">b</div>`).join('|'));
+
+  host.remove();
+}
+</script>
+
+<script id=items_fill_the_rows_in_order>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const boxes = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const base = d.getBoundingClientRect();
+    const out = [];
+    for (const el of d.querySelectorAll('.p')) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left - base.left, b.top - base.top]);
+    }
+    d.remove();
+    return out;
+  };
+
+  // A fourth item on a three-column grid starts the second row, under the
+  // first: the nth item is in column n mod 3 and row n div 3.
+  testing.expectEqual('0,0|200,0|400,0|0,18', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(3, 200px)">` +
+    `<div class=p>a</div><div class=p>b</div><div class=p>c</div><div class=p>d</div></div>`)
+    .join('|'));
+
+  // A row is as tall as the tallest item in it, so a 50px item in the first
+  // row pushes the second one down past it and not past its own height.
+  testing.expectEqual('0,0|200,0|0,50', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(2, 200px)">` +
+    `<div class=p style="${CB}height:50px"></div><div class=p></div>` +
+    `<div class=p></div></div>`).join('|'));
+
+  // An out-of-flow child takes no cell at all: it is not an item, so the
+  // sibling after it is still in the second column.
+  testing.expectEqual('0,0|0,0|200,0', boxes(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(2, 200px)">` +
+    `<div class=p>a</div><div class=p style="${CB}position:absolute">x</div>` +
+    `<div class=p>b</div></div>`).join('|'));
+
+  host.remove();
+}
+</script>
+
+<script id=a_grid_is_as_tall_as_its_rows>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const CB = 'box-sizing:content-box;';
+  const height = (html) => {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    host.appendChild(d);
+    const h = d.firstElementChild.getBoundingClientRect().height;
+    d.remove();
+    return h;
+  };
+
+  // Two rows of 18px text, and not the six-item stack the block walk made.
+  testing.expectEqual(36, height(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(3, 200px)">` +
+    `<div>a</div><div>b</div><div>c</div><div>d</div><div>e</div><div>f</div></div>`));
+
+  // The tallest item in each row is what that row contributes.
+  testing.expectEqual(80, height(
+    `<div style="${CB}display:grid;grid-template-columns:repeat(2, 200px)">` +
+    `<div style="${CB}height:30px"></div><div style="${CB}height:10px"></div>` +
+    `<div style="${CB}height:50px"></div><div style="${CB}height:20px"></div></div>`));
+
+  // A grid with no template stacks its items the way a block does, which is
+  // what an implicit single column is.
+  testing.expectEqual(36, height(
+    `<div style="${CB}display:grid"><div>a</div><div>b</div></div>`));
+
+  host.remove();
+}
+</script>
