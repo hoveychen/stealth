@@ -1957,6 +1957,25 @@ pub fn lengthFactor(style_manager: *StyleManager, element: *Element, property_na
             // takes its half from the block the span sits in. Chrome answers
             // 952 on the 1904px line, measured -- and asking the span instead
             // was a closed loop, because the span's own ink is the div's box.
+            // An out-of-flow box is not contained by that block at all: it takes
+            // its share of its positioned ancestor's PADDING box, which is the
+            // same rule `containingHeightForPercentage` already applies on the
+            // other axis. `width:50%` inside `width:300px;padding:10px;
+            // position:relative` is 160 in Chrome 153 -- half of 320 -- where
+            // this answered 150, and the percentage paddings and margins beside
+            // it were short by the same tenth (scratch/s76/expr-abspct.js).
+            //
+            // The offsets were already right: `outOfFlowPosition` adds the
+            // ancestor's `padding_x` to the box it measures `left: 10%` against,
+            // so a box could sit at 32 and then be sized as if the block it sat
+            // in were 300 wide.
+            if (flowKind(element, frame) == .positioned) {
+                const anchor = positionedAncestor(element, frame) orelse break :blk .{
+                    .pixels = @as(f64, @floatFromInt(element.ownerFrame(frame)._page.getViewport().width)) / 100.0,
+                };
+                const box = anchor.getElementDimensions(frame);
+                break :blk .{ .pixels = (box.width + box.padding_x) / 100.0 };
+            }
             const parent = element.containingBlock(frame) orelse break :blk .unresolvable;
             break :blk .{ .pixels = parent.getElementDimensions(frame).width / 100.0 };
         } else if (percentageOfContainingBlockHeight(property_name)) blk: {
@@ -3721,6 +3740,22 @@ fn declaredEitherSpelling(style_manager: *StyleManager, element: *Element, name:
 pub fn containingWidth(element: *Element, frame: *Frame, containing: *?f64, depth: u8) ?f64 {
     if (containing.*) |width| return width;
     if (depth >= Element.MAX_CONTAINING_BLOCK_DEPTH) return null;
+    // An out-of-flow box is contained by its positioned ancestor's PADDING box.
+    // The same rule as the one in `lengthFactor`'s percentage branch, and it has
+    // to be here too because a percentage padding and a percentage margin come
+    // through this helper rather than through that one: an absolute box with
+    // `width:50%;padding-left:10%;margin-left:10%` inside a
+    // `width:300px;padding:10px` ancestor measured 190 wide at 30 in this engine
+    // against Chrome 153's 192 at 32 -- the width had been fixed and its two
+    // edges were still a tenth of 300 (scratch/s76/expr-abspct.js).
+    if (flowKind(element, frame) == .positioned) {
+        const anchor = positionedAncestor(element, frame) orelse
+            return @floatFromInt(element.ownerFrame(frame)._page.getViewport().width);
+        const box = anchor.getElementDimensions(frame);
+        const width = box.width + box.padding_x;
+        containing.* = width;
+        return width;
+    }
     // The same ancestor the fill branch measures -- Element.containingBlock,
     // which walks past an inline one -- so the two share a number rather than
     // each measuring a different element.

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+An out-of-flow box takes its percentages from its positioned ancestor's PADDING
+box. Its OFFSETS already did -- `outOfFlowPosition` adds the ancestor's
+padding_x to the box it measures `left: 10%` against -- and its size did not, so
+a box sat at 32 and was then sized as if the block it sat in were 300 and not
+320 wide. `width:50%` inside `width:300px;padding:10px;position:relative`
+measured 150 where headed Chrome 153 says 160, and a percentage padding and
+margin on the same box were short by the same tenth.
+
+The block axis had the rule already (`containingHeightForPercentage`); this is
+the inline axis catching up, in the two places a percentage reaches the layout:
+`lengthFactor` for a declared width, and `containingWidth` for the paddings and
+margins.
+
+Nine cases read on headed Chrome 153 against www.scrapingcourse.com with
+scratch/s76/expr-abspct.js. This engine answered 4 of 9 before and answers 8 of
+9 now; the one left is `position:fixed` inside a transformed ancestor, whose
+containing block this engine does not make the ancestor at all.
+-->
+
+<script id=an_out_of_flow_box_measures_against_the_padding_box>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (outer, inner) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div id=o style="box-sizing:content-box;' + outer + '">' +
+      '<div id=p style="box-sizing:content-box;' + inner + '"></div></div>';
+    host.appendChild(d);
+    const p = d.querySelector('#p').getBoundingClientRect();
+    const o = d.querySelector('#o').getBoundingClientRect();
+    d.remove();
+    return { left: p.left - o.left, top: p.top - o.top, width: p.width, height: p.height };
+  };
+  const ABS = 'position:absolute;left:10%;top:20%;width:50%;height:30%';
+
+  // 300 of content plus 10 of padding a side is a 320x120 padding box, so the
+  // halves and tenths are all of that and not of 300x100.
+  const padded = box('position:relative;width:300px;height:100px;padding:10px', ABS);
+  testing.expectEqual(32, padded.left);
+  testing.expectEqual(24, padded.top);
+  testing.expectEqual(160, padded.width);
+  testing.expectEqual(36, padded.height);
+
+  // A border is OUTSIDE the padding box, so it moves the box without resizing
+  // it -- which is what separates "padding box" from "border box".
+  const bordered = box('position:relative;width:300px;height:100px;border:15px solid', ABS);
+  testing.expectEqual(45, bordered.left);
+  testing.expectEqual(150, bordered.width);
+
+  // Both at once: the offsets clear the border and the size counts the padding.
+  const both = box('position:relative;width:300px;height:100px;padding:10px;border:15px solid', ABS);
+  testing.expectEqual(47, both.left);
+  testing.expectEqual(160, both.width);
+
+  // And `box-sizing: border-box` on the ancestor shrinks the padding box back
+  // to the 300 it declared.
+  const bb = box('box-sizing:border-box;position:relative;width:300px;height:100px;padding:10px', ABS);
+  testing.expectEqual(30, bb.left);
+  testing.expectEqual(150, bb.width);
+
+  host.remove();
+}
+</script>
+
+<script id=only_the_out_of_flow_box_gets_the_padding_box>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (inner) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div id=o style="box-sizing:content-box;position:relative;' +
+      'width:300px;height:100px;padding:10px">' +
+      '<div id=p style="box-sizing:content-box;' + inner + '"></div></div>';
+    host.appendChild(d);
+    const p = d.querySelector('#p').getBoundingClientRect();
+    const o = d.querySelector('#o').getBoundingClientRect();
+    d.remove();
+    return { left: p.left - o.left, width: p.width };
+  };
+
+  // An in-flow child is contained by the CONTENT box, so its half is 150. So is
+  // a float's: it is out of the parent's height, not out of its containing
+  // block.
+  testing.expectEqual(150, box('width:50%;height:30%').width);
+  testing.expectEqual(150, box('float:left;width:50%;height:30%').width);
+
+  // A percentage padding and a percentage margin on the out-of-flow box take
+  // their share of the same 320, and they reach the layout by a different route
+  // than the width does -- which is why fixing only the width left these two a
+  // tenth of 300 each.
+  const edges = box('position:absolute;left:0;top:0;width:50%;height:30%;padding-left:10%;margin-left:10%');
+  testing.expectEqual(32, edges.left);
+  testing.expectEqual(192, edges.width);
+
+  host.remove();
+}
+</script>
