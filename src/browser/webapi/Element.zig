@@ -4859,6 +4859,23 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         }
     }
 
+    // Which way this box's lines run, which is which physical axis is the
+    // BLOCK one. Under a vertical writing mode the lines stack across the page,
+    // so the width is the extent the content decides and the height is the one
+    // the lines wrap in -- the two branches below that fill a block's width
+    // from its containing block and take its height from its text swap roles.
+    // CSSStyleDeclaration.writesVertically carries the reading.
+    //
+    // Behind `measure_text_width` like the rest of the width machinery: the
+    // y-only path (`getElementHeight`) asks about thousands of elements per
+    // elementFromPoint call and must not pay a cascade walk for each.
+    // A box whose author gave it both axes has nothing left for either branch
+    // to decide, so it does not pay for the question either.
+    const vertical = if (comptime measure_text_width)
+        (width == null or height == null) and CSSStyleDeclaration.writesVertically(self, frame)
+    else
+        false;
+
     // `aspect-ratio` gives the box whichever axis the author left open, sized
     // off the one they gave. The ratio is measured across the box `box-sizing`
     // names: `width:100px;padding:10px;aspect-ratio:2/1` is 120 by 70 as a
@@ -5096,8 +5113,22 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
             // reason that flag exists -- has no use for a width. Without the
             // gate, document.elementFromPoint pays it for every element it
             // rejects on height alone, which is thousands per call.
-            if (CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
-                if (self.containingBlock(frame)) |parent| {
+            // Not when the lines run down the page: the width is then the
+            // BLOCK axis, and a block box's block axis is never filled from its
+            // containing block -- it is as long as the content makes it. The
+            // text walk below is what answers it.
+            if (!vertical and CSSStyleDeclaration.fillsContainingBlock(self, frame)) {
+                if (self.containingBlock(frame)) |parent| fill: {
+                    // A horizontal box inside a VERTICAL one has no containing
+                    // width to fill: its containing block's inline axis runs the
+                    // other way, so the width it would fill is not a length that
+                    // block has. Chrome sizes it from its own content instead --
+                    // a `horizontal-tb` div holding "Hamburgefonstiv" inside a
+                    // `vertical-rl` parent is 124.1484 wide on Chrome 153
+                    // (scratch/s85/expr-vwm.js, `nestedHorizontal`), its
+                    // max-content width, and not the parent's 18 -- which is
+                    // what the text walk below answers when nothing fills.
+                    if (CSSStyleDeclaration.writesVertically(parent, frame)) break :fill;
                     // What fills the containing block is the BORDER box, so the
                     // padding and the border come out of the content: measured,
                     // `padding:10px` on the 1904px line is 1884 of content and
@@ -5154,32 +5185,70 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
         }
     }
 
-    const wants_text_width = measure_text_width and width == null;
-    if (wants_text_width or height == null) {
-        // The width the text has to wrap in is this box's CONTENT width, which is
-        // what `width` already holds -- the fill branch took the padding and the
-        // border off it. Null when the box has no width of its own: a
-        // shrink-to-fit one takes its max-content width and does not wrap, and
-        // the height-only path (`getElementHeight`, which
-        // document.elementFromPoint rejects thousands of elements on) never asked
-        // for a width at all. That path therefore sees a one-line height for
-        // wrapped text where the reported one is right, which is a hit test
-        // against a y model that is already synthetic -- see
-        // calculateDocumentPosition -- and not a reading a page can make.
-        if (self.textLayout(frame, wants_text_width, width, measure_text_width)) |text| {
-            if (wants_text_width) width = text.width;
-            // A multi-column container's own text is NOT one strip at this
-            // width: it wraps one column wide and is then cut into columns, so
-            // the height here would both over- and under-state it. Left open
-            // for `multiColumnContent`, which clientHeightOf reaches through
-            // the content fallback a box with no height of its own takes.
-            //
-            // Without this the cut was invisible on exactly the shape the sweep
-            // reads: six words in a `column-count: 3` box measured 54, the
-            // text's own height at the full width, where Chrome says 36 -- the
-            // columns had been worked out and then thrown away by the `@max`.
-            if (height == null and !CSSStyleDeclaration.isMultiColumnContainer(self, frame)) {
-                height = text.height;
+    // Lines that run down the page wrap in the box's HEIGHT and stack across
+    // its width, so the extent handed to the walk and both answers it gives
+    // come back the other way round. `<div style="writing-mode:vertical-rl;
+    // height:200px">Hamburgefonstiv</div>` is 18 wide and 200 tall in Chrome:
+    // one 16px Georgia line box laid on its side, wrapping in the 200 the
+    // author gave and not in the 800 of the host it sits in.
+    //
+    // The inline positions the walk records are still the horizontal ones --
+    // turning the line boxes themselves is not this branch's to do -- and a
+    // vertical box's children keep the coordinates they had.
+    if (vertical) {
+        // The inline axis is the HEIGHT now, so the rule that makes an ordinary
+        // block as wide as its containing block makes this one as TALL as it --
+        // but only while the containing block's lines run the same way. A
+        // `vertical-rl` div inside a `vertical-rl` parent 200 tall is 200 tall
+        // in Chrome 153 and not the 124.1484 of its own text
+        // (scratch/s85/expr-vwm.js, `inherited`); one inside a HORIZONTAL parent
+        // is the 124.1484, because its inline axis crosses its parent's and
+        // there is no length there to fill.
+        if (height == null and depth < MAX_CONTAINING_BLOCK_DEPTH and
+            CSSStyleDeclaration.fillsContainingBlock(self, frame))
+        {
+            if (self.containingBlock(frame)) |parent| {
+                if (CSSStyleDeclaration.writesVertically(parent, frame)) {
+                    const available = parent.dimensionsAt(frame, measure_text_width, depth + 1, true).height;
+                    const margin_y = self.containerMarginPx("margin-top", frame, &containing, depth) +
+                        self.containerMarginPx("margin-bottom", frame, &containing, depth);
+                    height = @max(0, available - margin_y - dims.padding_y - dims.border_y);
+                    dims.explicit_height = true;
+                }
+            }
+        }
+        if (self.textLayout(frame, true, height, measure_text_width)) |text| {
+            if (width == null) width = text.height;
+            if (height == null) height = text.width;
+        }
+    } else {
+        const wants_text_width = measure_text_width and width == null;
+        if (wants_text_width or height == null) {
+            // The width the text has to wrap in is this box's CONTENT width, which is
+            // what `width` already holds -- the fill branch took the padding and the
+            // border off it. Null when the box has no width of its own: a
+            // shrink-to-fit one takes its max-content width and does not wrap, and
+            // the height-only path (`getElementHeight`, which
+            // document.elementFromPoint rejects thousands of elements on) never asked
+            // for a width at all. That path therefore sees a one-line height for
+            // wrapped text where the reported one is right, which is a hit test
+            // against a y model that is already synthetic -- see
+            // calculateDocumentPosition -- and not a reading a page can make.
+            if (self.textLayout(frame, wants_text_width, width, measure_text_width)) |text| {
+                if (wants_text_width) width = text.width;
+                // A multi-column container's own text is NOT one strip at this
+                // width: it wraps one column wide and is then cut into columns, so
+                // the height here would both over- and under-state it. Left open
+                // for `multiColumnContent`, which clientHeightOf reaches through
+                // the content fallback a box with no height of its own takes.
+                //
+                // Without this the cut was invisible on exactly the shape the sweep
+                // reads: six words in a `column-count: 3` box measured 54, the
+                // text's own height at the full width, where Chrome says 36 -- the
+                // columns had been worked out and then thrown away by the `@max`.
+                if (height == null and !CSSStyleDeclaration.isMultiColumnContainer(self, frame)) {
+                    height = text.height;
+                }
             }
         }
     }
