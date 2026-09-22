@@ -3333,6 +3333,24 @@ pub fn intrinsicImageSize(self: *const Element) ?IntrinsicBox {
     };
 }
 
+/// Does this element size itself off a ratio it brought with it?
+///
+/// Only two do. A `<canvas>` takes its ratio from the buffer -- the branch in
+/// `dimensionsIn` that scales one axis off the other is the measurement -- and
+/// an `<img>` whose bytes declared a size takes it from the picture. Neither a
+/// `<video>`, an `<object>` nor an `<svg>` has one: each keeps its 300 or its
+/// 150 when the other axis is declared, measured in
+/// tools/fingerprint/scratch/expr-replaced-intrinsic.js.
+///
+/// Asked by `aspect-ratio`'s `auto <ratio>` form, which is the intrinsic ratio
+/// wherever there is one and the written ratio everywhere else.
+pub fn hasIntrinsicRatio(self: *const Element) bool {
+    if (self.getTag() == .canvas) {
+        return true;
+    }
+    return self.intrinsicImageSize() != null;
+}
+
 /// `width` and `height` are the CONTENT box. What a page reads is one of three
 /// boxes and the edges are how they are told apart: clientWidth is content +
 /// padding, offsetWidth and getBoundingClientRect add the border, and a
@@ -4329,6 +4347,23 @@ pub fn dimensionsAt(self: *Element, frame: *Frame, comptime measure_text_width: 
 /// property lookups, and it goes away with the prototype.
 pub var measure_entries: u64 = 0;
 
+/// One axis of an `aspect-ratio` box across the ratio, in CONTENT lengths.
+///
+/// `ratio` multiplies: the inline axis of a `w / h` box is `h * (w/h)` and its
+/// block axis is `w * (h/w)`. Under `border-box` the ratio spans the border box,
+/// so the edges of the axis being measured FROM join it and the edges of the
+/// one being measured TO come back off; under `content-box` neither does.
+fn acrossRatio(from: f64, ratio: f64, box: struct {
+    from_outer: f64,
+    to_outer: f64,
+    border_box: bool,
+}) f64 {
+    if (!box.border_box) {
+        return @max(0, from * ratio);
+    }
+    return @max(0, (from + box.from_outer) * ratio - box.to_outer);
+}
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
     measure_entries += 1;
     // A backstop the `depth` parameter cannot be: not every path down carries
@@ -4556,6 +4591,52 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
                         edges.border_y - edges.padding_y);
                     dims.explicit_height = true;
                 }
+            }
+        }
+    }
+
+    // `aspect-ratio` gives the box whichever axis the author left open, sized
+    // off the one they gave. The ratio is measured across the box `box-sizing`
+    // names: `width:100px;padding:10px;aspect-ratio:2/1` is 120 by 70 as a
+    // content box -- 50 of content height plus its own padding -- and 100 by 50
+    // under `border-box`, where the padding is inside the measured square.
+    // Measured on Chrome 153, scratch/s76/expr-aspect.js.
+    const aspect_ratio: ?f64 = if (width == null or height == null)
+        CSSStyleDeclaration.aspectRatio(self, frame)
+    else
+        null;
+    // The edges the ratio spans under `border-box`, and whether it does. Asked
+    // for here rather than read off `dims` because the y-only path never fills
+    // them -- the same reason the inset branch above asks. Behind the ratio
+    // being there at all, so `getElementHeight` pays for neither on the
+    // overwhelming majority of elements that declare no ratio.
+    const aspect_edges: CSSStyleDeclaration.BoxEdges = if (aspect_ratio == null)
+        .{}
+    else if (comptime measure_text_width)
+        .{
+            .padding_x = dims.padding_x,
+            .padding_y = dims.padding_y,
+            .border_x = dims.border_x,
+            .border_y = dims.border_y,
+        }
+    else
+        CSSStyleDeclaration.boxEdgesSharing(self, frame, &containing, depth);
+    const aspect_border_box = aspect_ratio != null and
+        (if (comptime measure_text_width) border_box else CSSStyleDeclaration.usesBorderBox(self, frame));
+
+    // The INLINE axis, before the branches below: a block-level box with a
+    // definite height takes its width from the ratio rather than stretching
+    // across its containing block. `height:50px;aspect-ratio:2/1` in a 300px
+    // parent measures 100 wide in Chrome, not 300.
+    if (aspect_ratio) |ratio| {
+        if (width == null) {
+            if (height) |h| {
+                width = acrossRatio(h, ratio, .{
+                    .from_outer = aspect_edges.padding_y + aspect_edges.border_y,
+                    .to_outer = aspect_edges.padding_x + aspect_edges.border_x,
+                    .border_box = aspect_border_box,
+                });
+                dims.explicit_width = true;
             }
         }
     }
@@ -4789,6 +4870,26 @@ pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: 
     // A declared width already answers the only question the measurement is
     // for, so it also gates the walk over the text -- not just the caller's
     // opt-out above.
+    // And the BLOCK axis, now that a stretched or intrinsic width is known: an
+    // `aspect-ratio:2/1` box with nothing else declared fills its 300px parent
+    // and is 150 tall.
+    //
+    // Not marked explicit, unlike the width above. Chrome floors a ratio's
+    // height with the box's content -- a 100px-wide `2/1` holding seven lines
+    // of text measures 126 and not 50 -- and that floor is the `@max` in
+    // clientHeightOf, which only runs while the height is not a declared one.
+    if (aspect_ratio) |ratio| {
+        if (height == null) {
+            if (width) |w| {
+                height = acrossRatio(w, 1 / ratio, .{
+                    .from_outer = aspect_edges.padding_x + aspect_edges.border_x,
+                    .to_outer = aspect_edges.padding_y + aspect_edges.border_y,
+                    .border_box = aspect_border_box,
+                });
+            }
+        }
+    }
+
     const wants_text_width = measure_text_width and width == null;
     if (wants_text_width or height == null) {
         // The width the text has to wrap in is this box's CONTENT width, which is

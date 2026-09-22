@@ -3917,6 +3917,47 @@ pub fn wrapsText(element: *Element, frame: *Frame) bool {
     return !std.ascii.eqlIgnoreCase(mode, "nowrap");
 }
 
+/// The `aspect-ratio` the cascade gives this element, as width divided by
+/// height. Null when the box has none.
+///
+/// `auto` is none, and so is a DEGENERATE ratio: `aspect-ratio: 2 / 0` measures
+/// 0px tall on Chrome 153, which is what a box with no ratio and no content
+/// measures too, and a negative one is rejected by the parser and computes back
+/// as `auto` (scratch/s76/expr-aspect.js).
+///
+/// An `auto <ratio>` pair means "the intrinsic ratio if there is one, this
+/// otherwise", so it is the ratio for every non-replaced element and is refused
+/// for the two replaced ones that carry a ratio of their own.
+pub fn aspectRatio(element: *Element, frame: *Frame) ?f64 {
+    const declared = cascadedComputedValue(element, "aspect-ratio", frame) orelse return null;
+    var rest = std.mem.trim(u8, declared, &std.ascii.whitespace);
+    if (std.ascii.eqlIgnoreCase(rest, "auto")) {
+        return null;
+    }
+    if (rest.len > 4 and std.ascii.eqlIgnoreCase(rest[0..4], "auto") and std.ascii.isWhitespace(rest[4])) {
+        if (element.hasIntrinsicRatio()) {
+            return null;
+        }
+        rest = std.mem.trim(u8, rest[4..], &std.ascii.whitespace);
+    }
+
+    var parts = std.mem.splitScalar(u8, rest, '/');
+    const width = std.fmt.parseFloat(f64, std.mem.trim(u8, parts.first(), &std.ascii.whitespace)) catch return null;
+    // A lone number is the ratio against 1 -- `aspect-ratio: 0.5` is a box
+    // twice as tall as it is wide, measured.
+    var height: f64 = 1;
+    if (parts.next()) |text| {
+        height = std.fmt.parseFloat(f64, std.mem.trim(u8, text, &std.ascii.whitespace)) catch return null;
+    }
+    if (parts.next() != null) {
+        return null;
+    }
+    if (!(width > 0) or !(height > 0)) {
+        return null;
+    }
+    return width / height;
+}
+
 pub fn usesBorderBox(element: *Element, frame: *Frame) bool {
     const style_manager = &element.ownerFrame(frame)._style_manager;
     const declared = cascadedKeyword(style_manager, element, "box-sizing") orelse
@@ -6212,6 +6253,21 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
         }
         try buf.writer.writeByte(c);
         i += 1;
+    }
+
+    // An `aspect-ratio` is a PAIR however the author wrote it: Chrome answers
+    // `1 / 1` for `aspect-ratio: 1` and `0.5 / 1` for `0.5`, and completes the
+    // `auto <number>` form the same way. Measured on Chrome 153,
+    // scratch/s76/expr-aspect.js. Only a bare `auto` escapes it -- that is not
+    // a ratio at all.
+    if (std.mem.eql(u8, property_name, "aspect-ratio")) {
+        const written = std.mem.trimEnd(u8, if (changed) buf.written() else value, &std.ascii.whitespace);
+        if (written.len != 0 and
+            std.mem.indexOfScalar(u8, written, '/') == null and
+            !std.ascii.eqlIgnoreCase(written, "auto"))
+        {
+            return std.fmt.allocPrint(arena, "{s} / 1", .{written});
+        }
     }
 
     // Most values carry no capital at all, so the copy is thrown away far more

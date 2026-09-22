@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+`aspect-ratio` sized nothing: `<div style="width:100px;aspect-ratio:2/1">` was
+100 by 0 in this engine where headed Chrome 153 says 100 by 50, and the property
+reached getComputedStyle without ever reaching the box.
+
+Every number below was read on headed Chrome 153 with scratch/s76/expr-aspect.js
+against www.scrapingcourse.com, twenty-three cases, and this engine now answers
+all twenty-three byte for byte.
+
+`box-sizing` is pinned on every probe here for the same reason it is pinned in
+that probe: the ratio spans the box `box-sizing` names, so a page carrying a
+universal `border-box` changes the answer, and the runner's page is not the
+probe's.
+-->
+
+<script id=aspect_ratio_fills_the_axis_left_open>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (style, inner) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div style="box-sizing:content-box;width:300px">' +
+      '<div id=p style="box-sizing:content-box;' + style + '">' + (inner || '') + '</div></div>';
+    host.appendChild(d);
+    const r = d.querySelector('#p').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+
+  // The block axis off a declared width, and the inline axis off a declared
+  // height -- which outranks the stretch a block-level box would otherwise take
+  // across its 300px parent.
+  const w = box('width:100px;aspect-ratio:2/1');
+  testing.expectEqual(100, w.width);
+  testing.expectEqual(50, w.height);
+
+  const h = box('height:50px;aspect-ratio:2/1');
+  testing.expectEqual(100, h.width);
+  testing.expectEqual(50, h.height);
+
+  // Neither declared: the width is the stretch, and the ratio follows it.
+  const n = box('aspect-ratio:2/1');
+  testing.expectEqual(300, n.width);
+  testing.expectEqual(150, n.height);
+
+  // A lone number is the ratio against 1, both in the box and in the
+  // serialisation.
+  const half = box('width:100px;aspect-ratio:0.5');
+  testing.expectEqual(200, half.height);
+
+  // The ratio lands on the layout grid like any other used length: 100 * 7/3 is
+  // 233.333, and the box is 233.328125.
+  const grid = box('width:100px;aspect-ratio:3/7');
+  testing.expectEqual(233.328125, grid.height);
+
+  host.remove();
+}
+</script>
+
+<script id=aspect_ratio_spans_the_box_that_box_sizing_names>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (style) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div style="box-sizing:content-box;width:300px">' +
+      '<div id=p style="' + style + '"></div></div>';
+    host.appendChild(d);
+    const r = d.querySelector('#p').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+
+  // content-box: the square is the CONTENT, and the padding hangs outside both
+  // of its sides.
+  const content = box('box-sizing:content-box;width:100px;padding:10px;aspect-ratio:2/1');
+  testing.expectEqual(120, content.width);
+  testing.expectEqual(70, content.height);
+
+  // border-box: the padding is inside the square, so the rect IS the ratio.
+  const border = box('box-sizing:border-box;width:100px;padding:10px;aspect-ratio:2/1');
+  testing.expectEqual(100, border.width);
+  testing.expectEqual(50, border.height);
+
+  // A border counts on whichever side of that line box-sizing puts it.
+  const edge = box('box-sizing:content-box;width:100px;border:5px solid;aspect-ratio:2/1');
+  testing.expectEqual(110, edge.width);
+  testing.expectEqual(60, edge.height);
+
+  host.remove();
+}
+</script>
+
+<script id=aspect_ratio_yields_to_content_and_to_the_bounds>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'box-sizing:content-box;position:absolute;left:0;top:0;' +
+    'width:800px;font:16px Georgia;line-height:normal';
+  document.body.appendChild(host);
+
+  const box = (style, inner) => {
+    const d = document.createElement('div');
+    d.innerHTML = '<div style="box-sizing:content-box;width:300px">' +
+      '<div id=p style="box-sizing:content-box;' + style + '">' + (inner || '') + '</div></div>';
+    host.appendChild(d);
+    const r = d.querySelector('#p').getBoundingClientRect();
+    d.remove();
+    return r;
+  };
+
+  // A declared height is the height: the ratio never gets asked.
+  testing.expectEqual(90, box('width:100px;height:90px;aspect-ratio:2/1').height);
+
+  // `min-height` and `max-height` apply to what the ratio produced.
+  testing.expectEqual(20, box('width:100px;max-height:20px;aspect-ratio:2/1').height);
+  testing.expectEqual(80, box('width:100px;min-height:80px;aspect-ratio:2/1').height);
+
+  // And the content floors it: a ratio is a size, not a clip. Asserted as an
+  // inequality against the same text's own unratioed height, because the number
+  // is a line count and the runner's page need not resolve the probe's face.
+  const text = 'Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor';
+  const plain = box('width:100px', text);
+  const ratioed = box('width:100px;aspect-ratio:2/1', text);
+  testing.expectTrue(plain.height > 50);
+  testing.expectEqual(plain.height, ratioed.height);
+
+  // A degenerate ratio is no ratio, and neither is `auto`.
+  testing.expectEqual(0, box('width:100px;aspect-ratio:2/0').height);
+  testing.expectEqual(0, box('width:100px;aspect-ratio:auto').height);
+  testing.expectEqual(0, box('width:100px;aspect-ratio:-2/1').height);
+
+  host.remove();
+}
+</script>
+
+<script id=aspect_ratio_serialises_as_a_pair>
+{
+  const d = document.createElement('div');
+  document.body.appendChild(d);
+
+  const ratio = (value) => {
+    d.style.aspectRatio = value;
+    return getComputedStyle(d).aspectRatio;
+  };
+
+  testing.expectEqual('1 / 1', ratio('1'));
+  testing.expectEqual('0.5 / 1', ratio('0.5'));
+  testing.expectEqual('16 / 9', ratio('16/9'));
+  testing.expectEqual('auto 2 / 1', ratio('auto 2/1'));
+  testing.expectEqual('auto', ratio('auto'));
+
+  d.remove();
+}
+</script>
