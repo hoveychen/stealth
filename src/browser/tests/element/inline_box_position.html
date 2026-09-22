@@ -69,3 +69,67 @@ read on headed Chrome 153 with scratch/s74/expr-geom.js (`inline.padded`,
   host.remove();
 }
 </script>
+
+<!--
+Where a box sits in its line is the line's own baseline less the box's, and the
+line's is a maximum over everything on it -- so it is not known until the line
+ends. Every inline box used to be recorded at the line's TOP instead, which is
+right only for the tallest thing on the line. The five spans of
+`inline.vertAlign` in scratch/s74/expr-geom.js all read y=0 where headed Chrome
+153 says 0, 11.6641, 2.1641, 7.1641 and 7.1641, and all six controls of
+`form.controls` read 0 where Chrome says 21.5, 23, 23, 20.5, 0 and 21.5.
+
+`super` and `sub` are functions of the font SIZE alone -- three families agree
+at every one of 43 sizes in scratch/s75/expr-valign.js -- and the ladders are
+`size/3 + 0.5` and `size/5 + 0.5`. Asserted here against the engine's own
+unshifted span, so the assertion is the shift and not the advance.
+-->
+
+<script id=vertical_align_moves_the_box_within_its_line>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:20px Georgia';
+  host.innerHTML = 'x<span id=sup style="vertical-align:super">s</span>' +
+                   '<span id=sub style="vertical-align:sub">s</span>' +
+                   '<span id=len style="vertical-align:5px">s</span>' +
+                   '<span id=base>s</span>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const sup = box('sup'), sub = box('sub'), len = box('len'), base = box('base');
+
+  // 20/3 + 0.5 and 20/5 + 0.5, on the layout grid.
+  testing.expectEqual(7.1640625, base.top - sup.top);
+  testing.expectEqual(-4.5, base.top - sub.top);
+  testing.expectEqual(5, base.top - len.top);
+  // The raised span is the top of the line, so the line grew by its own shift.
+  testing.expectEqual(host.getBoundingClientRect().top, sup.top);
+
+  host.remove();
+}
+</script>
+
+<script id=a_form_control_brings_its_own_baseline>
+{
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:0;top:0;width:600px;font:16px Georgia';
+  host.innerHTML = '<div><input id=field><input id=check type=checkbox>' +
+                   '<textarea id=area></textarea></div>';
+  document.body.appendChild(host);
+
+  const box = (id) => host.querySelector('#' + id).getBoundingClientRect();
+  const field = box('field'), check = box('check'), area = box('area');
+
+  // The textarea stands on its bottom edge and is the tallest box here, so it
+  // is the top of the line and the line's baseline is its own bottom.
+  testing.expectEqual(host.getBoundingClientRect().top, area.top);
+  const baseline = area.top + area.height;
+  // A checkbox stands on the baseline; a text field hangs its font's descent
+  // below it, so it is the lower of the two tops by exactly that descent.
+  testing.expectEqual(baseline, check.top + check.height);
+  testing.expectTrue(field.top + field.height > baseline);
+  testing.expectTrue(field.top < check.top);
+
+  host.remove();
+}
+</script>
