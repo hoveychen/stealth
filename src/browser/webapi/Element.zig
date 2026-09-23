@@ -4559,8 +4559,55 @@ fn acrossRatio(from: f64, ratio: f64, box: struct {
     return @max(0, (from + box.from_outer) * ratio - box.to_outer);
 }
 
+/// One measurement's inputs, so a repeat of the same question can be answered
+/// from `Frame._measure_memo` instead of laying the subtree out again. Every
+/// argument `dimensionsIn` varies on is here; `depth` is not an argument it
+/// varies on but a recursion budget, and is kept because a measurement that ran
+/// out of budget answered 0 and must not be handed to a caller that still had
+/// some.
+pub const MeasureKey = struct {
+    element: *Element,
+    /// `?f64` has padding a hash would read, so the width travels as its bits
+    /// with a separate flag for the absent case.
+    containing_width: u64,
+    has_containing_width: bool,
+    distribute_flex: bool,
+    measure_text_width: bool,
+    depth: u8,
+};
+
+pub const MeasureMemo = std.AutoHashMapUnmanaged(MeasureKey, Dimensions);
+
 pub fn dimensionsIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
     measure_entries += 1;
+
+    // Not memoised while the reentry backstop is in reach: what it answers is a
+    // function of how deep the measurement in flight already is, and that is
+    // state the key does not carry. Caching the 0 it hands back would hand the
+    // same 0 to a later caller that had budget to spare.
+    const memo = if (frame._layout_depth + 1 >= MAX_LAYOUT_REENTRY) null else frame._measure_memo;
+    if (memo == null) {
+        return self.measureIn(frame, measure_text_width, depth, distribute_flex, containing_width);
+    }
+    const key: MeasureKey = .{
+        .element = self,
+        .containing_width = if (containing_width) |w| @bitCast(w) else 0,
+        .has_containing_width = containing_width != null,
+        .distribute_flex = distribute_flex,
+        .measure_text_width = measure_text_width,
+        .depth = depth,
+    };
+    if (memo.?.get(key)) |hit| {
+        return hit;
+    }
+    const dims = self.measureIn(frame, measure_text_width, depth, distribute_flex, containing_width);
+    // A measurement it could not record is a slower walk rather than a wrong
+    // one, the same trade `Frame.elementTransform` makes.
+    memo.?.put(frame.arena, key, dims) catch {};
+    return dims;
+}
+
+fn measureIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, depth: u8, distribute_flex: bool, containing_width: ?f64) Dimensions {
     // A backstop the `depth` parameter cannot be: not every path down carries
     // it. A percentage width resolves through the computed-value machinery,
     // which reaches back for the containing block's box through
