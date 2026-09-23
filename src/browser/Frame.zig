@@ -2152,6 +2152,21 @@ fn fillPositionTables(self: *Frame) bool {
     const version = self._page.liveVersion();
     if (!self.position_table_filled or self.position_table_version != version) {
         const root = self.document.getDocumentElement() orelse return false;
+
+        // The pass shares one set of measurements, for the same reason the hit
+        // test does and with the same safety argument: no script runs while it
+        // is running, so a repeat of the same question cannot have acquired a
+        // different answer. Without it the pass re-measures its way down --
+        // measured on www.boots.com, ONE pass over 7434 nodes spent 141
+        // SECONDS and entered `dimensionsIn` 1,636,845 times, about 220 times
+        // per node, because a flex row's content height asks its items, whose
+        // own heights ask the row back. The station timed out in the antibot
+        // sweep against a document Imperva had answered 200.
+        var measure_memo: Element.MeasureMemo = .empty;
+        const memo_was = self._measure_memo;
+        self._measure_memo = &measure_memo;
+        defer self._measure_memo = memo_was;
+
         self.position_table_building = true;
         self.position_table = .empty;
         self.static_position_table = .empty;
