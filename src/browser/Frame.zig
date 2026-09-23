@@ -215,6 +215,23 @@ _image_cache: std.StringHashMapUnmanaged(*ImageCacheEntry) = .empty,
 /// this counts them all. See Element.MAX_LAYOUT_REENTRY.
 _layout_depth: u16 = 0,
 
+/// Measurements already made during one hit test, keyed by the whole argument
+/// tuple `Element.dimensionsIn` answers to.
+///
+/// Null except while `document.elementFromPoint` is walking, and that narrow
+/// scope is the correctness argument: no script runs during the walk, so the
+/// document cannot change under it and a repeat of the same question has the
+/// same answer. It is not a general layout cache -- pricing one of those is
+/// what `layout-pass-cost-prototype` did, and it did not fit.
+///
+/// What it buys: measuring a container lays out its whole subtree, and the walk
+/// then asks each of those descendants for its own box, laying the same
+/// subtrees out again. On www.kohls.com that is 1162 measured boxes and 49
+/// SECONDS per call, twice per load -- long enough that the sweep gave up on
+/// the station and recorded `timeout: Runtime.enable` for a page the guard had
+/// in fact served.
+_measure_memo: ?*Element.MeasureMemo = null,
+
 /// Flex lines solved for the document as it stands. See Element.FlexLineLookup.
 _flex_lines: Element.FlexLineLookup = .empty,
 

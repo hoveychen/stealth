@@ -1352,6 +1352,23 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
 
     var visibility_cache: Element.VisibilityCache = .{};
 
+    // Measuring a container lays out its whole subtree, and this walk then asks
+    // each of those descendants for its own box -- laying the same subtrees out
+    // again, once per level of nesting. Sharing the measurements across the walk
+    // is what makes it a walk and not a re-layout per candidate: on
+    // www.kohls.com, 1162 of 1505 candidates take the measured path and the call
+    // cost 49 SECONDS, twice per load, which is why the antibot sweep recorded
+    // `timeout: Runtime.enable` against a page the guard had served.
+    //
+    // Safe for exactly as long as it is installed: no script runs during the
+    // walk, so the same question cannot acquire a different answer. It comes
+    // back off at the end rather than living on the frame, because outside this
+    // call the document does change.
+    var measure_memo: Element.MeasureMemo = .empty;
+    const memo_was = frame._measure_memo;
+    frame._measure_memo = &measure_memo;
+    defer frame._measure_memo = memo_was;
+
     while (stack.items.len > 0) {
         const node = stack.pop() orelse break;
         if (node.is(Element)) |element| {
