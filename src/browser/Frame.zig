@@ -557,6 +557,14 @@ _pending_loads: u32,
 
 _parent_notified: bool = false,
 
+// Set once this frame's navigable has been discarded -- the <iframe> holding it
+// left the document, or navigated away. The Frame itself outlives that (a
+// script can still be holding the Window), but the Document it carries no
+// longer has a browsing context, which is what `Document.hasBrowsingContext`
+// asks. Chrome makes that visible: `contentDocument.defaultView` goes null and
+// every computed value in the document empties out.
+_navigable_discarded: bool = false,
+
 // whether our parent's load event is waiting for us to load. For a root page,
 // this is meaningless. For an iframe, it's false when loading=lazy. We'll still
 // load the iframe, but we won't delay the parent
@@ -5128,6 +5136,7 @@ fn discardIFrameNavigable(iframe: *IFrame) void {
     }
 
     window._closed = true;
+    frame._navigable_discarded = true;
     iframe._window = null;
     iframe._executed = false;
 
