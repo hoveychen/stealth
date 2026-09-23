@@ -59,7 +59,16 @@ for (const p of parts) {
 const knobSrc = parts.map((p) => `try { (() => {\n${KNOBS[p]}\n})(); } catch (e) {}`).join('\n');
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const LP = process.env.LP_BIN || path.join(repo, 'zig-out-rel/bin/lightpanda');
+// `zig-out`, not `zig-out-rel`: the release tree is not what `zig build`
+// refreshes, so it goes stale silently and this tool then reports the verdict
+// of whatever binary was left there. On 2026-09-22 the `zig-out-rel` copy here
+// was three weeks old (2026-08-31, older than the relay chain itself) and it
+// took `x-hyatt` 0/5 on `x-kpsdk-r` in the same minute the current build took
+// 5/5 -- so every Kasada reading taken through this tool without LP_BIN set was
+// a reading of August's engine, and the station has in fact been open for some
+// time. Same fix in `kasada-fetch-guard.mjs`. Pin the binary explicitly
+// (`LP_BIN=.pinned/lp-bNNN-x`) whenever a run has to be attributable.
+const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
 // Ask the browser for its user agent instead of writing the version down.
 //
 // This was a hardcoded `Chrome/151.0.0.0`. Chrome moved to 152 and the guards
