@@ -38,7 +38,7 @@
 // is the IP asking. A pass measured from a residential address says nothing
 // about the same binary from a datacenter one; what this sweep isolates is the
 // engine, by holding the address fixed across the two columns.
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -61,6 +61,24 @@ const arg = (name, fallback) => {
     return i !== -1 ? process.argv[i + 1] : fallback;
 };
 const outPath = path.resolve(repo, arg('--out', `tools/fingerprint/results/antibot-${engine}.json`));
+const lpBin = process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda');
+// `zig build` with no flags produces a Debug binary, and that is what this
+// default path holds. A debug engine is roughly 7x slower on script-heavy
+// pages -- aw-hollandandbarrett settles in 54s on ReleaseFast and has still
+// not answered Runtime.enable at 92s on Debug -- so every `error` and
+// `timeout` row a debug sweep records is a reading about the build, not about
+// the guard. Ask the binary which one it is rather than inferring it, and say
+// so out loud: the same family of mistake has already been made by reading a
+// sweep taken against a month-old binary.
+const lpBuildMode = () => {
+    if (engine !== 'lightpanda') return null;
+    try {
+        const stdout = execFileSync(lpBin, ['version'], { encoding: 'utf8', timeout: 20000 });
+        return stdout.match(/^build:\s*(\S+)/m)?.[1] ?? 'unknown';
+    } catch {
+        return 'unknown';
+    }
+};
 const proxy = arg('--proxy', null);
 const windowSize = arg('--window-size', '1920,1080');
 // Substring filter, so one station can be re-run without walking fifteen.
@@ -277,7 +295,7 @@ async function launch() {
             ...chromeArgs,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
-        proc = spawn(process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda'), [
+        proc = spawn(lpBin, [
             'serve', '--host', '127.0.0.1', '--port', String(PORT),
             ...(proxy ? ['--http-proxy', proxy] : []),
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -616,8 +634,20 @@ const snapshot = {
     startedAt: new Date().toISOString(),
     egress: null,
     version: null,
+    // Debug vs ReleaseFast, read off the binary itself. A sweep taken on a
+    // debug build cannot be compared with one taken on a release build.
+    buildMode: lpBuildMode(),
     stations: [],
 };
+
+if (snapshot.buildMode && snapshot.buildMode !== 'ReleaseFast' && snapshot.buildMode !== 'ReleaseSafe') {
+    console.log(
+        `!! ${path.relative(repo, lpBin)} reports build: ${snapshot.buildMode}. Every error/timeout row below ` +
+        `is a reading about the build as much as about the guard;\n` +
+        `!! rebuild with \`zig build -Doptimize=ReleaseFast -p zig-out-relfast\` and re-run with ` +
+        `LP_BIN=zig-out-relfast/bin/lightpanda before calling a slow station a defect.\n`,
+    );
+}
 
 try {
     // The address is half of any guard's decision, so record it in the snapshot
