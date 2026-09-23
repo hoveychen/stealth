@@ -2110,7 +2110,7 @@ const CollapsedRun = struct {
             // word are the kernel's and need nothing here. (This comment used
             // to say no pair has a space on either side, which was true of
             // font_kerning.zig alone and wrong about Chrome.)
-            width += text_measure.measureAt(face, word, size, &self.at_word_start).width;
+            width += text_measure.widthAt(face, word, size, &self.at_word_start);
             self.previous = ends.last;
         }
         return width;
@@ -2874,7 +2874,7 @@ const LineFlow = struct {
             const word = str[start..i];
             // Before the measurement, which advances the flag past this word.
             const ends = text_case.edges(word, face.transform, self.at_word_start);
-            self.word += text_measure.measureAt(face, word, size, &self.at_word_start).width;
+            self.word += text_measure.widthAt(face, word, size, &self.at_word_start);
             if (!self.have_word) {
                 self.word_first = ends.first;
                 self.word_joins = joins;
