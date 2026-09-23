@@ -29,7 +29,10 @@ const settle = Number(arg('--settle', 16000));
 const outDir = arg('--out', path.join(here, 'scratch', `guard-${engine}`));
 
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const LP = process.env.LP_BIN || path.join(repo, 'zig-out-rel/bin/lightpanda');
+// `zig-out`, not `zig-out-rel` -- the release tree goes stale silently and this
+// tool would then measure it instead of the build under test. See the same fix
+// in `kasada-knob.mjs` for the run that caught it.
+const LP = process.env.LP_BIN || path.join(repo, 'zig-out/bin/lightpanda');
 // Ask the browser for its user agent instead of writing the version down. This
 // was a hardcoded `Chrome/151.0.0.0`; Chrome moved to 152 and the guards began
 // refusing the mismatch (see cf-verdict.mjs for the full account -- it read
