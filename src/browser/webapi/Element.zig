@@ -1538,7 +1538,12 @@ pub fn requestFullscreen(_: *const Element, _: ?js.Object, exec: *const js.Execu
 }
 
 pub fn requestPointerLock(_: *const Element, _: ?js.Object, exec: *const js.Execution) js.Promise {
-    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.WrongDocumentError } });
+    // `error.WrongDocument`, which is the name `DOMException.fromError` knows.
+    // Spelled `error.WrongDocumentError` this used to take the `orelse
+    // unreachable` in PromiseResolver.rejectError and kill the process: one
+    // call to this method, from any page, was a crash. www.sony.com makes it,
+    // and the antibot sweep read the dead engine as `timeout: Runtime.enable`.
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.WrongDocument } });
 }
 
 // CSS zoom is not something we apply, so the effective zoom is always 1.

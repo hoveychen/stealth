@@ -118,7 +118,18 @@ pub fn rejectError(
         .type_error => |msg| self.local.isolate.createTypeError(msg),
         // "Exceptional".
         .dom_exception => |exception| {
-            var dom_exception = DOMException.fromError(exception.err) orelse unreachable;
+            // An error name the table does not carry is a bug in the caller,
+            // and it used to be a fatal one: `orelse unreachable` took the
+            // whole process down from inside a promise rejection, which is a
+            // place any page can reach. `requestPointerLock` spelled its error
+            // `WrongDocumentError` against a table that has `WrongDocument`,
+            // so one call crashed the engine. Rejecting with the generic
+            // DOMException instead loses the name and keeps the browser, and
+            // the log line names the caller to fix.
+            var dom_exception = DOMException.fromError(exception.err) orelse blk: {
+                log.err(.bug, "rejectDomException unmapped", .{ .source = source, .err = exception.err });
+                break :blk DOMException{ ._code = .invalid_state_error };
+            };
             dom_exception._custom_message = exception.message;
             self._reject(dom_exception) catch |reject_err| {
                 log.err(.bug, "rejectDomException", .{ .source = source, .err = reject_err, .persistent = false });
