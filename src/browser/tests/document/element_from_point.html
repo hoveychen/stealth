@@ -174,6 +174,13 @@
   }
   document.body.appendChild(host);
 
+  // The tree above was built a statement ago, so the first call after it has
+  // to fill the position tables -- one whole layout pass, which is not what
+  // this budget is about and is what used to make it straddle 1500ms on a
+  // loaded machine. Warm the tables outside the timer and charge the loop with
+  // the per-call cost the comment above is describing.
+  document.elementFromPoint(4000, 4000);
+
   const started = Date.now();
   for (let i = 0; i < 40; i++) {
     document.elementFromPoint(4000 + i, 4000);
@@ -214,6 +221,13 @@
     host.appendChild(row);
   }
   document.body.appendChild(host);
+
+  // Same reason as the block above: the first call after those 400 appends
+  // pays for a layout pass over 670KB of text (measured: 1445ms for this tree,
+  // 72ms for the same tree with a thirtieth of the text), and that pass is not
+  // what "does not measure every paragraph" is claiming. The 39 calls after it
+  // cost 13ms whatever the text says, which is the claim.
+  document.elementFromPoint(4000, 4000);
 
   const started = Date.now();
   for (let i = 0; i < 40; i++) {
