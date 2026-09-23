@@ -160,6 +160,23 @@ pub fn getURL(self: *const Document, frame: *const Frame) [:0]const u8 {
     return self._url orelse (self._frame orelse frame).url;
 }
 
+/// Whether this document still sits in a live browsing context.
+///
+/// Two ways to fail it. A document that never had one -- `createHTMLDocument`,
+/// `DOMParser` -- has no frame at all. A document whose <iframe> left the
+/// document keeps its frame (a script can still be holding the Window and
+/// mutating the DOM through it) but its navigable was discarded, so it is just
+/// as contextless. Chrome makes the second case visible in two places, both
+/// reachable from one expression a guard can run: `contentDocument.defaultView`
+/// answers null, and every computed value in the document comes back "".
+/// Cloudflare's guard reads exactly that -- `getComputedStyle(div).display` in
+/// a widget frame it has already taken out -- and this engine answered the real
+/// value where Chrome answers "" (scratch/s87/expr-nobc.js).
+pub fn hasBrowsingContext(self: *const Document) bool {
+    const frame = self._frame orelse return false;
+    return !frame._navigable_discarded;
+}
+
 pub fn getLocation(self: *const Document) ?*Location {
     if (self._type != .html) return null;
     const doc_frame = self._frame orelse return null;
@@ -2776,6 +2793,7 @@ pub const JsApi = struct {
     pub const designMode = bridge.accessor(Document.getDesignMode, Document.setDesignMode, .{});
     fn _defaultView(self: *const Document) ?*Window {
         const frame = self._frame orelse return null;
+        if (!self.hasBrowsingContext()) return null;
         return frame.window;
     }
     pub const onreadystatechange = bridge.accessor(handlerAccessor(.onreadystatechange).get, handlerAccessor(.onreadystatechange).set, .{});

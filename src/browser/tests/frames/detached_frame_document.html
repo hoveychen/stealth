@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+Two readings a guard gets for free from a child frame, both measured on a
+headed Chrome 153 in scratch/s87/expr-nobc.js, expr-sheets.js and
+expr-gcs-realm.js.
+
+1. A child document's cascade is its OWN. Each Frame carries a StyleManager
+   built from its document's sheets, and the computed-value path asked the
+   CALLER's frame for the declared display, so a <span> in an iframe under that
+   document's own `.sc { display: grid }` read back `inline` -- the parent
+   page's rules were the only ones consulted. Chrome answers `grid` whichever
+   window the call goes through: the receiver is not part of the question.
+
+2. An <iframe> taken out of the document loses its navigable, and the Document
+   a script is still holding loses its browsing context with it. Chrome then
+   answers null for `contentDocument.defaultView` and empties every computed
+   value in that document -- length 0, `display` "". This engine discarded the
+   navigable already (the element's contentWindow goes null) but the Document
+   kept answering full values, which is what Cloudflare's guard reads in a
+   widget frame it has already removed: `getComputedStyle(div).display` came
+   back `flex` for us where Chrome says "".
+-->
+
+<iframe id="child" style="width:300px;height:150px"></iframe>
+<iframe id="doomed" style="width:300px;height:150px"></iframe>
+
+<script id="child_document_cascade_is_its_own">
+{
+    const d = document.getElementById('child').contentDocument;
+    const st = d.createElement('style');
+    st.textContent = '.sc { display: grid; }';
+    d.head.appendChild(st);
+
+    const sp = d.createElement('span');
+    sp.className = 'sc';
+    d.body.appendChild(sp);
+
+    testing.expectEqual(1, d.styleSheets.length);
+    testing.expectEqual('grid', d.defaultView.getComputedStyle(sp).display);
+    testing.expectEqual('grid', window.getComputedStyle(sp).display);
+}
+</script>
+
+<script id="removed_frame_document_has_no_browsing_context">
+{
+    const f = document.getElementById('doomed');
+    const d = f.contentDocument;
+    const sp = d.createElement('span');
+    d.body.appendChild(sp);
+
+    testing.expectEqual(true, d.defaultView !== null);
+    testing.expectEqual('inline', window.getComputedStyle(sp).display);
+
+    f.remove();
+
+    testing.expectEqual(null, d.defaultView);
+    testing.expectEqual(null, f.contentWindow);
+
+    const cs = window.getComputedStyle(sp);
+    testing.expectEqual(0, cs.length);
+    testing.expectEqual('', cs.display);
+    testing.expectEqual('', cs.width);
+}
+</script>
+</body>

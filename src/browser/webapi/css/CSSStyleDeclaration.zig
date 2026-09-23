@@ -173,7 +173,7 @@ fn computedIsEmpty(self: *const CSSStyleDeclaration) bool {
     const node = element.asNode();
     if (!node.isConnected()) return true;
     const document = node.ownerDocument(self._frame) orelse return true;
-    return document._frame == null;
+    return !document.hasBrowsingContext();
 }
 
 pub fn length(self: *const CSSStyleDeclaration) u32 {
@@ -204,7 +204,7 @@ fn computedCustomNames(self: *const CSSStyleDeclaration) [][]const u8 {
     if (self.computedIsEmpty()) return &.{};
     const element = self._element orelse return &.{};
     var names: std.ArrayList([]const u8) = .empty;
-    self._frame._style_manager.collectCustomPropertyNames(element, &names) catch return &.{};
+    element.ownerFrame(self._frame)._style_manager.collectCustomPropertyNames(element, &names) catch return &.{};
     return names.items;
 }
 
@@ -572,10 +572,11 @@ fn propertyValueUnaliased(self: *const CSSStyleDeclaration, property_name: []con
     // attribute, or from an ancestor, and nothing precomputes the set.
     if (self._is_computed and isCustomProperty(normalized)) {
         const element = self._element orelse return "";
-        const value = frame._style_manager.customPropertyValue(element, normalized) orelse return "";
+        const style_manager = &element.ownerFrame(frame)._style_manager;
+        const value = style_manager.customPropertyValue(element, normalized) orelse return "";
         // var() is substituted at computed-value time; the specified value
         // that `el.style` hands out keeps its var() text.
-        return frame._style_manager.substituteVars(element, value) orelse "";
+        return style_manager.substituteVars(element, value) orelse "";
     }
 
     // Blink's own name for "the decoration this element draws", which is what
@@ -3291,11 +3292,16 @@ fn leftAtCurrentColour(
 /// answer too, so it never reaches `declaredValue` where the other properties
 /// have their keywords taken apart.
 fn resolvedDisplaySpecified(element: *Element, frame: *Frame) []const u8 {
-    const declared = frame._style_manager.computedDisplay(element) orelse
+    // The cascade that declares this is the ELEMENT's, not the caller's. An
+    // <iframe>'s document has a StyleManager of its own, so asking the caller's
+    // matched the child element against the parent page's rules and found
+    // nothing -- `<span class=si>` under the child's own `.si{display:flex}`
+    // read back `inline` (scratch/s87/expr-sheets.js).
+    const style_manager = &element.ownerFrame(frame)._style_manager;
+    const declared = style_manager.computedDisplay(element) orelse
         return getDefaultDisplay(element);
     const keyword = cssWideKeyword(declared) orelse return declared;
 
-    const style_manager = &element.ownerFrame(frame)._style_manager;
     const wrapped = comptime String.wrap("display");
     return switch (resolvedCssWide(style_manager, element, "display", wrapped, keyword, .computed, 0)) {
         .value => |value| value,
@@ -3323,7 +3329,7 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
     if (flowKind(element, frame) != .in_flow) return blockified;
 
     const parent = element.parentElement() orelse return specified;
-    if (!frame._style_manager.blockifiesChildren(parent)) {
+    if (!parent.ownerFrame(frame)._style_manager.blockifiesChildren(parent)) {
         return specified;
     }
     return blockified;
