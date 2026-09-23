@@ -72,7 +72,15 @@ fn run(allocator: Allocator, main_arena: Allocator, proc_args: std.process.Args)
                 try lp.checkVersion(allocator, &args);
             } else {
                 var stdout = std.Io.File.stdout().writerStreaming(lp.io, &.{});
-                try stdout.interface.print("{s}\n", .{lp.build_config.version});
+                // The optimisation mode goes on its own line, leaving the first
+                // one byte-identical for anything that reads only that. A debug
+                // binary runs roughly 7x slower, which is enough to turn a page
+                // that settles into one that times out, so a harness driving
+                // this engine needs a way to tell the two builds apart.
+                try stdout.interface.print("{s}\nbuild: {t}\n", .{
+                    lp.build_config.version,
+                    @import("builtin").mode,
+                });
             }
             return std.process.cleanExit(lp.io);
         },
