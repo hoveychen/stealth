@@ -348,6 +348,135 @@ pub fn measure(face: Face, text: []const u8, size: f64) Metrics {
     return measureAt(face, text, size, &at_word_start);
 }
 
+/// The width alone, answered from a memo when the same word has been priced in
+/// the same face at the same size before.
+///
+/// For the two layout walks that chop a run at white space and want nothing but
+/// the pen: `CollapsedRun.measure` and `LineFlow.add`. They ask this once per
+/// WORD, and a page is overwhelmingly the same few hundred words over and over
+/// -- the same word in the same face at the same size, because a paragraph is
+/// one face and one size. `measureAt` is a pure function of exactly the
+/// arguments below, so the memo needs no invalidation: nothing a mutation can
+/// change is an input to it.
+///
+/// It exists because a layout pass over a real page is this call. One
+/// `data-` attribute invalidates the whole position table, and rebuilding it
+/// re-measured 670KB of text: 400 paragraphs of filler cost 109ms a pass and 20
+/// mutation-then-read pairs cost 2177ms (scratch/s90/relayout-per-mutation.js,
+/// ReleaseFast), where `sample`'s self-time table put 3289 of its samples in
+/// `measureAt` against 367 in the runner-up.
+///
+/// Not folded into `measureAt` itself: every other caller wants the whole
+/// `Metrics`, and the ink box, the baselines and the two bounding edges are not
+/// what this stores. Callers wanting those keep paying for them.
+pub fn widthAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) f64 {
+    if (text.len == 0 or text.len > word_memo_max_len) {
+        return measureAt(face, text, size, at_word_start).width;
+    }
+    const slot = &word_memo[wordMemoHash(face, text, size, at_word_start.*)];
+    if (slot.len == text.len and
+        slot.at_word_start_in == at_word_start.* and
+        slot.size_bits == @as(u64, @bitCast(size)) and
+        std.mem.eql(u8, slot.bytes[0..slot.len], text) and
+        faceEql(slot.face, face))
+    {
+        at_word_start.* = slot.at_word_start_out;
+        return slot.width;
+    }
+    const was = at_word_start.*;
+    const width = measureAt(face, text, size, at_word_start).width;
+    // Direct-mapped, so a colliding word simply takes the slot. A page whose
+    // working set outruns the table pays what it paid before this existed
+    // rather than paying for eviction bookkeeping on top.
+    slot.* = .{
+        .len = @intCast(text.len),
+        .at_word_start_in = was,
+        .at_word_start_out = at_word_start.*,
+        .size_bits = @bitCast(size),
+        .face = face,
+        .width = width,
+        .bytes = undefined,
+    };
+    @memcpy(slot.bytes[0..text.len], text);
+    return width;
+}
+
+/// Long enough for a word, which is what this is asked about. 33 bytes is where
+/// the German dictionary runs out; past it the memo steps aside rather than
+/// growing an allocation, and the caller measures as it always did.
+const word_memo_max_len = 40;
+
+/// A power of two so the hash can be masked, and sized for a page rather than
+/// for a paragraph: 4096 words is more distinct words than a document holds,
+/// and the table is 512KB of BSS that never grows.
+const word_memo_slots = 4096;
+
+const WordMemoEntry = struct {
+    /// Zero means empty: `widthAt` never stores an empty word.
+    len: u8 = 0,
+    at_word_start_in: bool = false,
+    at_word_start_out: bool = false,
+    /// The bits and not the value, so the comparison is exact and total --
+    /// a NaN size would never match itself otherwise, and -0 would match 0.
+    size_bits: u64 = 0,
+    /// Inert: `len` is 0 in every default entry, and no lookup of an empty word
+    /// reaches the comparison.
+    face: Face = .{ .family = font_metrics.sans_serif },
+    width: f64 = 0,
+    bytes: [word_memo_max_len]u8 = undefined,
+};
+
+/// One table for the process, the way `Element.measure_entries` is one counter.
+/// It holds no pointer into any page: the word's bytes are copied in, and the
+/// two tables on a `Face` are comptime data. So it outlives a page safely and
+/// needs no clearing when one goes away.
+var word_memo: [word_memo_slots]WordMemoEntry = @splat(.{});
+
+fn wordMemoHash(face: Face, text: []const u8, size: f64, at_word_start: bool) usize {
+    var h = std.hash.Wyhash.init(@bitCast(size));
+    h.update(text);
+    h.update(&.{
+        @intFromBool(at_word_start),
+        @intFromEnum(face.variant),
+        @intFromEnum(face.surface),
+        @intFromEnum(face.transform),
+        @intFromEnum(face.caps),
+        @intFromBool(face.kerning),
+    });
+    h.update(std.mem.asBytes(&@as(u64, @bitCast(face.spacing.letter))));
+    h.update(std.mem.asBytes(&@as(u64, @bitCast(face.spacing.word))));
+    h.update(std.mem.asBytes(&@as(usize, @intFromPtr(face.family.glyphs.ptr))));
+    h.update(std.mem.asBytes(&@as(usize, @intFromPtr(face.table.glyphs.ptr))));
+    h.update(std.mem.asBytes(&@as(usize, @intFromPtr(face.space_kerns.pairs.ptr))));
+    return @intCast(h.final() % word_memo_slots);
+}
+
+/// Field by field rather than `std.meta.eql`, because a `Family` and the two
+/// variant tables are slices of comptime data: every `Family` in the engine is
+/// one of the constants at the foot of font_metrics.zig, each with its own
+/// `glyphs` array, so the pointer settles identity and the megabyte behind it
+/// is never walked. The two widths are compared as well, so a family assembled
+/// some other way could not pass as one of them for free.
+fn faceEql(a: Face, b: Face) bool {
+    return a.family.glyphs.ptr == b.family.glyphs.ptr and
+        a.family.glyphs.len == b.family.glyphs.len and
+        a.family.avg_char_width == b.family.avg_char_width and
+        a.family.max_char_width == b.family.max_char_width and
+        a.family.own_kerns.pairs.ptr == b.family.own_kerns.pairs.ptr and
+        a.variant == b.variant and
+        a.surface == b.surface and
+        a.transform == b.transform and
+        a.caps == b.caps and
+        a.kerning == b.kerning and
+        a.spacing.letter == b.spacing.letter and
+        a.spacing.word == b.spacing.word and
+        a.table.glyphs.ptr == b.table.glyphs.ptr and
+        a.table.glyphs.len == b.table.glyphs.len and
+        a.space_kerns.pairs.ptr == b.space_kerns.pairs.ptr and
+        a.space_kerns.pairs.len == b.space_kerns.pairs.len and
+        std.mem.eql(u64, &a.space_kerns.starts, &b.space_kerns.starts);
+}
+
 /// The same, with `capitalize`'s word-start flag carried in and out.
 ///
 /// A word can straddle two text nodes -- `ab` and `cd` are one word, `a ` and
@@ -906,6 +1035,63 @@ fn meanAdvance(family: font_metrics.Family) f64 {
 // it is set well clear of both sides rather than tight against one. Measured
 // here (debug build, Apple silicon): 3.9s with the whole-table walk, 0.48s
 // without it.
+test "text_measure: the word memo answers what measuring answers" {
+    // The memo is keyed on every argument `measureAt` varies on, so the risk it
+    // carries is an alias: two questions that share a slot and a comparison but
+    // not an answer. The faces below differ one field at a time, and the second
+    // pass over the whole matrix is the one that reads the memo -- the first
+    // only fills it.
+    const spaced: Spacing = .{ .letter = 1.5, .word = 3 };
+    const faces = [_]Face{
+        .regular(font_metrics.serif),
+        // Same family, but `of` resolves the variant table `regular` leaves
+        // empty: identical on every other field, and not the same face.
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .none),
+        .of(font_metrics.serif, 700, false, .{}, .layout, true, .none, .none),
+        .of(font_metrics.serif, 400, true, .{}, .layout, true, .none, .none),
+        .of(font_metrics.serif, 400, false, .{}, .canvas, true, .none, .none),
+        .of(font_metrics.serif, 400, false, .{}, .layout, false, .none, .none),
+        .of(font_metrics.serif, 400, false, spaced, .layout, true, .none, .none),
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .uppercase, .none),
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .lowercase, .none),
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .capitalize, .none),
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .lowercase),
+        .of(font_metrics.serif, 400, false, .{}, .layout, true, .none, .all),
+        .of(font_metrics.sans_serif, 400, false, .{}, .layout, true, .none, .none),
+        .of(font_metrics.monospace, 400, false, .{}, .layout, true, .none, .none),
+    };
+    const words = [_][]const u8{
+        "",
+        "a",
+        "Free",
+        "shipping",
+        "AVATAR",
+        "\u{00df}xy",
+        "caf\u{00e9}",
+        "\u{1F600}",
+        // Past `word_memo_max_len`, where the memo steps aside.
+        "Donaudampfschifffahrtsgesellschaftskapitaen",
+    };
+    const sizes = [_]f64{ 0, 10, 13.3333, 16, 72 };
+
+    for (0..2) |_| {
+        for (faces) |face| {
+            for (sizes) |size| {
+                for (words) |word| {
+                    for ([_]bool{ true, false }) |start| {
+                        var want_flag = start;
+                        const want = measureAt(face, word, size, &want_flag).width;
+                        var got_flag = start;
+                        const got = widthAt(face, word, size, &got_flag);
+                        try std.testing.expectEqual(want, got);
+                        try std.testing.expectEqual(want_flag, got_flag);
+                    }
+                }
+            }
+        }
+    }
+}
+
 test "text_measure: plain text is not charged for the emoji table" {
     const iterations = 60_000;
     const line = "Free shipping on orders over 49";
