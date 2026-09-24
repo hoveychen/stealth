@@ -3263,6 +3263,107 @@ pub fn minContentWidthExact(self: *Element, frame: *Frame) ?f64 {
     return widest;
 }
 
+/// The width a shrink-to-fit box takes when nothing wraps it -- CSS's
+/// max-content -- walked over the children it stacks.
+///
+/// `textLayout` answers this for a box whose content is all inline, and it
+/// returns null the moment a block-level child turns the box into a stack of
+/// child boxes. Nothing answered it after that, so EVERY shrink-to-fit box
+/// holding a `<div>` measured 0: a flex item, a float, an inline-block, a
+/// table cell. Measured against Chrome 153 with scratch/s104/t-flexmatrix.html
+/// -- a flex item holding one `<div>Performance and Security by Cloudflare</div>`
+/// is 283.70 wide in Chrome and was 0 here, and the Cloudflare interstitial's
+/// own `.footer-wrapper` is 285.11 there against 0 here, which left its
+/// `.footer-text` 0 wide and 91 tall with one word per line.
+///
+/// The walk is the intrinsic one and not a layout: a child that would fill its
+/// containing block cannot be measured by asking for that block's width, because
+/// the block being measured is the one this answer is FOR. So each child is
+/// asked what its own content makes it, the same question one level down.
+fn maxContentWidth(self: *Element, frame: *Frame, depth: u8) ?f64 {
+    if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+
+    // A flex ROW puts its items beside one another, so its max-content is what
+    // they add up to; every other arrangement stacks them, and the widest one
+    // decides. `reversed_row` is a row laid out backwards, which is the same
+    // sum. CSSStyleDeclaration.childArrangement is where the readings are.
+    const arrangement = CSSStyleDeclaration.childArrangement(self, frame);
+    const sums = arrangement == .row or arrangement == .reversed_row;
+
+    var visibility_cache: VisibilityCache = .{};
+    var total: f64 = 0;
+    var widest: f64 = 0;
+    var items: usize = 0;
+    var seen = false;
+
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
+        if (!el.checkVisibilityCached(&visibility_cache, frame)) continue;
+        // An out-of-flow box is not in the stack this box is as wide as: an
+        // `absolute` child contributes nothing to its parent's max-content.
+        if (CSSStyleDeclaration.flowKind(el, frame) != .in_flow) continue;
+        const outer = el.maxContentOuterWidth(frame, depth + 1);
+        seen = true;
+        items += 1;
+        total += outer;
+        widest = @max(widest, outer);
+    }
+    if (!seen) return null;
+    if (!sums) return widest;
+    // The gaps sit between the items, the same way flexLineTotals spends them.
+    if (items > 1) {
+        total += @as(f64, @floatFromInt(items - 1)) *
+            CSSStyleDeclaration.flexMainGapPx(self, frame, total);
+    }
+    return total;
+}
+
+/// One child's contribution to its parent's max-content: its own content width
+/// plus everything outside it, because what the parent has to be wide enough to
+/// hold is the child's MARGIN box.
+///
+/// An empty child contributes 0 of content and its edges, not nothing at all:
+/// the Cloudflare footer's `.footer-divider` is an empty `<span>` with a 1px
+/// border on each side sitting between two `gap: 8px` items, and dropping it
+/// took 2px of border and 8px of gap off the row.
+fn maxContentOuterWidth(self: *Element, frame: *Frame, depth: u8) f64 {
+    const edges = CSSStyleDeclaration.boxEdges(self, frame);
+    const content = self.maxContentInnerWidth(frame, depth, edges) orelse 0;
+    var containing: ?f64 = null;
+    return content + edges.padding_x + edges.border_x +
+        self.horizontalMargin(frame, &containing, depth);
+}
+
+/// The content width the box itself decides: a declared length first, then its
+/// own inline content, then the stack below it.
+fn maxContentInnerWidth(self: *Element, frame: *Frame, depth: u8, edges: CSSStyleDeclaration.BoxEdges) ?f64 {
+    const border_box = CSSStyleDeclaration.usesBorderBox(self, frame);
+    const clamp: CSSStyleDeclaration.WidthBox = .{
+        .border_box = border_box,
+        .padding_x = edges.padding_x,
+        .border_x = edges.border_x,
+    };
+    if (CSSStyleDeclaration.cascadedComputedLength(self, "width", frame)) |declared| {
+        const w = layoutUnit(declared);
+        const content = if (border_box) @max(0, w - edges.padding_x - edges.border_x) else w;
+        return CSSStyleDeclaration.clampWidth(self, frame, content, clamp);
+    }
+    // `available = null` is the unwrapped measurement, which is what
+    // max-content means: the text is one strip however long it is.
+    if (self.textLayout(frame, true, null, true)) |text| {
+        return CSSStyleDeclaration.clampWidth(self, frame, text.width, clamp);
+    }
+    if (self.maxContentWidth(frame, depth)) |inner| {
+        return CSSStyleDeclaration.clampWidth(self, frame, inner, clamp);
+    }
+    // Nothing inline and no children with a width: a replaced box still has the
+    // one it is born with.
+    if (intrinsicBox(self, frame, self.getTag())) |box| {
+        return CSSStyleDeclaration.clampWidth(self, frame, box.width, clamp);
+    }
+    return null;
+}
+
 /// The ink a non-replaced inline box's line boxes take: this element's own text
 /// plus whatever its children occupy. Neither a declared width nor a declared
 /// height reaches it -- neither property applies to an inline box -- so this is
@@ -5301,6 +5402,17 @@ fn measureIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, d
                 if (height == null and !CSSStyleDeclaration.isMultiColumnContainer(self, frame)) {
                     height = text.height;
                 }
+            }
+            // `textLayout` had nothing to say, which for a box that does not
+            // fill its containing block means its content is a stack of child
+            // boxes rather than a line of text -- and that stack has a
+            // max-content width of its own. Without this every shrink-to-fit
+            // box holding a `<div>` came out 0 wide; see maxContentWidth.
+            //
+            // Not `explicit`: it is a measurement, so clientWidth still takes
+            // the max with the content extent the way the text above does.
+            if (wants_text_width and width == null) {
+                width = self.maxContentWidth(frame, depth);
             }
         }
     }
