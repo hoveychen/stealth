@@ -225,8 +225,15 @@ pub const Table = font_kerning.Table;
     zig += `
 /// The space pairs for a family in a variant, matched the way
 /// \`font_kerning.tableFor\` matches: on the identity of the family's regular
-/// advance table. A variant with no row here kerns spaces the way the regular
-/// face does.
+/// advance table.
+///
+/// A variant with no row here kerns NO space pair, and that is a reading and
+/// not a gap: every family below was measured in all four faces, so a row is
+/// missing exactly where Chrome kerned nothing. This used to fall back to the
+/// family's regular row, which was a quiet lie for five faces -- the italic of
+/// system-ui kerns ', ' by nothing where its upright kerns it by -4.88 at the
+/// basis, and 'Hello, world.' at 100px came out exactly that much narrow. The
+/// other four are didot bold and sinhala_sangam_mn bold and bold-italic.
 ///
 /// A family with no row at all returns an empty table, which is the common
 /// case -- Verdana kerns no space pair at all, and its 'AVATAR To Wo' is the
@@ -235,19 +242,12 @@ pub fn tableFor(family: font_metrics.Family, variant: font_variants.Variant) Tab
     const rows = [_]struct { []const font_metrics.Glyph, font_variants.Variant, []const Pair, *const [4]u64 }{
 ${rows.join('\n')}
     };
-    var fallback: Table = .{};
     for (rows) |row| {
-        if (row[0].ptr != family.glyphs.ptr) {
-            continue;
-        }
-        if (row[1] == variant) {
+        if (row[0].ptr == family.glyphs.ptr and row[1] == variant) {
             return .{ .pairs = row[2], .starts = row[3].* };
         }
-        if (row[1] == .regular) {
-            fallback = .{ .pairs = row[2], .starts = row[3].* };
-        }
     }
-    return fallback;
+    return .{};
 }
 `;
     return zig;

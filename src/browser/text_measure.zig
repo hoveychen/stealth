@@ -1219,6 +1219,24 @@ test "text_measure: the space pairs Chrome kerns in layout and not in the canvas
     // the ones the canvas misses, so 'AV' -- which the canvas does kern -- is
     // not in it.
     try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, 'A', 'V'));
+
+    // Per VARIANT as well, and a variant that kerns nothing means nothing:
+    // system-ui's upright pulls ', ' in by -4.88 at the basis and its italic
+    // leaves it alone. The lookup used to answer the regular row for a variant
+    // with no row of its own, which put that -4.88 on the italic and made
+    // 'Hello, world.' at 100px 4.88 too narrow against Chrome's 519.875.
+    const system = font_space_kerning.tableFor(font_metrics.system_ui, .regular);
+    const system_italic = font_space_kerning.tableFor(font_metrics.system_ui, .italic);
+    try std.testing.expectEqual(@as(f64, -4.8828125), font_kerning.kern(system, ',', ' '));
+    try std.testing.expectEqual(@as(f64, -4.8828125), font_kerning.kern(system, '.', ' '));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(system_italic, ',', ' '));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(system_italic, '.', ' '));
+    const italic_face = Face.of(font_metrics.system_ui, 400, true, .{}, .layout, true, .none, .none);
+    try std.testing.expectApproxEqAbs(
+        @as(f64, 519.875),
+        measure(italic_face, "Hello, world.", 100).width,
+        1.0 / 128.0,
+    );
 }
 
 test "text_measure: the kerning bit turns off both tables" {
