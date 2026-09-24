@@ -3282,7 +3282,28 @@ pub fn minContentWidthExact(self: *Element, frame: *Frame) ?f64 {
 /// asked what its own content makes it, the same question one level down.
 fn maxContentWidth(self: *Element, frame: *Frame, depth: u8) ?f64 {
     if (depth >= MAX_CONTAINING_BLOCK_DEPTH) return null;
+    // The walk reaches every box under this one, and a shrink-to-fit box inside
+    // another asks for its own subtree again -- so on a page that nests them the
+    // same subtree is walked once per ancestor. The depth is part of the key
+    // rather than ignored, because the cut-off above makes the answer a function
+    // of it: two ancestors asking the same box arrive at different depths and
+    // only one of them may be allowed to recurse.
+    const key: MaxContentKey = .{ .el = self, .depth = depth };
+    if (frame._max_content_widths.get(key)) |cached| return cached;
+    const answer = self.maxContentWalk(frame, depth);
+    frame._max_content_widths.put(frame.arena, key, answer) catch {};
+    return answer;
+}
 
+/// What one box in that key is worth: see `_max_content_widths` for why the
+/// depth is in it.
+pub const MaxContentKey = struct {
+    el: *Element,
+    depth: u8,
+};
+
+/// The walk itself, with nothing cached. `maxContentWidth` is the way in.
+fn maxContentWalk(self: *Element, frame: *Frame, depth: u8) ?f64 {
     // A flex ROW puts its items beside one another, so its max-content is what
     // they add up to; every other arrangement stacks them, and the widest one
     // decides. `reversed_row` is a row laid out backwards, which is the same
@@ -4816,6 +4837,7 @@ fn measureIn(self: *Element, frame: *Frame, comptime measure_text_width: bool, d
             frame._table_layouts.clearRetainingCapacity();
             frame._table_cells.clearRetainingCapacity();
             frame._table_rows.clearRetainingCapacity();
+            frame._max_content_widths.clearRetainingCapacity();
             frame._flex_lines_dom_version = dom_version;
         }
     }
