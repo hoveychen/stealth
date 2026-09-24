@@ -345,7 +345,12 @@ pub fn kernBetween(face: Face, a: u21, b: u21, size: f64) f64 {
     // `font_kerning.zig` has no pair with a space on either side -- zero of its
     // 265 840. So the ordinary table could not answer even if it were asked,
     // and asking it would mean a `tableFor` walk per space.
-    return toPixels(font_kerning.kern(face.space_kerns, a, b), size);
+    //
+    // Through the optical table for the same reason `measure` goes through it:
+    // the pairs an optical face applies move with the size, and this face's two
+    // space pairs have faded to nothing by 17px.
+    const optical = font_optical.tableFor(face.family, face.variant);
+    return toPixels(optical.spaceKern(face.space_kerns, a, b, size), size);
 }
 
 /// Measures `text` in `face` at `size`, starting a `capitalize` at a word.
@@ -664,13 +669,18 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
             while (emitted < mapped.len()) : (emitted += 1) {
                 const codepoint = if (emitted == 0) mapped.first else mapped.second.?;
                 if (previous) |prev| {
-                    basis.* += font_kerning.kern(kerns, prev, codepoint);
+                    // Through the optical table, because the pairs move with the
+                    // font size the way the advances do -- 'AV' is -0.15503 em at
+                    // 28px and above and -0.12596 at 17px and below. For every
+                    // other family, and for every size from 28px up, this is the
+                    // tabulated pair unchanged.
+                    basis.* += optical.kern(kerns, prev, codepoint, run_size);
                     // Gated on one of the two being a space rather than looked up
                     // unconditionally: this is per character of every string the
                     // engine measures, and the second table can only ever answer at
                     // a space.
                     if (prev == ' ' or codepoint == ' ') {
-                        basis.* += font_kerning.kern(space_kerns, prev, codepoint);
+                        basis.* += optical.spaceKern(space_kerns, prev, codepoint, run_size);
                     }
                 }
                 previous = codepoint;
@@ -1461,6 +1471,78 @@ test "text_measure: the system face's weight is an axis and not two faces" {
         }
     }.f;
     try std.testing.expectEqual(helvetica(400), helvetica(500));
+}
+
+test "text_measure: the system face's kerning pairs are optical too" {
+    // Chrome's own max-content widths again (scratch/s108/expr-k6.js), read
+    // through layout for the same reason the advances are.
+    //
+    // The pairs move with the optical size the way the advances do, and the two
+    // masters are not a scaling of each other: 1612 pairs of SF kern at 17px
+    // and not at 100, and 1044 the other way round. 'DZ' below is one of the
+    // first kind and 'Fo' one of the second, so a model that scaled one table
+    // would have to get both of them wrong.
+    const at = struct {
+        fn f(italic: bool, size: f64, text: []const u8) f64 {
+            const face = Face.of(font_metrics.system_ui, 400, italic, .{}, .layout, true, .none, .none);
+            return measure(face, text, size).width;
+        }
+    }.f;
+    // Half of the 1/64px grid a box width lands on. These are single strings
+    // rather than the sixty-four copies the advance fixtures use, so there is
+    // nothing to average the rounding away: 'AV' at 13px reads 16.546875, which
+    // is 1059 units, and the model's unrounded 16.54199 is 1058.69 of them.
+    const slack = 1.0 / 128.0;
+    // On either master, where the model is the reading. 17px and below is TEXT,
+    // 28px and up is DISPLAY.
+    const rows = [_]struct { f64, []const u8, f64 }{
+        .{ 8, "AV", 10.6875 },
+        .{ 13, "AV", 16.546875 },
+        .{ 17, "AV", 20.96875 },
+        .{ 28, "AV", 34.03125 },
+        .{ 100, "AV", 118.8046875 },
+        // Kerns at TEXT and not at DISPLAY: -0.5px of the 17px reading, and
+        // nothing at all of the 100px one.
+        .{ 17, "DZ", 22.2421875 },
+        .{ 100, "DZ", 129.546875 },
+        // And the other way round.
+        .{ 17, "Fo", 18.9140625 },
+        .{ 100, "Fo", 103.90625 },
+        // The challenge page's own h1, which is where this face is measured in
+        // anger, and a string whose ", " pair is in the space table -- that one
+        // is -4.88 at the basis and gone entirely by 17px.
+        .{ 13, "Verify you are human", 127.6640625 },
+        .{ 17, "Verify you are human", 160.296875 },
+        .{ 100, "Verify you are human", 871.4375 },
+        .{ 17, "Hello, world.", 94.1640625 },
+        .{ 100, "Hello, world.", 501.90625 },
+        .{ 17, "To Wa Ya", 69.4609375 },
+        .{ 100, "To Wa Ya", 376.421875 },
+    };
+    for (rows) |row| {
+        try std.testing.expectApproxEqAbs(row[2], at(false, row[0], row[1]), slack);
+    }
+    // The italic has its own pairs: 4908 of them against the upright's 4501.
+    try std.testing.expectApproxEqAbs(@as(f64, 161.4453125), at(true, 17, "Verify you are human"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 893.0703125), at(true, 100, "Verify you are human"), slack);
+
+    // 18..27px, where the pairs cross between the masters on the same ladder
+    // the advances do and the blend is approximate in the same way. 0.09px over
+    // a twenty-character line, against the 12.2px the DISPLAY pairs alone were
+    // out by at 17px before this.
+    const band_slack = 0.1;
+    try std.testing.expectApproxEqAbs(@as(f64, 169.0703125), at(false, 18, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 199.2890625), at(false, 22, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 215.875), at(false, 24, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 242.734375), at(false, 27, "Verify you are human"), band_slack);
+
+    // A family with no optical table kerns the way it always did: exactly
+    // linear in the size, pairs included.
+    const sans = Face.of(font_metrics.sans_serif, 400, false, .{}, .layout, true, .none, .none);
+    try std.testing.expectEqual(
+        measure(sans, "AV Wa To", 100).width / 100 * 17,
+        measure(sans, "AV Wa To", 17).width,
+    );
 }
 
 test "text_measure: the ten strings the Turnstile widget actually measures" {

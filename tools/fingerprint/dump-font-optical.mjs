@@ -180,6 +180,27 @@ window.__selfPair = (font, ch) => {
   for (const n of [4, 8, 16, 32]) sum += __raw(font, ch.repeat(2 * n)) - 2 * __raw(font, ch.repeat(n));
   return sum / 4;
 };
+// Many strings, one layout. The pair sweep below asks for 50 176 widths at a
+// time and \`__raw\` forces a reflow for every one of them; a box per string in
+// one throwaway host costs a single layout for the lot.
+window.__batch = (font, strings) => {
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden';
+  host.style.font = font;
+  const frag = document.createDocumentFragment();
+  const cells = strings.map((s) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'width:max-content;white-space:pre';
+    d.textContent = s;
+    frag.appendChild(d);
+    return d;
+  });
+  host.appendChild(frag);
+  document.body.appendChild(host);
+  const out = cells.map((c) => c.getBoundingClientRect().width);
+  host.remove();
+  return out;
+};
 `;
 await evaluate(`(() => { ${PRELUDE} return JSON.stringify(true); })()`);
 
@@ -218,6 +239,127 @@ for (const family of families) {
 }
 process.stderr.write(`${optical.length} optical families\n`);
 if (surveyOnly) { cdp.ws.close(); chrome.kill(); process.exit(0); }
+
+// --- the kern pairs at the TEXT master -------------------------------------
+// The pairs in `font_kerning.zig` were read at 100px and are the DISPLAY
+// master's. Chrome's move with the optical size the same way the advances do,
+// and by as much: 1612 pairs of SF kern at 17px and not at 100, 1044 the other
+// way round, and twelve characters start a pair only at the TEXT end.
+//
+// Read through layout like everything else here, with a SEPARATOR that kerns
+// with nothing between the copies, so that n copies of "|ab" carry n clean
+// (a, b) junctions and no others and the box quantisation divides by n:
+//
+//     adv(s)  = W(s^n) / n
+//     adv(c)  = W((s c)^n) / n - adv(s)
+//     k(a, b) = W((s a b)^n) / n - adv(s) - adv(a) - adv(b)
+//
+// Three passes, because the separator is itself one of the things to be
+// measured: a coarse sweep of all 50 176 pairs finds both the pairs and the
+// characters that are in none of them, one of those becomes the separator, and
+// then the pairs are read again properly.
+const KERN_SCAN_REPEAT = 4;
+const KERN_REPEAT = 64;
+// Kerns land on exact multiples of 1/2048 em -- SF's units per em. The engine's
+// existing 100px table lands on them with a residual of exactly zero, so the
+// reading is snapped to them and the assertion below is what says the snapping
+// is recognising a grid rather than imposing one.
+const KERN_UPEM = 2048;
+
+// Every nonzero pair of one face at one size, in em, exact to 1/KERN_UPEM.
+async function kernMaster(css, prefix, size) {
+    const FONT = JSON.stringify(`${prefix}${size}px ${css}`);
+    const CHARS = `const chars = []; for (let c = ${FIRST}; c <= ${LAST}; c++) chars.push(String.fromCharCode(c));`;
+
+    // Pass 1, no separator: which pairs kern at all, and which characters are in
+    // none of them. A single width is quantised to 1/256px, so this difference
+    // of three carries 0.006px and the threshold sits well above it -- it only
+    // has to be tight enough that the separator candidates are really untouched.
+    const scan = await evaluate(`(() => { ${PRELUDE} ${CHARS}
+        const font = ${FONT};
+        const solo = __batch(font, chars);
+        const strings = [];
+        for (const a of chars) for (const b of chars) strings.push(a + b);
+        const w = __batch(font, strings);
+        const touched = new Set();
+        let i = 0;
+        for (let a = 0; a < chars.length; a++) for (let b = 0; b < chars.length; b++, i++) {
+          if (Math.abs(w[i] - solo[a] - solo[b]) > 0.02) { touched.add(a); touched.add(b); }
+        }
+        // Never the space: the layout surface treats it apart from every other
+        // character, and its own pairs are in a table of their own.
+        const free = [];
+        for (let c = 1; c < chars.length; c++) if (!touched.has(c)) free.push(c + ${FIRST});
+        return JSON.stringify({ free, kerning: touched.size });
+    })()`);
+    if (scan.free.length < 3) {
+        throw new Error(`no separator candidates: every character kerns with something`);
+    }
+
+    // Is a candidate really neutral? For candidate s and character x,
+    //     W((s x)^n) - W(s^n) - W(x^n)
+    //        = n k(s,x) + (n-1) k(x,s) - (n-1) k(s,s) - (n-1) k(x,x)
+    // which for a neutral s is -(n-1) k(x,x) -- the same row whichever neutral
+    // candidate is used. Candidates that all produce the SAME row are all
+    // neutral, short of every one of them kerning identically with all 224
+    // characters, and a candidate that differs is rejected.
+    const cands = scan.free.slice(0, 6);
+    const rows = await evaluate(`(() => { ${PRELUDE} ${CHARS}
+        const font = ${FONT}, n = 32;
+        const solo = __batch(font, chars.map((c) => c.repeat(n)));
+        const out = {};
+        for (const cand of ${JSON.stringify(cands)}) {
+          const s = String.fromCharCode(cand);
+          const w = __batch(font, chars.map((x) => (s + x).repeat(n)));
+          out[cand] = w.map((v, i) => +(v - solo[cand - ${FIRST}] - solo[i]).toFixed(6));
+        }
+        return JSON.stringify(out);
+    })()`);
+    const first = rows[cands[0]];
+    for (const c of cands.slice(1)) {
+        // Three undivided 1/256px reads go into a row, so the floor is 0.012px;
+        // a candidate that really kerns would be off by n times a kern, which
+        // at this size is whole pixels.
+        const bad = rows[c].findIndex((v, i) => Math.abs(v - first[i]) > 0.05);
+        if (bad >= 0) {
+            throw new Error(`separator candidates disagree at U+${(bad + FIRST).toString(16)}: ` +
+                `${cands[0]} says ${first[bad]}, ${c} says ${rows[c][bad]}`);
+        }
+    }
+    const SEP = String.fromCharCode(cands[0]);
+
+    // Pass 2, with the separator and few copies: the pair set, at eight times
+    // the precision of pass 1. Pass 3 then reads that set properly.
+    const sweep = (n, listing) => `(() => { ${PRELUDE} ${CHARS}
+        const font = ${FONT}, sep = ${JSON.stringify(SEP)}, n = ${n};
+        const s = __batch(font, [sep.repeat(n)])[0] / n;
+        const adv = __batch(font, chars.map((c) => (sep + c).repeat(n))).map((v) => v / n - s);
+        ${listing}
+        const w = __batch(font, list.map(([a, b]) =>
+            (sep + String.fromCharCode(a) + String.fromCharCode(b)).repeat(n)));
+        return JSON.stringify(list.map(([a, b], i) =>
+            [a, b, w[i] / n - s - adv[a - ${FIRST}] - adv[b - ${FIRST}]]));
+    })()`;
+    const coarse = await evaluate(sweep(KERN_SCAN_REPEAT, `
+        const list = [];
+        for (const a of chars) for (const b of chars) list.push([a.charCodeAt(0), b.charCodeAt(0)]);`));
+    const wanted = coarse.filter(([, , k]) => Math.abs(k) > 0.005).map(([a, b]) => [a, b]);
+    const fine = await evaluate(sweep(KERN_REPEAT, `const list = ${JSON.stringify(wanted)};`));
+
+    // Snap. The residual is the claim that these values ARE font units; it runs
+    // at 0.06 of one, against a read noise of 0.02.
+    let worst = 0;
+    const pairs = [];
+    for (const [a, b, k] of fine) {
+        const units = (k / size) * KERN_UPEM;
+        worst = Math.max(worst, Math.abs(units - Math.round(units)));
+        if (Math.round(units) !== 0) pairs.push([a, b, (Math.round(units) / KERN_UPEM) * 100]);
+    }
+    if (worst > 0.25) {
+        throw new Error(`kerns are not multiples of 1/${KERN_UPEM} em: worst residual ${worst.toFixed(3)} units`);
+    }
+    return { pairs, worst, sep: cands[0], scanned: wanted.length };
+}
 
 // --- measuring -------------------------------------------------------------
 // One face's per-em advances at one size, self-pair corrected. The run carries
@@ -329,11 +471,25 @@ for (const family of optical) {
             weight.push(w);
             tracking.push(t);
         }
+        // The pairs at the TEXT master, at weight 400 like the ladders. Split
+        // the way the engine's two display tables are: `font_kerning.zig` has
+        // no pair with a space on either side and `font_space_kerning.zig` has
+        // nothing else, because the canvas surface applies the first and not
+        // the second.
+        const kerns = await kernMaster(css, `${style}400 `, TEXT_SIZE);
+        const spacey = ([a, b]) => a === 0x20 || b === 0x20;
+        process.stderr.write(
+            `  ${family}/${roman}: ${kerns.pairs.length} TEXT pairs ` +
+            `(${kerns.pairs.filter(spacey).length} with a space), separator U+${kerns.sep.toString(16)}, ` +
+            `worst snap ${kerns.worst.toFixed(3)} of a font unit\n`);
+
         tables.push({
             family,
             roman,
             display: display.map((row) => row.map((v) => v * 100)),
             text: text.map((row) => row.map((v) => v * 100)),
+            textKerns: kerns.pairs.filter((p) => !spacey(p)),
+            textSpaceKerns: kerns.pairs.filter(spacey),
         });
         ladders.push({ family, roman, weight, tracking });
         process.stderr.write(
@@ -411,13 +567,21 @@ let zig = `// Generated by tools/fingerprint/dump-font-optical.mjs -- do not edi
 // Additive, like \`font_kerning.zig\` and \`font_variants.zig\`: this adds no
 // NAMES, so the font enumeration a probe performs cannot see it.
 //
-// NOT modelled here: kerning. The pairs in \`font_kerning.zig\` are the DISPLAY
-// master's and Chrome's move with the optical size too -- 'AV' is -0.15503 em
-// at 28px and above and -0.12596 at 17px and below, on the same \`w\` crossing.
-// Advances are the larger term by an order of magnitude and are what a
-// max-content box is mostly made of; the pairs are a plan of their own.
+// **The kerning pairs are optical too**, and \`text_kerns\` below is their TEXT
+// master. \`font_kerning.zig\` was read at 100px and is the DISPLAY one: 'AV' is
+// -0.15503 em there and -0.12596 at ${TEXT_SIZE}px and below. It is not a scaling --
+// 1612 pairs of SF kern at ${TEXT_SIZE}px and not at 100, 1044 the other way round, and
+// twelve characters start a pair only at the TEXT end -- so it is a table, and
+// it crosses on the same \`w\` ladder: 48 pairs read at every whole size from 15
+// to 32 each solve for the same w to 5e-4, which is the ladder the advances
+// solved for to 6.6e-3.
+//
+// The values are exact multiples of 1/${KERN_UPEM} em and are snapped to them. So is
+// every value in \`font_kerning.zig\`, to a residual of zero, which is what says
+// the grid is the font's and not the reading's.
 const font_metrics = @import("font_metrics.zig");
 const font_variants = @import("font_variants.zig");
+const font_kerning = @import("font_kerning.zig");
 
 /// The size \`text_*\` was measured at, and the size the two ladders are
 /// normalised at.
@@ -454,6 +618,14 @@ pub const Table = struct {
     text_weight: []const f64 = &.{},
     /// The tracking in em, on the same ladder.
     tracking: []const f64 = &.{},
+    /// The kerning pairs at the TEXT master, in the shape \`font_kerning.zig\`
+    /// holds the DISPLAY ones in and at the same basis. A pair that kerns at
+    /// one master and not the other is simply absent from that one's table,
+    /// which is the zero the lookup already answers with.
+    text_kerns: font_kerning.Table = .{},
+    /// The same for the pairs with a space on one side, which live in
+    /// \`font_space_kerning.zig\` because the canvas surface does not apply them.
+    text_space_kerns: font_kerning.Table = .{},
 
     pub fn empty(self: Table) bool {
         return self.text[0].len == 0;
@@ -472,6 +644,28 @@ pub const Table = struct {
         const d = atWeight(self.display, i, weight);
         const t = atWeight(self.text, i, weight);
         return d + at(self.text_weight, size) * (t - d) + at(self.tracking, size) * font_metrics.basis;
+    }
+
+    /// What the pair (a, b) adds at \`size\`, at the basis, given the DISPLAY
+    /// pairs the caller already looked the family up in. Answers \`display\`
+    /// itself for a face with no table and for every size from 28px up, so the
+    /// pairs a page at a reading size asks for are untouched by this.
+    pub fn kern(self: Table, display: font_kerning.Table, a: u21, b: u21, size: f64) f64 {
+        return self.mix(display, self.text_kerns, a, b, size);
+    }
+
+    /// The same for a pair with a space on one side, whose DISPLAY values are
+    /// in \`font_space_kerning.zig\` and which only the layout surface applies.
+    pub fn spaceKern(self: Table, display: font_kerning.Table, a: u21, b: u21, size: f64) f64 {
+        return self.mix(display, self.text_space_kerns, a, b, size);
+    }
+
+    fn mix(self: Table, display: font_kerning.Table, text: font_kerning.Table, a: u21, b: u21, size: f64) f64 {
+        const d = font_kerning.kern(display, a, b);
+        if (self.text[0].len == 0) return d;
+        const w = at(self.text_weight, size);
+        if (w == 0) return d;
+        return d + w * (font_kerning.kern(text, a, b) - d);
     }
 };
 
@@ -516,6 +710,17 @@ const clean = (v) => (Math.abs(v) < 1e-9 ? 0 : Number(v.toFixed(9)));
 const arr = (name, values) => `const ${name} = [_]f64{ ${values.map(num).join(', ')} };\n`;
 const ladderArr = (name, values) => arr(name, values.map(clean));
 const slot = (t, master, w) => `${master}${WEIGHTS[w]}_${t.roman}_${t.family}`;
+// A pair table in the shape `font_kerning.zig` writes them: sorted so the
+// lookup can bisect, with the bitmap of the characters that start one.
+const pairArr = (name, pairs) => {
+    const sorted = pairs.slice().sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+    const starts = [0n, 0n, 0n, 0n];
+    for (const [a] of sorted) starts[a >> 6] |= 1n << BigInt(a & 63);
+    return `const ${name} = [_]font_kerning.Pair{` +
+        sorted.map(([a, b, k]) => `.{ .first = ${a}, .second = ${b}, .kern = ${k} }`).join(', ') +
+        `};\nconst ${name}_starts = [4]u64{ ${starts.map((x) => x.toString()).join(', ')} };\n`;
+};
+const pairTable = (name) => `.{ .pairs = &${name}, .starts = ${name}_starts }`;
 for (const t of tables) {
     const l = ladders.find((x) => x.family === t.family && x.roman === t.roman);
     for (let w = 0; w < WEIGHTS.length; w++) {
@@ -524,6 +729,8 @@ for (const t of tables) {
     }
     zig += ladderArr(`weight_${t.roman}_${t.family}`, l.weight);
     zig += ladderArr(`tracking_${t.roman}_${t.family}`, l.tracking);
+    zig += pairArr(`textkerns_${t.roman}_${t.family}`, t.textKerns);
+    zig += pairArr(`textspacekerns_${t.roman}_${t.family}`, t.textSpaceKerns);
 }
 zig += `
 /// The table for a family in a roman, matched on the identity of its regular
@@ -536,7 +743,7 @@ zig += `
 pub fn tableFor(family: font_metrics.Family, variant: font_variants.Variant) Table {
     const italic = variant == .italic or variant == .bold_italic;
     const rows = [_]struct { []const font_metrics.Glyph, bool, Table }{
-${tables.map((t) => `        .{ font_metrics.${t.family}.glyphs, ${t.roman === 'italic'}, .{ .display = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'display', w)}`).join(', ')} }, .text = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'text', w)}`).join(', ')} }, .text_weight = &weight_${t.roman}_${t.family}, .tracking = &tracking_${t.roman}_${t.family} } },`).join('\n')}
+${tables.map((t) => `        .{ font_metrics.${t.family}.glyphs, ${t.roman === 'italic'}, .{ .display = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'display', w)}`).join(', ')} }, .text = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'text', w)}`).join(', ')} }, .text_weight = &weight_${t.roman}_${t.family}, .tracking = &tracking_${t.roman}_${t.family}, .text_kerns = ${pairTable(`textkerns_${t.roman}_${t.family}`)}, .text_space_kerns = ${pairTable(`textspacekerns_${t.roman}_${t.family}`)} } },`).join('\n')}
     };
     for (rows) |row| {
         if (row[0].ptr == family.glyphs.ptr and row[1] == italic) {
