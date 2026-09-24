@@ -141,6 +141,14 @@ pub const Surface = enum { canvas, layout };
 pub const Face = struct {
     family: font_metrics.Family,
     variant: font_variants.Variant = .regular,
+    /// The resolved `font-weight`, which an OPTICAL face needs beyond the
+    /// variant: SF's weight is a continuous axis, so 500 and 600 are their own
+    /// instances and not the two tables `variant` chooses between. Every other
+    /// family ignores it.
+    ///
+    /// 400 by default, and so a no-op for the dozen places that build a face by
+    /// struct literal -- an unstyled paragraph is what they are all measuring.
+    weight: u16 = 400,
     table: font_variants.Table = .{},
     spacing: Spacing = .{},
     /// Defaults to the canvas, because `Face.regular` is the SVG caller and
@@ -216,6 +224,7 @@ pub const Face = struct {
         return .{
             .family = family,
             .variant = variant,
+            .weight = weight,
             .table = font_variants.tableFor(family, variant),
             .spacing = spacing,
             .surface = surface,
@@ -439,6 +448,14 @@ fn wordMemoHash(face: Face, text: []const u8, size: f64, at_word_start: bool) us
     h.update(&.{
         @intFromBool(at_word_start),
         @intFromEnum(face.variant),
+        // The weight and not just the variant, because an optical face reads a
+        // continuous axis: 400 and 500 are the same `variant` and different
+        // advances, so a key without this answers whichever of the two was
+        // measured first. That is not a theoretical collision -- it is what
+        // `font-weight: 500 system-ui` did, silently, until a two-arm sweep
+        // came back with exactly two distinct widths over seven weights.
+        @truncate(face.weight),
+        @truncate(face.weight >> 8),
         @intFromEnum(face.surface),
         @intFromEnum(face.transform),
         @intFromEnum(face.caps),
@@ -465,6 +482,7 @@ fn faceEql(a: Face, b: Face) bool {
         a.family.max_char_width == b.family.max_char_width and
         a.family.own_kerns.pairs.ptr == b.family.own_kerns.pairs.ptr and
         a.variant == b.variant and
+        a.weight == b.weight and
         a.surface == b.surface and
         a.transform == b.transform and
         a.caps == b.caps and
@@ -730,7 +748,7 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
                 // The optical correction, and the only place a tabulated
                 // advance is charged. Empty -- and so exactly `glyph.advance`
                 // -- for every face but the macOS system one.
-                basis.* += optical.advance(codepoint, glyph.advance, run_size);
+                basis.* += optical.advance(codepoint, glyph.advance, run_size, face.weight);
             }
         }
     }
@@ -1339,6 +1357,110 @@ test "text_measure: the system face's advances are not linear in size" {
         measure(sans, run, 100).width / 100 * 16,
         measure(sans, run, 16).width,
     );
+}
+
+test "text_measure: the system face's weight is an axis and not two faces" {
+    // Chrome's own layout widths again (scratch/s107/expr-wfixtures.js), same
+    // channel and same sixty-four kern-free copies as the test above.
+    //
+    // SF's `wght` is continuous, so `bold` is the point 700 on an axis rather
+    // than a second face. Before this, everything below 600 measured as 400 and
+    // everything at or above it measured as 700 -- `font-weight: 500` was as
+    // wide as an unstyled paragraph and `600` was as wide as `bold`, which is
+    // what the Cloudflare challenge page's h1 asks for and got wrong by 1.24%.
+    const at = struct {
+        fn f(weight: u16, italic: bool, size: f64, ch: []const u8) f64 {
+            const face = Face.of(font_metrics.system_ui, weight, italic, .{}, .canvas, true, .none, .none);
+            var buf: [64 * 4]u8 = undefined;
+            var n: usize = 0;
+            for (0..64) |_| {
+                @memcpy(buf[n..][0..ch.len], ch);
+                n += ch.len;
+            }
+            return measure(face, buf[0..n], size).width;
+        }
+    }.f;
+    const slack = 1.0 / 256.0;
+    // The three masters and the seven points between them, at a DISPLAY size.
+    // Every hundred is its own width: eleven readings, no two the same.
+    const display = [_]struct { u16, f64 }{
+        .{ 1, 2600 },       .{ 100, 2700 },     .{ 200, 2796.875 }, .{ 300, 2896.875 },
+        .{ 400, 2996.875 }, .{ 500, 3125 },     .{ 600, 3250 },     .{ 700, 3378.125 },
+        .{ 800, 3503.125 }, .{ 900, 3628.125 }, .{ 1000, 3756.25 },
+    };
+    // Between the masters the model interpolates, and the residual it carries
+    // is the 2.4e-4 em a held-out weight measured at -- 0.024px a glyph at
+    // 100px, so 1.6px over sixty-four copies. The masters themselves are exact.
+    //
+    // Closing that means storing more than three weights, and the kerning gap
+    // on the same axis is an order of magnitude larger (13.7px on one line of
+    // the challenge page against 1.6px here), so that comes first.
+    const weightSlack = struct {
+        fn f(size: f64) f64 {
+            return 64 * 2.6e-4 * size;
+        }
+    }.f;
+    // Inside 18..27px neither optical master is the answer either, and that
+    // band carries its own 2.7e-4 em on top. See the test above.
+    const band_slack = 0.35;
+    for (display) |row| {
+        const master = row[0] == 1 or row[0] == 400 or row[0] == 1000;
+        try std.testing.expectApproxEqAbs(row[1], at(row[0], false, 100, "x"), if (master) slack else weightSlack(100));
+    }
+    // Strictly increasing, which no pair of tables could be.
+    for (1..display.len) |i| {
+        try std.testing.expect(at(display[i][0], false, 100, "x") > at(display[i - 1][0], false, 100, "x"));
+    }
+
+    // The TEXT master moves with the weight too, and by a DIFFERENT amount:
+    // 1 -> 1000 is 1.445x at 100px and 1.333x at 16px, so one axis cannot be
+    // derived from the other by a scale.
+    try std.testing.expectApproxEqAbs(@as(f64, 474), at(1, false, 16, "x"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 517), at(400, false, 16, "x"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 632), at(1000, false, 16, "x"), slack);
+    // And inside the crossing band, where both masters and both axes are live.
+    try std.testing.expectApproxEqAbs(@as(f64, 649.5), at(1, false, 24, "x"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 739.5), at(400, false, 24, "x"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 920.25), at(1000, false, 24, "x"), band_slack);
+
+    // Per glyph, not a scale of one: 'W' grows 16.6% from master to master and
+    // '.' grows 34.5%.
+    try std.testing.expectApproxEqAbs(@as(f64, 4893.75), at(1, false, 100, "M"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 5703.125), at(1000, false, 100, "M"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 3250), at(1, false, 100, "o"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 3934.375), at(1000, false, 100, "o"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 5525), at(1, false, 100, "W"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 6443.75), at(1000, false, 100, "W"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 1268.75), at(1, false, 100, "."), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 1706.25), at(1000, false, 100, "."), slack);
+
+    // The italic is a second roman with its own three masters, and at weight
+    // 400 it is NOT the upright -- 2996.875 in both is a coincidence of 'x' at
+    // this size, which 16px separates.
+    try std.testing.expectApproxEqAbs(@as(f64, 2665.625), at(1, true, 100, "x"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 2996.875), at(400, true, 100, "x"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 3821.875), at(1000, true, 100, "x"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 519.5), at(400, true, 16, "x"), slack);
+    try std.testing.expect(at(400, true, 16, "x") != at(400, false, 16, "x"));
+
+    // The memo the measurements go through keys on the weight. Without this the
+    // seven weights above came back as exactly TWO distinct widths -- whichever
+    // side of 600 was measured first -- and every fixture here still passed,
+    // because the test would have measured each one first.
+    const one = at(475, false, 100, "x");
+    _ = at(476, false, 100, "x");
+    try std.testing.expectEqual(one, at(475, false, 100, "x"));
+    try std.testing.expect(at(475, false, 100, "x") != at(476, false, 100, "x"));
+
+    // A family with no optical table ignores the weight beyond the variant it
+    // already chose: 400 and 500 are one table there, and both are the regular.
+    const helvetica = struct {
+        fn f(weight: u16) f64 {
+            const face = Face.of(font_metrics.sans_serif, weight, false, .{}, .canvas, true, .none, .none);
+            return measure(face, "x" ** 64, 100).width;
+        }
+    }.f;
+    try std.testing.expectEqual(helvetica(400), helvetica(500));
 }
 
 test "text_measure: the ten strings the Turnstile widget actually measures" {
