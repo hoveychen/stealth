@@ -90,6 +90,64 @@ seven shapes answer 283.70.
 </script>
 
 <!--
+An atomic inline -- an inline-block, an <img> -- is on the line, not instead of
+it. The walk above asked each ELEMENT child what it was worth and ignored the
+text between them, which is right for a stack of blocks and wrong for a line:
+the Cloudflare interstitial's `.footer-text` is
+`Performance and Security by <a>Cloudflare</a>` with `a{display:inline-block}`,
+and it measured the <a>'s 51.69 where Chrome 153 says 225.83.
+
+`x` throughout, and equalities against the same characters written as one run,
+because a kern pair straddling the boundary would otherwise be the thing under
+test rather than the sum.
+-->
+
+<script id=max_content_of_a_line>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (inner, style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="display:flex"><div data-m style="' + (style || '') + '">' + inner + '</div></div>';
+    host.appendChild(wrap);
+    const width = wrap.querySelector('[data-m]').getBoundingClientRect().width;
+    wrap.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  const IB = (s) => '<span style="display:inline-block">' + s + '</span>';
+
+  const four = measure('xxxx');
+  const eight = measure('xxxxxxxx');
+  const twelve = measure('xxxxxxxxxxxx');
+  if (!(four > 0 && eight > four)) wrong.push('nothing is being measured: ' + four + ', ' + eight);
+
+  // Text then a box, a box then text, and text either side of one: all one line.
+  eq('text then a box', measure('xxxx' + IB('xxxx')), eight);
+  eq('a box then text', measure(IB('xxxx') + 'xxxx'), eight);
+  eq('text either side', measure('xxxx' + IB('xxxx') + 'xxxx'), twelve);
+  // Two boxes with nothing between them are still one line.
+  eq('two boxes', measure(IB('xxxx') + IB('xxxx')), eight);
+
+  // A BLOCK child interrupts the line, so the text beside it is its own
+  // anonymous block and the widest of the two decides rather than the sum.
+  eq('text above a block', measure('xxxxxxxx<div>xxxx</div>'), eight);
+  eq('text below a wider block', measure('xxxx<div>xxxxxxxx</div>'), eight);
+
+  // A text child of a flex container is an anonymous ITEM, so it is summed with
+  // the element items beside it and it takes a gap like any other.
+  eq('text is a flex item', measure('xxxx<span>xxxx</span>', 'display:flex'), eight);
+  eq('and takes a gap', measure('xxxx<span>xxxx</span>', 'display:flex;gap:10px'), eight + 10);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
 `font-size` in `rem` units resolves against the ROOT's font size. The layout's
 own copy of the unit table had no arm for it, so the declaration parsed to
 nothing and the element kept the inherited size -- while getComputedStyle,

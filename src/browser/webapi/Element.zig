@@ -3291,13 +3291,49 @@ fn maxContentWidth(self: *Element, frame: *Frame, depth: u8) ?f64 {
     const sums = arrangement == .row or arrangement == .reversed_row;
 
     var visibility_cache: VisibilityCache = .{};
+    // The two answers the same walk produces, because which of them is wanted
+    // is not known until the last child has said whether it is a block: `total`
+    // is everything side by side on one line, `widest` is everything stacked.
     var total: f64 = 0;
     var widest: f64 = 0;
     var items: usize = 0;
     var seen = false;
+    // Whether the children make an inline formatting context -- no block-level
+    // box among them -- so that the text and the boxes share a line.
+    var all_inline = true;
+    // This element's own text, collapsed the way a line collapses it, and the
+    // width of the run since the last block-level child, which is the anonymous
+    // block that run becomes when there IS one.
+    var run: CollapsedRun = .{};
+    var run_width: f64 = 0;
+    // Resolving the font is a cascade read, and most boxes walked here hold no
+    // text at all, so it waits until one does.
+    var face: text_measure.Face = undefined;
+    var size: f64 = 0;
+    var have_font = false;
 
     var children = self.layoutChildren(frame);
-    while (children.nextElement()) |el| {
+    while (children.next()) |node| {
+        if (node.is(CData.Text)) |text| {
+            const str = Factory.protoOf(text)._data.str();
+            // A text child of a flex or grid container is an anonymous ITEM,
+            // and of anything else a piece of the inline run; either way the
+            // font it is measured in is this element's.
+            if (!have_font) {
+                const resolved = self.resolveFont(frame);
+                face = resolved.face;
+                size = resolved.size;
+                have_font = true;
+            }
+            const had_run = run.rendered();
+            run_width += run.measure(str, face, size);
+            if (!had_run and run.rendered()) {
+                seen = true;
+                items += 1;
+            }
+            continue;
+        }
+        const el = node.is(Element) orelse continue;
         if (!el.checkVisibilityCached(&visibility_cache, frame)) continue;
         // An out-of-flow box is not in the stack this box is as wide as: an
         // `absolute` child contributes nothing to its parent's max-content.
@@ -3307,15 +3343,55 @@ fn maxContentWidth(self: *Element, frame: *Frame, depth: u8) ?f64 {
         items += 1;
         total += outer;
         widest = @max(widest, outer);
+        if (isInlineLevel(el, frame)) {
+            // The box sits on the line the run is building, so a run waiting in
+            // front of it is a space and the run carries on after it.
+            if (!have_font) {
+                const resolved = self.resolveFont(frame);
+                face = resolved.face;
+                size = resolved.size;
+                have_font = true;
+            }
+            run_width += run.box(face, size);
+        } else {
+            // The box interrupts the line: what the run has so far is a box of
+            // its own -- an anonymous block beside this one, or an anonymous
+            // flex item before it -- so it is banked and a new run opens.
+            all_inline = false;
+            widest = @max(widest, run_width);
+            total += run_width;
+            run = .{};
+            run_width = 0;
+        }
     }
     if (!seen) return null;
-    if (!sums) return widest;
-    // The gaps sit between the items, the same way flexLineTotals spends them.
-    if (items > 1) {
-        total += @as(f64, @floatFromInt(items - 1)) *
-            CSSStyleDeclaration.flexMainGapPx(self, frame, total);
+    widest = @max(widest, run_width);
+    total += run_width;
+    if (sums) {
+        // The gaps sit between the items, the same way flexLineTotals spends
+        // them.
+        if (items > 1) {
+            total += @as(f64, @floatFromInt(items - 1)) *
+                CSSStyleDeclaration.flexMainGapPx(self, frame, total);
+        }
+        return total;
     }
-    return total;
+    // Text beside an atomic inline -- the Cloudflare footer's `.footer-text` is
+    // `Performance and Security by <a>Cloudflare</a>` with `a{display:inline-
+    // block}` -- is one line, so the two add up. textLayout cannot answer it:
+    // an inline-block is not an inline box to the scan, so it hands the whole
+    // element back here, and taking the widest child alone measured the box at
+    // the <a>'s 51.69 where Chrome 153 says 225.83.
+    if (all_inline) return total;
+    return widest;
+}
+
+/// Whether this element's box goes ON a line rather than interrupting one. Only
+/// `display` decides it here: a float or an absolute box is inline-level by
+/// this reading and blockified by the cascade, and both are dropped before this
+/// is asked.
+fn isInlineLevel(el: *Element, frame: *Frame) bool {
+    return std.mem.startsWith(u8, CSSStyleDeclaration.resolvedDisplay(el, frame), "inline");
 }
 
 /// One child's contribution to its parent's max-content: its own content width
