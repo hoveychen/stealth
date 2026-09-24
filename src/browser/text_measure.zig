@@ -229,7 +229,7 @@ pub const Face = struct {
             .spacing = spacing,
             .surface = surface,
             .space_kerns = if (surface == .layout and kerning)
-                font_space_kerning.tableFor(family, variant)
+                font_space_kerning.tableFor(family, kernVariant(family, variant))
             else
                 .{},
             .kerning = kerning,
@@ -345,7 +345,20 @@ pub fn kernBetween(face: Face, a: u21, b: u21, size: f64) f64 {
     // `font_kerning.zig` has no pair with a space on either side -- zero of its
     // 265 840. So the ordinary table could not answer even if it were asked,
     // and asking it would mean a `tableFor` walk per space.
-    return toPixels(font_kerning.kern(face.space_kerns, a, b), size);
+    //
+    // Through the optical table for the same reason `measure` goes through it:
+    // the pairs an optical face applies move with the size, and this face's two
+    // space pairs have faded to nothing by 17px.
+    //
+    // Empty when the caller's table is, rather than blended into it: with
+    // `font-kerning: none`, or on the canvas surface, `space_kerns` is empty
+    // and an optical blend towards the tabulated pairs would put back exactly
+    // the pairs that switch just took away.
+    const optical = if (face.surface == .layout and face.kerning)
+        font_optical.tableFor(face.family, face.variant)
+    else
+        &font_optical.none;
+    return toPixels(optical.spaceKern(face.space_kerns, a, b, size, face.weight), size);
 }
 
 /// Measures `text` in `face` at `size`, starting a `capitalize` at a word.
@@ -536,6 +549,12 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // absent in each of them -- the correction is a property of the family and
     // the variant, both of which are already on the face.
     const optical = font_optical.tableFor(face.family, face.variant);
+    // The same table for the pairs, or an empty one when the switch that
+    // emptied the caller's pair tables is off: an optical blend towards the
+    // tabulated pairs would put back exactly what `font-kerning: none` -- or
+    // the canvas surface, for the space pairs -- has just taken away.
+    const optical_kerns = if (face.kerning) optical else &font_optical.none;
+    const optical_space = if (face.surface == .layout and face.kerning) optical else &font_optical.none;
     var pen_basis: f64 = 0;
     // The same, for the characters `font-variant-caps` shrinks. A second
     // accumulator and not a scaled addition into the first, because the two
@@ -664,13 +683,18 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
             while (emitted < mapped.len()) : (emitted += 1) {
                 const codepoint = if (emitted == 0) mapped.first else mapped.second.?;
                 if (previous) |prev| {
-                    basis.* += font_kerning.kern(kerns, prev, codepoint);
+                    // Through the optical table, because the pairs move with the
+                    // font size the way the advances do -- 'AV' is -0.15503 em at
+                    // 28px and above and -0.12596 at 17px and below. For every
+                    // other family, and for every size from 28px up, this is the
+                    // tabulated pair unchanged.
+                    basis.* += optical_kerns.kern(kerns, prev, codepoint, run_size, face.weight);
                     // Gated on one of the two being a space rather than looked up
                     // unconditionally: this is per character of every string the
                     // engine measures, and the second table can only ever answer at
                     // a space.
                     if (prev == ' ' or codepoint == ' ') {
-                        basis.* += font_kerning.kern(space_kerns, prev, codepoint);
+                        basis.* += optical_space.spaceKern(space_kerns, prev, codepoint, run_size, face.weight);
                     }
                 }
                 previous = codepoint;
@@ -1195,6 +1219,24 @@ test "text_measure: the space pairs Chrome kerns in layout and not in the canvas
     // the ones the canvas misses, so 'AV' -- which the canvas does kern -- is
     // not in it.
     try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(serif, 'A', 'V'));
+
+    // Per VARIANT as well, and a variant that kerns nothing means nothing:
+    // system-ui's upright pulls ', ' in by -4.88 at the basis and its italic
+    // leaves it alone. The lookup used to answer the regular row for a variant
+    // with no row of its own, which put that -4.88 on the italic and made
+    // 'Hello, world.' at 100px 4.88 too narrow against Chrome's 519.875.
+    const system = font_space_kerning.tableFor(font_metrics.system_ui, .regular);
+    const system_italic = font_space_kerning.tableFor(font_metrics.system_ui, .italic);
+    try std.testing.expectEqual(@as(f64, -4.8828125), font_kerning.kern(system, ',', ' '));
+    try std.testing.expectEqual(@as(f64, -4.8828125), font_kerning.kern(system, '.', ' '));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(system_italic, ',', ' '));
+    try std.testing.expectEqual(@as(f64, 0), font_kerning.kern(system_italic, '.', ' '));
+    const italic_face = Face.of(font_metrics.system_ui, 400, true, .{}, .layout, true, .none, .none);
+    try std.testing.expectApproxEqAbs(
+        @as(f64, 519.875),
+        measure(italic_face, "Hello, world.", 100).width,
+        1.0 / 128.0,
+    );
 }
 
 test "text_measure: the kerning bit turns off both tables" {
@@ -1463,6 +1505,152 @@ test "text_measure: the system face's weight is an axis and not two faces" {
     try std.testing.expectEqual(helvetica(400), helvetica(500));
 }
 
+test "text_measure: the system face's kerning pairs are optical too" {
+    // Chrome's own max-content widths again (scratch/s108/expr-k6.js), read
+    // through layout for the same reason the advances are.
+    //
+    // The pairs move with the optical size the way the advances do, and the two
+    // masters are not a scaling of each other: 1612 pairs of SF kern at 17px
+    // and not at 100, and 1044 the other way round. 'DZ' below is one of the
+    // first kind and 'Fo' one of the second, so a model that scaled one table
+    // would have to get both of them wrong.
+    const at = struct {
+        fn f(italic: bool, size: f64, text: []const u8) f64 {
+            const face = Face.of(font_metrics.system_ui, 400, italic, .{}, .layout, true, .none, .none);
+            return measure(face, text, size).width;
+        }
+    }.f;
+    // Half of the 1/64px grid a box width lands on. These are single strings
+    // rather than the sixty-four copies the advance fixtures use, so there is
+    // nothing to average the rounding away: 'AV' at 13px reads 16.546875, which
+    // is 1059 units, and the model's unrounded 16.54199 is 1058.69 of them.
+    const slack = 1.0 / 128.0;
+    // On either master, where the model is the reading. 17px and below is TEXT,
+    // 28px and up is DISPLAY.
+    const rows = [_]struct { f64, []const u8, f64 }{
+        .{ 8, "AV", 10.6875 },
+        .{ 13, "AV", 16.546875 },
+        .{ 17, "AV", 20.96875 },
+        .{ 28, "AV", 34.03125 },
+        .{ 100, "AV", 118.8046875 },
+        // Kerns at TEXT and not at DISPLAY: -0.5px of the 17px reading, and
+        // nothing at all of the 100px one.
+        .{ 17, "DZ", 22.2421875 },
+        .{ 100, "DZ", 129.546875 },
+        // And the other way round.
+        .{ 17, "Fo", 18.9140625 },
+        .{ 100, "Fo", 103.90625 },
+        // The challenge page's own h1, which is where this face is measured in
+        // anger, and a string whose ", " pair is in the space table -- that one
+        // is -4.88 at the basis and gone entirely by 17px.
+        .{ 13, "Verify you are human", 127.6640625 },
+        .{ 17, "Verify you are human", 160.296875 },
+        .{ 100, "Verify you are human", 871.4375 },
+        .{ 17, "Hello, world.", 94.1640625 },
+        .{ 100, "Hello, world.", 501.90625 },
+        .{ 17, "To Wa Ya", 69.4609375 },
+        .{ 100, "To Wa Ya", 376.421875 },
+    };
+    for (rows) |row| {
+        try std.testing.expectApproxEqAbs(row[2], at(false, row[0], row[1]), slack);
+    }
+    // The italic has its own pairs: 4908 of them against the upright's 4501.
+    try std.testing.expectApproxEqAbs(@as(f64, 161.4453125), at(true, 17, "Verify you are human"), slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 893.0703125), at(true, 100, "Verify you are human"), slack);
+
+    // 18..27px, where the pairs cross between the masters on the same ladder
+    // the advances do and the blend is approximate in the same way. 0.09px over
+    // a twenty-character line, against the 12.2px the DISPLAY pairs alone were
+    // out by at 17px before this.
+    const band_slack = 0.1;
+    try std.testing.expectApproxEqAbs(@as(f64, 169.0703125), at(false, 18, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 199.2890625), at(false, 22, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 215.875), at(false, 24, "Verify you are human"), band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 242.734375), at(false, 27, "Verify you are human"), band_slack);
+
+    // A family with no optical table kerns the way it always did: exactly
+    // linear in the size, pairs included.
+    const sans = Face.of(font_metrics.sans_serif, 400, false, .{}, .layout, true, .none, .none);
+    try std.testing.expectEqual(
+        measure(sans, "AV Wa To", 100).width / 100 * 17,
+        measure(sans, "AV Wa To", 17).width,
+    );
+}
+
+test "text_measure: the system face's kerning pairs move with the weight too" {
+    // Chrome's own max-content widths across the whole weight axis
+    // (scratch/s109/expr-k7.js), read through layout like the rest of this
+    // face. The pairs ride `font-weight` harder than the advances do: 'Ya' at
+    // the TEXT master is -0.0635 em at weight 1 and -0.1074 at 1000, and 'DZ'
+    // at the DISPLAY master kerns at both ends of the axis and not at 400.
+    const at = struct {
+        fn f(italic: bool, weight: u16, size: f64, text: []const u8) f64 {
+            const face = Face.of(font_metrics.system_ui, weight, italic, .{}, .layout, true, .none, .none);
+            return measure(face, text, size).width;
+        }
+    }.f;
+    // Half of the 1/64px grid a box lands on, the same slack the optical-size
+    // fixtures take and for the same reason: one string, nothing to average the
+    // rounding away.
+    const slack = 1.0 / 128.0;
+    // At a tabulated weight the model IS the reading: every row here is exact.
+    const masters = [_]struct { bool, u16, f64, []const u8, f64 }{
+        .{ false, 1, 17, "AV", 19.9921875 },
+        .{ false, 1, 100, "AV", 107.5234375 },
+        .{ false, 1000, 17, "AV", 24.5703125 },
+        .{ false, 1000, 100, "AV", 137.6953125 },
+        .{ false, 1, 17, "Ya", 17.8359375 },
+        .{ false, 1000, 17, "Ya", 20.9140625 },
+        // Kerns at both ends of the axis and not at its middle, at the DISPLAY
+        // master: a model that took the weight-400 pairs for the whole axis
+        // would read the first and last of these 0.5px narrow.
+        .{ false, 1, 100, "DZ", 116.8984375 },
+        .{ false, 400, 100, "DZ", 129.546875 },
+        .{ false, 1000, 100, "DZ", 135.6484375 },
+        // And a pair that kerns at DISPLAY at every weight and at TEXT at none.
+        .{ false, 1, 17, "Fo", 18.3984375 },
+        .{ false, 1000, 17, "Fo", 20.75 },
+        .{ false, 1, 100, "Fo", 96.4375 },
+        .{ false, 1000, 100, "Fo", 117.3359375 },
+        .{ false, 1, 13, "Verify you are human", 122.2890625 },
+        .{ false, 1000, 13, "Verify you are human", 145.1015625 },
+        .{ false, 1, 8, "To Wa Ya", 34.359375 },
+        .{ false, 1000, 8, "To Wa Ya", 38.4609375 },
+        .{ true, 1000, 100, "Verify you are human", 1048 },
+    };
+    for (masters) |row| {
+        try std.testing.expectApproxEqAbs(row[4], at(row[0], row[1], row[2], row[3]), slack);
+    }
+
+    // Between the masters the pairs are interpolated, so the reading carries
+    // the same 1e-4 em residual the advances do -- 0.27px over a
+    // twenty-character line at 100px, against the 12.8px the weight-400 pairs
+    // alone were out by there.
+    const blend_slack = 0.3;
+    try std.testing.expectApproxEqAbs(@as(f64, 22.7734375), at(false, 700, 17, "AV"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 128.2734375), at(false, 700, 100, "AV"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 115.9921875), at(false, 300, 100, "AV"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 171.7421875), at(false, 700, 17, "Verify you are human"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 952.421875), at(false, 700, 100, "Verify you are human"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 173.0078125), at(true, 700, 17, "Verify you are human"), blend_slack);
+    // Inside the optical crossing band as well, where the two blends compose.
+    try std.testing.expectApproxEqAbs(@as(f64, 215.625), at(false, 700, 22, "Verify you are human"), blend_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 234.6640625), at(false, 700, 24, "Verify you are human"), blend_slack);
+
+    // A family with no optical table takes its bold pairs from the bold ROW of
+    // `font_kerning.zig` and nothing else: the weight blend must not touch it,
+    // or every bold face in the engine would kern by half.
+    const bold = Face.of(font_metrics.sans_serif, 700, false, .{}, .layout, true, .none, .none);
+    const pair = measure(bold, "AV", 100).width -
+        measure(bold, "A", 100).width - measure(bold, "V", 100).width;
+    try std.testing.expectApproxEqAbs(
+        font_kerning.kern(font_kerning.tableFor(font_metrics.sans_serif, .bold), 'A', 'V'),
+        pair,
+        1e-9,
+    );
+    try std.testing.expect(pair < -1);
+}
+
 test "text_measure: the ten strings the Turnstile widget actually measures" {
     // Not emoji. The widget hands measureText the UTF-8 bytes of each emoji
     // read back as Latin-1, so U+1F600 arrives as U+00F0 U+009F U+0098 U+0080
@@ -1727,7 +1915,19 @@ fn unitLength(codepoint: u21) u32 {
 fn kernsFor(face: Face) font_kerning.Table {
     if (!face.kerning) return .{};
     if (face.family.own_kerns.pairs.len != 0) return face.family.own_kerns;
-    return font_kerning.tableFor(face.family, face.variant);
+    return font_kerning.tableFor(face.family, kernVariant(face.family, face.variant));
+}
+
+/// Which variant's pairs are the DISPLAY master `font_optical` blends from.
+///
+/// For an optical face that is the ROMAN's row and never the bold one: the bold
+/// pairs of such a face are a point on a weight axis `font_optical` already
+/// interpolates towards, so handing it the bold row as its weight-400 master
+/// would charge the weight twice -- 'AV' at 100px is -0.078 em at 400 and
+/// -0.088 at 700, and the two applied together come out -0.093.
+fn kernVariant(family: font_metrics.Family, variant: font_variants.Variant) font_variants.Variant {
+    if (font_optical.tableFor(family, variant).empty()) return variant;
+    return if (variant == .italic or variant == .bold_italic) .italic else .regular;
 }
 
 /// Total advance of `text` at `font_size`, cluster by cluster, plus what the
