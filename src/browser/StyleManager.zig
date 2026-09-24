@@ -3720,6 +3720,22 @@ fn parseFontSize(self: *StyleManager, raw: []const u8, parent: ?*Element, depth:
         .percentage => self.computedFontSizeAt(parent, depth) / 100.0,
         .em => self.computedFontSizeAt(parent, depth),
         .ex => self.computedFontSizeAt(parent, depth) / 2.0,
+        // `rem` is the ROOT's font size, not the parent's -- and on the root
+        // itself it is the initial 16px, which is what a null parent is here.
+        // It was missing, so the declaration parsed to nothing and the size
+        // fell through to the inherited one: the Cloudflare interstitial's
+        // `.footer { font-size: .75rem }` laid out at 16px while
+        // getComputedStyle read back the correct 12px, and its footer text
+        // measured 263.65 wide against Chrome's 225.83. The computed-style
+        // surface resolves the unit through its own table
+        // (CSSStyleDeclaration's `.rem` arm); this is the layout's copy, and
+        // the two had drifted apart.
+        .rem => blk: {
+            const start = parent orelse break :blk 16;
+            var root = start;
+            while (root.parentElement()) |up| root = up;
+            break :blk self.computedFontSizeAt(root, depth + 1);
+        },
         else => return null,
     };
     const size = parsed.value * factor;

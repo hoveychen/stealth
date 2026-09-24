@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A box that does not fill its containing block is as wide as its content, and
+"its content" used to mean "its own text and nothing else": the moment the text
+sat inside a child <div>, the walk that measures it returned nothing and the box
+came out 0 wide. Every shrink-to-fit box was affected -- a flex item, a float,
+an inline-block -- and the Cloudflare interstitial's `.footer-wrapper` is one:
+285.11 wide in Chrome 153, 0 here, which left its `.footer-text` 0 wide and 91
+tall with one word per line.
+
+The assertions below are equalities between two shapes of the same content
+rather than pixel counts, because what was wrong was the shape of the answer:
+wrapping text in a <div> must not change how wide the box holding it is. The
+font the line is measured in then cancels out of both sides.
+Measured against Chrome 153 with scratch/s104/t-flexmatrix.html, where all
+seven shapes answer 283.70.
+-->
+
+<script id=max_content_of_a_stack>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const TEXT = 'Performance and Security by Cloudflare';
+  const measure = (html) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const width = el.getBoundingClientRect().width;
+    wrap.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // The baseline every other shape is compared with: a flex item whose text is
+  // its own. This one always worked.
+  const bare = measure('<div style="display:flex"><div data-m>' + TEXT + '</div></div>');
+  if (!(bare > 0)) wrong.push('bare: want a width, got ' + bare);
+
+  // One <div> around the text, which is what turned the box into a stack.
+  eq('block child', measure('<div style="display:flex"><div data-m><div>' + TEXT + '</div></div></div>'), bare);
+  // Two levels of it.
+  eq('nested blocks', measure('<div style="display:flex"><div data-m><div><div>' + TEXT + '</div></div></div></div>'), bare);
+  // Two block children stack, so the widest one decides rather than the sum.
+  eq('two stacked', measure('<div style="display:flex"><div data-m><div>x</div><div>' + TEXT + '</div></div></div>'), bare);
+  // A flex ROW inside the item lays its own items side by side, so the item is
+  // as wide as they add up to -- one item here, so the same width again.
+  eq('nested flex row', measure('<div style="display:flex"><div data-m><div style="display:flex"><span>' + TEXT + '</span></div></div></div>'), bare);
+  // The item IS the row.
+  eq('item is a row', measure('<div style="display:flex"><div data-m style="display:flex"><span>' + TEXT + '</span></div></div>'), bare);
+
+  // A row of two sums them, and the gap between them is spent too.
+  const two = measure('<div style="display:flex"><div data-m style="display:flex"><span>' + TEXT + '</span><span>' + TEXT + '</span></div></div>');
+  eq('row of two', two, bare * 2);
+  const gapped = measure('<div style="display:flex"><div data-m style="display:flex;gap:8px"><span>' + TEXT + '</span><span>' + TEXT + '</span></div></div>');
+  eq('row of two with a gap', gapped, bare * 2 + 8);
+
+  // An EMPTY child is not nothing: it contributes its own border and it still
+  // takes a gap. The Cloudflare footer's divider is exactly this -- an empty
+  // <span> with a 1px border on each side between two `gap:8px` items -- and
+  // dropping it took 10px off the row.
+  const divider = measure('<div style="display:flex"><div data-m style="display:flex;gap:8px">' +
+    '<span>' + TEXT + '</span><span style="border:1px solid"></span><span>' + TEXT + '</span></div></div>');
+  eq('empty divider counts', divider, bare * 2 + 8 + 8 + 2);
+
+  // A box that FILLS its containing block is untouched by any of this: it is
+  // as wide as the block, whatever it holds.
+  const filled = measure('<div style="width:400px"><div data-m><div>' + TEXT + '</div></div></div>');
+  eq('a filling block still fills', filled, 400);
+
+  // An absolutely positioned child is out of flow, so it is not part of the
+  // stack its parent has to be wide enough to hold.
+  eq('out of flow contributes nothing',
+    measure('<div style="display:flex"><div data-m><div>' + TEXT + '</div>' +
+      '<div style="position:absolute">' + TEXT + TEXT + '</div></div></div>'), bare);
+
+  // `max-width` bounds the contribution, the same as it bounds any other width.
+  eq('max-width on the child',
+    measure('<div style="display:flex"><div data-m><div style="max-width:40px">' + TEXT + '</div></div></div>'), 40);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+An atomic inline -- an inline-block, an <img> -- is on the line, not instead of
+it. The walk above asked each ELEMENT child what it was worth and ignored the
+text between them, which is right for a stack of blocks and wrong for a line:
+the Cloudflare interstitial's `.footer-text` is
+`Performance and Security by <a>Cloudflare</a>` with `a{display:inline-block}`,
+and it measured the <a>'s 51.69 where Chrome 153 says 225.83.
+
+`x` throughout, and equalities against the same characters written as one run,
+because a kern pair straddling the boundary would otherwise be the thing under
+test rather than the sum.
+-->
+
+<script id=max_content_of_a_line>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const measure = (inner, style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="display:flex"><div data-m style="' + (style || '') + '">' + inner + '</div></div>';
+    host.appendChild(wrap);
+    const width = wrap.querySelector('[data-m]').getBoundingClientRect().width;
+    wrap.remove();
+    return width;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+  const IB = (s) => '<span style="display:inline-block">' + s + '</span>';
+
+  const four = measure('xxxx');
+  const eight = measure('xxxxxxxx');
+  const twelve = measure('xxxxxxxxxxxx');
+  if (!(four > 0 && eight > four)) wrong.push('nothing is being measured: ' + four + ', ' + eight);
+
+  // Text then a box, a box then text, and text either side of one: all one line.
+  eq('text then a box', measure('xxxx' + IB('xxxx')), eight);
+  eq('a box then text', measure(IB('xxxx') + 'xxxx'), eight);
+  eq('text either side', measure('xxxx' + IB('xxxx') + 'xxxx'), twelve);
+  // Two boxes with nothing between them are still one line.
+  eq('two boxes', measure(IB('xxxx') + IB('xxxx')), eight);
+
+  // A BLOCK child interrupts the line, so the text beside it is its own
+  // anonymous block and the widest of the two decides rather than the sum.
+  eq('text above a block', measure('xxxxxxxx<div>xxxx</div>'), eight);
+  eq('text below a wider block', measure('xxxx<div>xxxxxxxx</div>'), eight);
+
+  // A text child of a flex container is an anonymous ITEM, so it is summed with
+  // the element items beside it and it takes a gap like any other.
+  eq('text is a flex item', measure('xxxx<span>xxxx</span>', 'display:flex'), eight);
+  eq('and takes a gap', measure('xxxx<span>xxxx</span>', 'display:flex;gap:10px'), eight + 10);
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+`font-size` in `rem` units resolves against the ROOT's font size. The layout's
+own copy of the unit table had no arm for it, so the declaration parsed to
+nothing and the element kept the inherited size -- while getComputedStyle,
+which resolves the unit through a different table, read back the right one. The
+Cloudflare interstitial's footer is `font-size: .75rem`, and it laid out at 16px.
+-->
+
+<script id=rem_font_size_reaches_the_layout>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const TEXT = 'Performance and Security by Cloudflare';
+  const measure = (style) => {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div style="display:flex"><div data-m style="' + style + '">' + TEXT + '</div></div>';
+    host.appendChild(wrap);
+    const el = wrap.querySelector('[data-m]');
+    const out = el.getBoundingClientRect().width + '@' + getComputedStyle(el).fontSize;
+    wrap.remove();
+    return out;
+  };
+
+  const wrong = [];
+  const eq = (what, got, want) => { if (got !== want) wrong.push(what + ': want ' + want + ', got ' + got); };
+
+  // The root is 16px here, so three quarters of it is 12px however it is
+  // written -- and all four must lay out at the same width, not just compute
+  // to the same string.
+  const px = measure('font-size:12px');
+  eq('rem', measure('font-size:.75rem'), px);
+  eq('percentage', measure('font-size:75%'), px);
+  eq('em', measure('font-size:.75em'), px);
+  // And the size really is 12px rather than the inherited 16.
+  eq('computes to 12px', px.split('@')[1], '12px');
+  if (measure('') === px) wrong.push('16px and 12px measure the same, so nothing is being measured');
+
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
