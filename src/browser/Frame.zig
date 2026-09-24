@@ -239,6 +239,14 @@ _flex_lines: Element.FlexLineLookup = .empty,
 /// at once when that moves, the same rule StyleManager's cascade caches use.
 _flex_lines_dom_version: usize = 0,
 
+/// The max-content width each box's intrinsic walk arrived at, keyed by the box
+/// and the depth it was asked at. Cleared with `_flex_lines`, and not an
+/// optimisation: `maxContentWidth` walks the whole subtree below a shrink-to-fit
+/// box, and a page where those nest -- every retail page -- asked the same
+/// subtree once per ancestor. Five Akamai stations that served the page in 25-70
+/// seconds stopped answering inside the sweep's 90s budget entirely.
+_max_content_widths: std.AutoHashMapUnmanaged(Element.MaxContentKey, ?f64) = .empty,
+
 /// Grid column tracks solved for the document as it stands, keyed by the
 /// container. Cleared with `_flex_lines` and under the same rule: every item on
 /// one grid asks for the same track list, and parsing it once per item is the
