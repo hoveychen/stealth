@@ -24,6 +24,7 @@ const font_kerning = @import("font_kerning.zig");
 const font_space_kerning = @import("font_space_kerning.zig");
 const text_case = @import("text_case.zig");
 const font_variants = @import("font_variants.zig");
+const font_optical = @import("font_optical.zig");
 const emoji_metrics = @import("emoji_metrics.zig");
 const emoji_presentation = @import("emoji_presentation.zig");
 const emoji_properties = @import("emoji_properties.zig");
@@ -508,6 +509,15 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // to the basis and back without picking up that same error — 20px at
     // 15px font-size comes back as 20.000000000000004 — so they are kept
     // apart. A string of printable ASCII never touches the second piece.
+    // The optical-size correction for this face, resolved once for the run.
+    // Empty for every family but the macOS system one, and free when it is:
+    // `Table.advance` on an empty table returns the tabulated advance.
+    //
+    // Resolved HERE rather than carried on the `Face`, because a face is also
+    // built by struct literal in a dozen places and a field would be silently
+    // absent in each of them -- the correction is a property of the family and
+    // the variant, both of which are already on the face.
+    const optical = font_optical.tableFor(face.family, face.variant);
     var pen_basis: f64 = 0;
     // The same, for the characters `font-variant-caps` shrinks. A second
     // accumulator and not a scaled addition into the first, because the two
@@ -717,7 +727,10 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
                     descent = if (first) glyph_descent else @max(descent, glyph_descent);
                 }
 
-                basis.* += glyph.advance;
+                // The optical correction, and the only place a tabulated
+                // advance is charged. Empty -- and so exactly `glyph.advance`
+                // -- for every face but the macOS system one.
+                basis.* += optical.advance(codepoint, glyph.advance, run_size);
             }
         }
     }
@@ -1250,6 +1263,82 @@ test "text_measure: reproduces Chrome's measureText" {
     // Chrome's, beside the note that we did not model kerning.
     try std.testing.expectEqual(@as(f64, 12.6025390625), measure(Face.regular(font_metrics.sans_serif), "AV", 10).width);
     try std.testing.expectEqual(@as(f64, 10.5615234375), measure(Face.regular(font_metrics.sans_serif), "To", 10).width);
+}
+
+test "text_measure: the system face's advances are not linear in size" {
+    // Chrome's own layout widths, read off a `width: max-content` box at device
+    // pixel ratio 2 (scratch/s106/expr-fixtures.js). Sixty-four copies of one
+    // glyph: kern-free by construction, so this is the advance model and
+    // nothing else, and long enough that the box's 1/256px quantisation is a
+    // rounding error rather than the answer.
+    //
+    // `measureText` is deliberately not the channel here. For this face alone
+    // the canvas reports a wrong optical instance for a whole size at a time,
+    // at random -- see tools/fingerprint/dump-font-optical.mjs.
+    const face = Face.regular(font_metrics.system_ui);
+    const run = "x" ** 64;
+    // One unit of the 1/256px grid a box width lands on, and not half of it:
+    // Chrome does not round the run's total to the nearest unit. Sixty-four
+    // copies of 'x' at 8px read 281.671875 where 128 copies read 563.33594,
+    // which is 72108 and 144214 units -- the shorter run is a unit above half
+    // the longer one, so a sum this close is as close as a reading gets.
+    const slack = 1.0 / 256.0;
+    const rows = [_]struct { f64, f64 }{
+        // Below 6px the tracking has saturated: the same per-em advance.
+        .{ 1, 36.125 },
+        .{ 6, 216.75 },
+        .{ 8, 281.671875 },
+        // A scale of the 100px table would answer 16 * 29.96875 = 479.5 here.
+        .{ 16, 517 },
+        .{ 17, 542.9375 },
+        // The crossing band is checked below, at its own slack.
+        // From 28px up it is the 100px table plus a tracking that reaches zero
+        // at 80: 28 * 29.96875 is 839.125, and the 24.5 between them is it.
+        .{ 28, 863.625 },
+        .{ 32, 985 },
+        .{ 48, 1461 },
+        .{ 80, 2397.5 },
+        .{ 100, 2996.875 },
+        // Between two whole sizes the ladder is interpolated, not the width.
+        .{ 16.5, 530.0625 },
+    };
+    for (rows) |row| {
+        try std.testing.expectApproxEqAbs(row[1], measure(face, run, row[0]).width, slack);
+    }
+
+    // 18..27px, where neither master is the answer and the model interpolates
+    // between them. It is a WORSE fit there and this records how much: the
+    // crossing is not exactly a linear blend, so the per-glyph residual is up
+    // to 2.7e-4 em, which over sixty-four copies is the third of a pixel below.
+    // Every other size in this test is inside the 1/256px a reading resolves.
+    //
+    // Closing it means storing the ten band sizes as their own tables rather
+    // than interpolating -- ten more per face -- and the kerning gap in the
+    // same range is an order of magnitude larger, so that comes first.
+    const band_slack = 0.35;
+    try std.testing.expectApproxEqAbs(@as(f64, 573.1875), measure(face, run, 18).width, band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 679.9375), measure(face, run, 22).width, band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 739.5), measure(face, run, 24).width, band_slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 832.359375), measure(face, run, 27).width, band_slack);
+    // A fractional size inside the band inherits the band's residual.
+    try std.testing.expectApproxEqAbs(@as(f64, 695.0390625), measure(face, run, 22.5).width, band_slack);
+
+    // Three more glyphs at one small and one large size, because the
+    // correction below the crossing is PER GLYPH and a single glyph could be
+    // fitted by a scale.
+    try std.testing.expectApproxEqAbs(@as(f64, 875), measure(face, "M" ** 64, 16).width, slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 284), measure(face, "." ** 64, 16).width, slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 268), measure(face, " " ** 64, 16).width, slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 5318.75), measure(face, "M" ** 64, 100).width, slack);
+    try std.testing.expectApproxEqAbs(@as(f64, 1375), measure(face, "." ** 64, 100).width, slack);
+
+    // And a family that is not optically sized stays exactly linear, which is
+    // what `font_metrics.zig`'s header claims for the other 203 names.
+    const sans = Face.regular(font_metrics.sans_serif);
+    try std.testing.expectEqual(
+        measure(sans, run, 100).width / 100 * 16,
+        measure(sans, run, 16).width,
+    );
 }
 
 test "text_measure: the ten strings the Turnstile widget actually measures" {
