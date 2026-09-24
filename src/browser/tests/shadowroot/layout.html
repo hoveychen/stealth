@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<!--
+A shadow host lays out its SHADOW tree, not its light-DOM children. The box
+tree had never heard of the composed tree, so every host measured its light
+children instead -- and a host whose light children are all projected through a
+<slot> measured them twice over, while a host with no light children at all
+measured nothing and came back 0 tall.
+
+That last shape is the one that mattered: Cloudflare's Turnstile builds its
+whole 300x65 widget inside a CLOSED shadow root and reports the host's size
+back to the challenge, so the challenge read "the widget is invisible" off a
+host this engine said was 0 tall (`scratch/s95/t-shadow.html`, Chrome 153
+answers 65 where this engine answered 0).
+
+Every number below is Chrome 153's, taken on the same two pages with
+tools/fingerprint/run-expr.mjs.
+-->
+
+<script id=shadow_content_gives_the_host_its_height>
+{
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  // [light html, shadow html, Chrome's host height]
+  const CASES = [
+    // Nothing in the light DOM at all: the only content is the shadow tree,
+    // which is exactly the Turnstile shape. This answered 0.
+    ['', '<div style="height:65px"></div>', 65],
+    // Light children are NOT laid out by the host; they reach the box only
+    // through a <slot>. Both of these answered 40 before.
+    ['<div style="height:40px"></div>', '<div style="height:65px"></div>', 65],
+    ['<div style="height:40px"></div>', '', 0],
+    // ...and through a <slot> they do come back, in the slot's place, so the
+    // padding wrapped around the slot counts and the light child is measured
+    // once.
+    ['<div style="height:40px"></div>', '<slot></slot>', 40],
+    ['<div style="height:40px"></div>', '<div style="padding:10px"><slot></slot></div>', 60],
+    // A slot with nothing assigned keeps its own children: fallback content.
+    ['', '<slot><div style="height:25px"></div></slot>', 25],
+    // A named slot takes only what was addressed to it; the unnamed child has
+    // nowhere to go and is not rendered at all.
+    ['<div slot=x style="height:30px"></div><div style="height:11px"></div>',
+      '<slot name=x></slot>', 30],
+  ];
+
+  const wrong = [];
+  for (const [light, shadow, want] of CASES) {
+    const el = document.createElement('div');
+    el.innerHTML = light;
+    host.appendChild(el);
+    el.attachShadow({ mode: 'open' }).innerHTML = shadow;
+    const got = el.getBoundingClientRect().height;
+    if (got !== want || el.offsetHeight !== want) {
+      wrong.push(`[${light}|${shadow}]: want ${want}, got ${got}/${el.offsetHeight}`);
+    }
+    el.remove();
+  }
+  host.remove();
+  testing.expectEqual('', wrong.join(' | '));
+}
+</script>
+
+<!--
+A closed root is laid out the same way an open one is: the mode governs who can
+reach `shadowRoot` from script, not whether the content has a box. Turnstile's
+is closed, so this is the shape that actually ships.
+-->
+
+<script id=closed_root_is_laid_out_too>
+{
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  const root = el.attachShadow({ mode: 'closed' });
+  const inner = document.createElement('div');
+  inner.style.cssText = 'width:300px;height:65px';
+  root.appendChild(inner);
+
+  const host = el.getBoundingClientRect();
+  const child = inner.getBoundingClientRect();
+  // The host takes the child's height, and the child is placed at the host's
+  // own origin rather than at the placeholder coordinates a subtree nothing
+  // walks falls back to.
+  const got = [host.height, child.width, child.height,
+               child.x - host.x, child.y - host.y].join(' ');
+  el.remove();
+  testing.expectEqual('65 300 65 0 0', got);
+}
+</script>
