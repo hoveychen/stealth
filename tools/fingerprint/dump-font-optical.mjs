@@ -664,7 +664,7 @@ pub const Table = struct {
     /// \`font_space_kerning.zig\` row.
     display_space_kerns: [weight_masters.len]font_kerning.Table = .{ .{}, .{}, .{} },
 
-    pub fn empty(self: Table) bool {
+    pub fn empty(self: *const Table) bool {
         return self.text[0].len == 0;
     }
 
@@ -672,7 +672,7 @@ pub const Table = struct {
     /// the basis. Falls back to \`display\` -- what \`font_metrics\` /
     /// \`font_variants\` answer -- for an empty table or a code point outside the
     /// tabulated range.
-    pub fn advance(self: Table, codepoint: u21, display: f64, size: f64, weight: u16) f64 {
+    pub fn advance(self: *const Table, codepoint: u21, display: f64, size: f64, weight: u16) f64 {
         if (self.text[0].len == 0) return display;
         if (codepoint < font_metrics.first_codepoint or codepoint > font_metrics.last_codepoint) {
             return display;
@@ -687,22 +687,22 @@ pub const Table = struct {
     /// DISPLAY pairs at weight 400 the caller already looked the family up in.
     /// Answers \`held\` itself for a face with no table and for every size from
     /// 28px up, so the pairs a page at a heading size asks for are untouched.
-    pub fn kern(self: Table, held: font_kerning.Table, a: u21, b: u21, size: f64, weight: u16) f64 {
-        return self.mix(self.display_kerns, held, self.text_kerns, a, b, size, weight);
+    pub fn kern(self: *const Table, held: font_kerning.Table, a: u21, b: u21, size: f64, weight: u16) f64 {
+        return self.mix(&self.display_kerns, held, &self.text_kerns, a, b, size, weight);
     }
 
     /// The same for a pair with a space on one side, whose held DISPLAY values
     /// are in \`font_space_kerning.zig\` and which only the layout surface
     /// applies.
-    pub fn spaceKern(self: Table, held: font_kerning.Table, a: u21, b: u21, size: f64, weight: u16) f64 {
-        return self.mix(self.display_space_kerns, held, self.text_space_kerns, a, b, size, weight);
+    pub fn spaceKern(self: *const Table, held: font_kerning.Table, a: u21, b: u21, size: f64, weight: u16) f64 {
+        return self.mix(&self.display_space_kerns, held, &self.text_space_kerns, a, b, size, weight);
     }
 
     fn mix(
-        self: Table,
-        display: [weight_masters.len]font_kerning.Table,
+        self: *const Table,
+        display: *const [weight_masters.len]font_kerning.Table,
         held: font_kerning.Table,
-        text: [weight_masters.len]font_kerning.Table,
+        text: *const [weight_masters.len]font_kerning.Table,
         a: u21,
         b: u21,
         size: f64,
@@ -729,7 +729,7 @@ const mid_master = 1;
 /// A weight that IS a master comes back bit for bit, the way \`atWeight\` does:
 /// the two ends are returned whole rather than blended with a zero coefficient.
 fn kernAtWeight(
-    tables: [weight_masters.len]font_kerning.Table,
+    tables: *const [weight_masters.len]font_kerning.Table,
     held: font_kerning.Table,
     a: u21,
     b: u21,
@@ -827,6 +827,20 @@ for (const t of tables) {
     }
 }
 zig += `
+const Row = struct { glyphs: []const font_metrics.Glyph, italic: bool, table: Table };
+
+/// The tabulated romans, at file scope rather than inside \`tableFor\`: a
+/// \`Table\` is several hundred bytes wide now that it carries four pair sets at
+/// three weights each, and a local array literal would build the whole thing on
+/// the stack on every call -- \`measure\` asks for one per string it measures.
+const rows = [_]Row{
+${tables.map((t) => `    .{ .glyphs = font_metrics.${t.family}.glyphs, .italic = ${t.roman === 'italic'}, .table = .{ .display = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'display', w)}`).join(', ')} }, .text = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'text', w)}`).join(', ')} }, .text_weight = &weight_${t.roman}_${t.family}, .tracking = &tracking_${t.roman}_${t.family}, ${PAIR_SETS.map((set) => `.${{ textkerns: 'text_kerns', textspacekerns: 'text_space_kerns', displaykerns: 'display_kerns', displayspacekerns: 'display_space_kerns' }[set]} = .{ ${WEIGHTS.map((_, w) => pairSlotTable(t, set, w)).join(', ')} }`).join(', ')} } },`).join('\n')}
+};
+
+/// The empty table, for a family with no row: a pointer to one copy of it
+/// rather than a fresh value built per call.
+pub const none: Table = .{};
+
 /// The table for a family in a roman, matched on the identity of its regular
 /// advance table the way \`font_variants.tableFor\` is: a \`Family\` is a value and
 /// its \`glyphs\` slice is the one thing unique to it.
@@ -834,17 +848,16 @@ zig += `
 /// Keyed on the ROMAN and not the variant, because the bold of an optical face
 /// is a weight and not a face: \`.bold\` and \`.regular\` want the same table and
 /// differ only in the weight they then ask it for.
-pub fn tableFor(family: font_metrics.Family, variant: font_variants.Variant) Table {
+///
+/// By pointer, for the same reason \`rows\` is at file scope.
+pub fn tableFor(family: font_metrics.Family, variant: font_variants.Variant) *const Table {
     const italic = variant == .italic or variant == .bold_italic;
-    const rows = [_]struct { []const font_metrics.Glyph, bool, Table }{
-${tables.map((t) => `        .{ font_metrics.${t.family}.glyphs, ${t.roman === 'italic'}, .{ .display = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'display', w)}`).join(', ')} }, .text = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'text', w)}`).join(', ')} }, .text_weight = &weight_${t.roman}_${t.family}, .tracking = &tracking_${t.roman}_${t.family}, ${PAIR_SETS.map((set) => `.${{ textkerns: 'text_kerns', textspacekerns: 'text_space_kerns', displaykerns: 'display_kerns', displayspacekerns: 'display_space_kerns' }[set]} = .{ ${WEIGHTS.map((_, w) => pairSlotTable(t, set, w)).join(', ')} }`).join(', ')} } },`).join('\n')}
-    };
-    for (rows) |row| {
-        if (row[0].ptr == family.glyphs.ptr and row[1] == italic) {
-            return row[2];
+    for (&rows) |*row| {
+        if (row.glyphs.ptr == family.glyphs.ptr and row.italic == italic) {
+            return &row.table;
         }
     }
-    return .{};
+    return &none;
 }
 `;
 await fs.writeFile(path.join(repo, 'src/browser/font_optical.zig'), zig);

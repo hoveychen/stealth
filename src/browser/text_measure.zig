@@ -357,7 +357,7 @@ pub fn kernBetween(face: Face, a: u21, b: u21, size: f64) f64 {
     const optical = if (face.surface == .layout and face.kerning)
         font_optical.tableFor(face.family, face.variant)
     else
-        font_optical.Table{};
+        &font_optical.none;
     return toPixels(optical.spaceKern(face.space_kerns, a, b, size, face.weight), size);
 }
 
@@ -553,8 +553,8 @@ pub fn measureAt(face: Face, text: []const u8, size: f64, at_word_start: *bool) 
     // emptied the caller's pair tables is off: an optical blend towards the
     // tabulated pairs would put back exactly what `font-kerning: none` -- or
     // the canvas surface, for the space pairs -- has just taken away.
-    const optical_kerns = if (face.kerning) optical else font_optical.Table{};
-    const optical_space = if (face.surface == .layout and face.kerning) optical else font_optical.Table{};
+    const optical_kerns = if (face.kerning) optical else &font_optical.none;
+    const optical_space = if (face.surface == .layout and face.kerning) optical else &font_optical.none;
     var pen_basis: f64 = 0;
     // The same, for the characters `font-variant-caps` shrinks. A second
     // accumulator and not a scaled addition into the first, because the two
