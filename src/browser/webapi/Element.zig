@@ -5899,6 +5899,74 @@ fn contentHeightIn(self: *Element, frame: *Frame, visibility_cache: *VisibilityC
     return self.blockContent(frame, visibility_cache, extent, content_width, depth, pass, floats);
 }
 
+/// Where a layout walk goes: a shadow host lays out its SHADOW tree, not its
+/// light-DOM children -- that is what the composed tree means, and it is the
+/// tree `RenderTree.zig` already walks for markdown and screenshots. The box
+/// tree here had never heard of it, so every shadow host on the web measured 0
+/// tall: a `<div>` hosting a 300x65 widget answered `getBoundingClientRect`
+/// with a height of 0 where Chrome answers 65, and the content inside the
+/// shadow root fell back to placeholder coordinates because nothing ever placed
+/// it. Cloudflare's Turnstile puts its whole widget in a closed shadow root and
+/// reports the host's size back to the challenge, so this read as "the
+/// challenge widget is invisible" -- `scratch/s95/t-shadow.html` has the five
+/// shapes, and Chrome answers 65/69/69/65/69 where this engine answered
+/// 0/0/69/65/0.
+///
+/// A host's light-DOM children come back through a `<slot>`, which is why this
+/// is an iterator and not a first-child: the slot stands where its assigned
+/// nodes go, so a walk that stopped at the slot would measure a component's
+/// fallback content instead of the content it was handed.
+pub const LayoutChildren = struct {
+    frame: *Frame,
+    next_node: ?*Node,
+    /// The nodes the `<slot>` being stood in was assigned, and the sibling to
+    /// carry on from once they run out.
+    assigned: []const *Node = &.{},
+    after_slot: ?*Node = null,
+
+    pub fn next(self: *LayoutChildren) ?*Node {
+        while (true) {
+            if (self.assigned.len > 0) {
+                const node = self.assigned[0];
+                self.assigned = self.assigned[1..];
+                return node;
+            }
+            if (self.after_slot) |resume_node| {
+                self.next_node = resume_node;
+                self.after_slot = null;
+            }
+            const node = self.next_node orelse return null;
+            self.next_node = node.nextSibling();
+            // A `<slot>` with nothing assigned keeps its own children, which is
+            // what fallback content is.
+            if (node.is(Html.Slot)) |slot| {
+                const assigned = slot.assignedNodes(null, self.frame) catch &.{};
+                if (assigned.len > 0) {
+                    self.assigned = assigned;
+                    self.after_slot = self.next_node;
+                    self.next_node = null;
+                    continue;
+                }
+            }
+            return node;
+        }
+    }
+
+    /// The same walk, for the callers that only have something to say about
+    /// elements.
+    pub fn nextElement(self: *LayoutChildren) ?*Element {
+        while (self.next()) |node| {
+            if (node.is(Element)) |el| return el;
+        }
+        return null;
+    }
+};
+
+fn layoutChildren(self: *Element, frame: *Frame) LayoutChildren {
+    const parent = if (self.hostedShadowRoot(frame)) |shadow| shadow.asNode() else self.asNode();
+    return .{ .frame = frame, .next_node = parent.firstChild() };
+}
+
 /// The stack itself: every content height that is not a flex line or a column
 /// strip lands here.
 fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache, extent: Extent, content_width: ?f64, depth: u8, pass: ?PositionPass, outer_floats: ?FloatContext) ContentHeight {
@@ -6001,8 +6069,8 @@ fn blockContent(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     var group: MarginGroup = .{};
     var placed = false;
 
-    var child = self.asNode().firstChild();
-    while (child) |node| : (child = node.nextSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.next()) |node| {
         // Where the run being built starts, which is what the lines in it add
         // their own offset to when they ask the floats for a band. `total` only
         // moves between runs -- a flush, a block child -- so the top of the
@@ -6595,8 +6663,8 @@ fn hasEditingBaseline(self: *Element) bool {
 /// for an atomic inline is the difference between sitting on the baseline and
 /// bringing its own. Bounded like every other walk here.
 fn hasInlineBaseline(self: *Element, frame: *Frame, depth: u8) bool {
-    var child = self.asNode().firstChild();
-    while (child) |node| : (child = node.nextSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.next()) |node| {
         if (node.is(CData.Text)) |text| {
             if (!isCollapsibleWhitespace(Factory.protoOf(text)._data.str())) return true;
             continue;
@@ -6670,8 +6738,8 @@ fn flexJustify(
     var used: f64 = 0;
     var items: f64 = 0;
     var line_width: ?f64 = axis.content_width;
-    var child = self.firstElementChild();
-    while (child) |el| : (child = el.nextElementSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
         if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
         if (!el.checkVisibilityCached(null, frame)) continue;
         const box = el.dimensionsIn(frame, true, depth + 1, true, axis.content_width);
@@ -6751,8 +6819,8 @@ fn flexWrappedLines(
     var on_line: usize = 0;
     var index: usize = 0;
 
-    var child = self.firstElementChild();
-    while (child) |el| : (child = el.nextElementSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
         if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
         if (!CSSStyleDeclaration.isFlexItem(el, frame)) continue;
 
@@ -6893,8 +6961,8 @@ fn flexRowContent(
     var line_index: usize = 0;
     var cross_origin: f64 = 0;
 
-    var child = self.firstElementChild();
-    while (child) |el| : (child = el.nextElementSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
         // An out-of-flow child of a flex container is not an item: it takes no
         // share of the line and does not advance the cursor. The stacking walk
         // records its static position; here it simply is not on the line, and
@@ -7037,8 +7105,8 @@ fn gridContent(
     };
     var items: std.ArrayListUnmanaged(Item) = .empty;
 
-    var child = self.firstElementChild();
-    while (child) |el| : (child = el.nextElementSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
         if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
         if (!CSSStyleDeclaration.isGridItem(el, frame)) {
             // Out of flow, so not in a cell -- but it still has a static
@@ -7164,8 +7232,8 @@ fn tableContent(
     var above: f64 = 0;
     var below: f64 = 0;
     {
-        var child = self.firstElementChild();
-        while (child) |caption| : (child = caption.nextElementSibling()) {
+        var children = self.layoutChildren(frame);
+        while (children.nextElement()) |caption| {
             if (!CSSStyleDeclaration.isTableCaption(caption, frame)) continue;
             if (!caption.checkVisibilityCached(visibility_cache, frame)) continue;
             const box = caption.dimensionsIn(frame, true, depth + 1, true, layout.content_width);
@@ -7188,8 +7256,8 @@ fn tableContent(
         const y = band.start + above;
         if (!row.checkVisibilityCached(visibility_cache, frame)) continue;
 
-        var child = row.firstElementChild();
-        while (child) |cell| : (child = cell.nextElementSibling()) {
+        var cells = row.layoutChildren(frame);
+        while (cells.nextElement()) |cell| {
             if (!CSSStyleDeclaration.isTableCell(cell, frame)) continue;
             if (!cell.checkVisibilityCached(visibility_cache, frame)) continue;
             const placed = frame._table_cells.get(cell) orelse continue;
@@ -7333,8 +7401,8 @@ fn flexColumnContent(
     var cursor: f64 = spread.leading;
     var placed_any = false;
 
-    var child = self.firstElementChild();
-    while (child) |el| : (child = el.nextElementSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.nextElement()) |el| {
         if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
         if (!CSSStyleDeclaration.isFlexItem(el, frame)) {
             // Out of flow, so not on the column -- but it still has a static
@@ -7448,7 +7516,10 @@ fn multiColumnContent(
     // with a block child in it has no such floor -- Chrome cuts the block --
     // which is why this asks whether the container holds any elements at all
     // rather than trying to find the breaks.
-    if (self.firstElementChild() == null) {
+    if (blk: {
+        var children = self.layoutChildren(frame);
+        break :blk children.nextElement() == null;
+    }) {
         const font = self.resolveFont(frame);
         const strut = self.lineBoxHalves(frame, font.face, font.size);
         const line = strut.above + strut.below;
@@ -7630,8 +7701,8 @@ fn contentWidth(self: *Element, frame: *Frame, visibility_cache: *VisibilityCach
     // until the first child that says no.
     var share_a_line = true;
 
-    var child = self.asNode().firstChild();
-    while (child) |node| : (child = node.nextSibling()) {
+    var children = self.layoutChildren(frame);
+    while (children.next()) |node| {
         if (node.is(Element)) |el| {
             if (!el.checkVisibilityCached(visibility_cache, frame)) continue;
             if (!extent.counts(CSSStyleDeclaration.flowKind(el, frame))) continue;
