@@ -745,6 +745,14 @@ try {
     }
 
     let live = fresh ? null : await session();
+    // The address the last station was left sitting on. One engine process
+    // serves the whole sweep unless --fresh, so a navigation that never landed
+    // leaves the previous station's document in place -- and it reads as a
+    // perfectly ordinary page. Five of the fifty-two rows in the 2026-09-23
+    // ReleaseFast sweep were that: three scored `pass` off bloomingdales.com,
+    // two scored a challenge off binance.com and zeroclover.io. A false green
+    // and a false red from the same defect, neither visible in the verdict.
+    let prevHref = null;
 
     for (const station of stations) {
         const row = { name: station.name, vendor: station.vendor, url: station.url, guards: station.guards };
@@ -770,7 +778,14 @@ try {
             // this station for most of a month. Enable it after the settle,
             // read the page, and put it back.
             if (engine === 'lightpanda') {
-                await cdp.send('Page.navigate', { url: station.url }, sessionId);
+                // Page.navigate reports a refusal in-band, as `errorText` on a
+                // successful command reply rather than as a protocol error, so
+                // a `send` that resolves is not yet a navigation that happened.
+                // Without this the settle runs out over whatever document was
+                // already there -- the *previous station's* -- and the read
+                // that follows scores that page under this station's name.
+                const nav = await cdp.send('Page.navigate', { url: station.url }, sessionId);
+                if (nav?.errorText) row.navError = nav.errorText;
                 await sleep(settleMs);
                 await cdp.send('Runtime.enable', {}, sessionId);
             } else {
@@ -820,6 +835,24 @@ try {
         // the second one, was cut off.
         if (trace) row.wire = wire.slice(0, 1200);
         Object.assign(row, verdict(station, reading, docs));
+        if (reading?.href) {
+            // Judged on the host rather than the whole address because plenty
+            // of stations legitimately move (a path redirect, a locale prefix,
+            // an interstitial on a subdomain), and only two shapes are
+            // conclusive: the reading is byte-for-byte the page the previous
+            // station was left on, or the navigation itself was refused. Any
+            // other host change is recorded and left alone -- `hostMismatch`
+            // is a flag to look at, not a verdict.
+            const host = (u) => { try { return new URL(u).hostname; } catch { return null; } };
+            const want = host(station.url);
+            const got = host(reading.href);
+            if (want && got && want !== got) row.hostMismatch = got;
+            if (got && (reading.href === prevHref || row.navError)) {
+                row.staleVerdict = row.verdict;
+                row.verdict = 'stale-document';
+            }
+            prevHref = reading.href;
+        }
         if (reading) {
             row.title = reading.title;
             row.landedOn = reading.href;
@@ -856,9 +889,17 @@ try {
     snapshot.profileDir = profileDir;
     snapshot.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-60);
     const pass = snapshot.stations.filter((s) => s.verdict === 'pass').length;
-    snapshot.summary = { stations: snapshot.stations.length, pass };
+    // Counted separately because a stale row is neither a pass nor a refusal:
+    // it is a station that was not measured, and a door map built from a sweep
+    // with several of them is missing that many readings.
+    const stale = snapshot.stations.filter((s) => s.verdict === 'stale-document').length;
+    snapshot.summary = { stations: snapshot.stations.length, pass, stale };
     await fs.mkdir(path.dirname(outPath), { recursive: true });
     await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2) + '\n');
-    console.log(`\n${pass}/${snapshot.stations.length} passed — wrote ${path.relative(repo, outPath)}`);
+    console.log(
+        `\n${pass}/${snapshot.stations.length} passed` +
+        (stale ? ` (${stale} not measured: stale document)` : '') +
+        ` — wrote ${path.relative(repo, outPath)}`,
+    );
     process.exit(0);
 }
