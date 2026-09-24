@@ -109,8 +109,17 @@ export async function newPage(cdp) {
 
 // Navigate and give the page a chance to run its scripts. lightpanda has no
 // reliable networkIdle signal across all versions, so we poll readyState.
+// Returns the navigation's own report. A refused navigation comes back in-band
+// -- `errorText` on an otherwise successful command reply, not a protocol error
+// -- and the readyState poll below cannot tell the difference, because the
+// document that was already there is `complete` and answers immediately. So a
+// caller that ignores the return value settles over the *previous* page and
+// reads it as this one. Warned about here rather than thrown, so that no
+// existing caller changes behaviour; a caller that judges a page on what it
+// read should look at the value.
 export async function goto(cdp, sessionId, url, { settleMs = 3000 } = {}) {
-    await cdp.send('Page.navigate', { url }, sessionId);
+    const nav = await cdp.send('Page.navigate', { url }, sessionId);
+    if (nav?.errorText) console.error(`goto ${url}: ${nav.errorText}`);
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
         try {
@@ -122,6 +131,7 @@ export async function goto(cdp, sessionId, url, { settleMs = 3000 } = {}) {
         await sleep(200);
     }
     await sleep(settleMs);
+    return nav;
 }
 
 export async function evaluate(cdp, sessionId, expression, { awaitPromise = false } = {}) {
