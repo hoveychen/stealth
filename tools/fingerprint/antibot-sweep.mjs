@@ -789,7 +789,8 @@ try {
                 await sleep(settleMs);
                 await cdp.send('Runtime.enable', {}, sessionId);
             } else {
-                await goto(cdp, sessionId, station.url, { settleMs });
+                const nav = await goto(cdp, sessionId, station.url, { settleMs });
+                if (nav?.errorText) row.navError = nav.errorText;
             }
             reading = await evaluate(cdp, sessionId, extractAntibot);
             if (engine === 'lightpanda') await cdp.send('Runtime.disable', {}, sessionId);
