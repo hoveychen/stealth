@@ -110,12 +110,23 @@ const variantDisplayFor = (family, variant) =>
 const families = [...nameFor.keys()].filter((f) => displayFor.has(f)).sort();
 process.stderr.write(`${families.length} families to screen for optical sizing\n`);
 
-const VARIANTS = [
-    ['regular', ''],
-    ['bold', 'bold '],
+// An optical face is measured per ROMAN, not per variant: SF's `wght` is a
+// continuous axis, so `bold` is not a face but the point 700 on it. At 100px
+// every multiple of 25 from 1 to 1000 measures differently, in two straight
+// lines meeting at 400.
+const ROMANS = [
+    ['roman', ''],
     ['italic', 'italic '],
-    ['bold_italic', 'italic bold '],
 ];
+// The masters those two lines meet at, and the ends they run to. Interpolating
+// between them reproduces a held-out weight to 2.4e-4 em at the median and at
+// the 95th percentile alike; the two code points that miss are U+7F and U+80,
+// whose notdef box does not move with the weight at all.
+const WEIGHTS = [1, 400, 1000];
+// Which of those the engine already holds a table for, so the generated one is
+// that table's own values rather than a fresh reading of it -- `font-weight:
+// 400` and `bold` have to keep answering exactly what they answer today.
+const MID = 1;
 
 const chrome = spawn(CHROME, [
     `--remote-debugging-port=${PORT}`,
@@ -209,45 +220,78 @@ process.stderr.write(`${optical.length} optical families\n`);
 if (surveyOnly) { cdp.ws.close(); chrome.kill(); process.exit(0); }
 
 // --- measuring -------------------------------------------------------------
-const tables = [];   // { family, variant, advances }  advances at the 100px basis
-const ladders = [];  // { family, variant, weight[], tracking[] }
+// One face's per-em advances at one size, self-pair corrected. The run carries
+// (n-1) copies of whatever a pair of this glyph with itself costs, so that has
+// to come back out: four glyphs of SF pair with themselves by as much as 0.04
+// em, which at TEXT_SIZE is 0.67px and would go straight into the table. Gated
+// on a threshold well above the 1/256px read noise, because the correction is
+// worth 0.04 em on the handful of glyphs that do pair and would ADD 3e-4 em of
+// noise to the 218 that do not.
+const tableAt = (FONT, size) => `(() => { ${PRELUDE} ${FONT}
+    const out = [], pairs = [];
+    for (let c = ${FIRST}; c <= ${LAST}; c++) {
+      const ch = String.fromCharCode(c);
+      const raw = __selfPair(font(${size}), ch);
+      const k = Math.abs(raw) > 0.05 ? raw : 0;
+      const n = ${TEXT_REPEAT};
+      out.push((__adv(font(${size}), ch, n) - k * (n - 1) / n) / ${size});
+      if (k) pairs.push([c, k / ${size}]);
+    }
+    return JSON.stringify({ advances: out, selfPairs: pairs });
+})()`;
+
+const tables = [];   // { family, roman, display: [3][], text: [3][] }  at the 100px basis
+const ladders = [];  // { family, roman, weight[], tracking[] }
 for (const family of optical) {
     const css = quote(nameFor.get(family));
-    const display = displayFor.get(family).map((a) => a / 100);
-    for (const [variant, prefix] of VARIANTS) {
-        const FONT = `const font = (size) => ${JSON.stringify(prefix)} + size + 'px ' + ${JSON.stringify(css)};`;
-        const measured = await evaluate(`(() => { ${PRELUDE} ${FONT}
-            const out = [], pairs = [];
-            for (let c = ${FIRST}; c <= ${LAST}; c++) {
-              const ch = String.fromCharCode(c);
-              // The run carries (n-1) copies of whatever a pair of this glyph
-              // with itself costs, so that has to come back out: four glyphs
-              // of SF pair with themselves by as much as 0.04 em, which is
-              // 0.67px at this size and would go straight into the table.
-              // Gated on a threshold well above the 1/256px read noise: the
-              // correction is worth 0.04 em on the handful of glyphs that do
-              // pair, and would ADD 3e-4 em of noise to the 218 that do not.
-              const raw = __selfPair(font(${TEXT_SIZE}), ch);
-              const k = Math.abs(raw) > 0.05 ? raw : 0;
-              const n = ${TEXT_REPEAT};
-              out.push((__adv(font(${TEXT_SIZE}), ch, n) - k * (n - 1) / n) / ${TEXT_SIZE});
-              if (k) pairs.push([c, k / ${TEXT_SIZE}]);
+    for (const [roman, style] of ROMANS) {
+        // What this engine already answers at weight 400: the regular table for
+        // the roman, the italic variant table for the italic. The generated
+        // table is those values rather than a fresh reading of them, so
+        // `font-weight: 400` keeps measuring exactly what it measures today and
+        // the weight axis is additive at its own middle master.
+        const held = (roman === 'italic'
+            ? variantDisplayFor(family, 'italic')
+            : null) ?? displayFor.get(family).map((a) => a / 100);
+
+        const display = [], text = [];
+        for (const w of WEIGHTS) {
+            const prefix = `${style}${w} `;
+            const FONT = `const font = (size) => ${JSON.stringify(prefix)} + size + 'px ' + ${JSON.stringify(css)};`;
+            const measuredText = await evaluate(tableAt(FONT, TEXT_SIZE));
+            const measuredDisplay = await evaluate(tableAt(FONT, 100));
+            text.push(measuredText.advances);
+            display.push(measuredDisplay.advances);
+            if (measuredText.selfPairs.length) {
+                process.stderr.write(`  ${family}/${roman}@${w}: pairs with itself: ` +
+                    measuredText.selfPairs.map(([c, k]) => `U+${c.toString(16).padStart(4, '0')} ${k.toFixed(5)}em`).join(', ') + `\n`);
             }
-            return JSON.stringify({ advances: out, selfPairs: pairs });
-        })()`);
-        const text = measured.advances;
-        if (measured.selfPairs.length) {
-            process.stderr.write(`  ${family}/${variant}: pairs with itself: ` +
-                measured.selfPairs.map(([c, k]) => `U+${c.toString(16).padStart(4, '0')} ${k.toFixed(5)}em`).join(', ') + `\n`);
         }
-        const selfPaired = await evaluate(`(() => { ${PRELUDE} ${FONT}
+        // How far the measured middle master is from the one the engine holds.
+        // Reported rather than assumed: if the two disagree by more than the
+        // read noise, the face has stopped resolving the way `font_metrics.zig`
+        // was written against and the whole table is against a different font.
+        const drift = Math.max(...display[MID].map((v, i) => Math.abs(v - held[i])));
+        if (drift > 1e-3) {
+            throw new Error(`${family}/${roman}: measured weight-400 DISPLAY is ${drift.toExponential(2)} em from the engine's table`);
+        }
+        // Take the engine's values at the middle master, and leave TEXT alone.
+        // The model is `D + w*(T-D) + t`, so at 100px it answers D and at
+        // TEXT_SIZE it answers T: substituting one does not move the other, and
+        // shifting TEXT by the difference would only write the read noise the
+        // difference IS into the table it is subtracted from.
+        display[MID] = held;
+
+        const prefix400 = `${style}400 `;
+        const FONT400 = `const font = (size) => ${JSON.stringify(prefix400)} + size + 'px ' + ${JSON.stringify(css)};`;
+        const selfPaired = await evaluate(`(() => { ${PRELUDE} ${FONT400}
             return JSON.stringify(${JSON.stringify(LADDER)}
               .filter((g) => Math.abs(__selfPair(font(${TEXT_SIZE}), g)) > 0.05));
         })()`);
         if (selfPaired.length) {
-            throw new Error(`ladder glyphs pair with themselves in ${family}/${variant}: ${selfPaired.join(' ')}`);
+            throw new Error(`ladder glyphs pair with themselves in ${family}/${roman}: ${selfPaired.join(' ')}`);
         }
-        const ladder = await evaluate(`(() => { ${PRELUDE} ${FONT}
+        const ladder = await evaluate(`(() => { ${PRELUDE} ${FONT400}
             const out = [];
             for (let size = 1; size <= ${SIZES}; size++) {
               out.push(${JSON.stringify(LADDER)}.map((g) => __adv(font(size), g, ${LADDER_REPEAT}) / size));
@@ -255,17 +299,17 @@ for (const family of optical) {
             return JSON.stringify(out);
         })()`);
 
-        // The variant's DISPLAY advances as THIS ENGINE holds them, not as they
-        // measure here. The correction is applied on top of whatever
-        // `font_metrics` / `font_variants` answer, so solving against anything
-        // else would leave the difference between the two in `t`.
-        const displayVariant = variantDisplayFor(family, variant) ?? display;
-
         // Solve w and t at every size, least squares over the ladder glyphs:
         //   v(g) - D(g) = w * (T(g) - D(g)) + t
+        //
+        // At the middle master only. The six (weight, roman) combinations each
+        // solve to the same pair of ladders to 1.2e-2 in w and 3.4e-4 in t --
+        // the same spread the four VARIANTS showed before the axis was known --
+        // so the optical axis and the weight axis separate and one ladder per
+        // roman covers the whole weight range.
         const idx = LADDER.map((g) => g.charCodeAt(0) - FIRST);
-        const T = idx.map((i) => text[i]);
-        const D = idx.map((i) => displayVariant[i]);
+        const T = idx.map((i) => text[MID][i]);
+        const D = idx.map((i) => display[MID][i]);
         // TEXT is read at TEXT_SIZE, where the tracking is not zero, so `text`
         // is (master + t(TEXT_SIZE)). Normalising t to zero there is what makes
         // the two tables and the two ladders one consistent set -- w == 1 and
@@ -285,11 +329,16 @@ for (const family of optical) {
             weight.push(w);
             tracking.push(t);
         }
-        tables.push({ family, variant, advances: text.map((v) => v * 100) });
-        ladders.push({ family, variant, weight, tracking });
+        tables.push({
+            family,
+            roman,
+            display: display.map((row) => row.map((v) => v * 100)),
+            text: text.map((row) => row.map((v) => v * 100)),
+        });
+        ladders.push({ family, roman, weight, tracking });
         process.stderr.write(
-            `${family}/${variant}: w ${weight[0].toFixed(4)}..${weight[SIZES - 1].toFixed(4)}, ` +
-            `worst residual ${worst.toExponential(2)} em\n`);
+            `${family}/${roman}: w ${weight[0].toFixed(4)}..${weight[SIZES - 1].toFixed(4)}, ` +
+            `worst residual ${worst.toExponential(2)} em, middle-master drift ${drift.toExponential(2)} em\n`);
     }
 }
 cdp.ws.close();
@@ -306,7 +355,7 @@ for (const family of optical) {
         spreadT = Math.max(spreadT, Math.max(...ts) - Math.min(...ts));
     }
 }
-process.stderr.write(`ladder spread across the four faces: w ${spreadW.toExponential(2)}, t ${spreadT.toExponential(2)}\n`);
+process.stderr.write(`ladder spread across the romans: w ${spreadW.toExponential(2)}, t ${spreadT.toExponential(2)}\n`);
 
 // --- writing ---------------------------------------------------------------
 const num = (v) => (Number.isInteger(v) ? `${v}.0` : String(v));
@@ -323,25 +372,41 @@ let zig = `// Generated by tools/fingerprint/dump-font-optical.mjs -- do not edi
 // this face the canvas reports a wrong optical instance for a whole size at a
 // time, at random):
 //
-//     advance(glyph, size) / size = mix(DISPLAY, TEXT, w(size)) + t(size)
+//     advance(glyph, size, weight) / size
+//         = mix(DISPLAY(weight), TEXT(weight), w(size)) + t(size)
 //
 //   * TEXT is one master over 1..${TEXT_SIZE}px -- 224 code points agree to 8e-6 em
-//     across 6, 10, 13 and ${TEXT_SIZE}px -- and is \`advances_*\` below.
-//   * DISPLAY is one master over 28..120px and is the existing 100px table in
-//     \`font_metrics.zig\` / \`font_variants.zig\`, unchanged.
+//     across 6, 10, 13 and ${TEXT_SIZE}px -- and is \`text_*\` below.
+//   * DISPLAY is one master over 28..120px and is \`display_*\` below. At weight
+//     400 it IS the existing 100px table in \`font_metrics.zig\` /
+//     \`font_variants.zig\`, copied rather than re-read, so that weight keeps
+//     answering exactly what it answered before this axis existed.
 //   * \`w\` is 1 at or below 17px, 0 at or above 28px, and crosses between.
 //   * \`t\` is a tracking in em added to EVERY glyph's advance. A single glyph's
 //     advance already carries it, so a run of n costs n*(a + t*size) -- checked
 //     against 1, 2, 4 ... 128 copies at five sizes.
 //
-// Both ladders are normalised so that w == 1 and t == 0 at ${TEXT_SIZE}px, which is
-// where \`advances_*\` was read: the two tables and the two ladders are one set,
-// and at ${TEXT_SIZE}px the model reproduces the reading exactly.
+// **Both masters move with \`font-weight\`, which is an AXIS and not two faces.**
+// SF's \`wght\` is continuous: at 100px every multiple of 25 from 1 to 1000
+// measures differently, in two straight lines meeting at 400. So \`bold\` is not
+// a face, it is the point 700 on that axis, and mapping everything >= 600 onto
+// one bold table made \`font-weight: 600 system-ui\` 1.24% too wide at every size
+// -- which is what the h1 of the Cloudflare challenge page asks for.
 //
-// The ladders came out the same for regular, bold, italic and bold-italic to
-// ${spreadW.toExponential(0)} in w and ${spreadT.toExponential(0)} in t. They are still written per face rather
-// than shared: 1.2e-2 of w across the crossing band is 0.03px a glyph at 24px,
-// and a line of prose is thirty of them.
+// Each master is therefore three tables, at ${WEIGHTS.join(', ')}, with the value between
+// them linear. Interpolating reproduces a held-out 600 and 700 to 2.4e-4 em at
+// the median AND the 95th percentile; the only code points that miss are U+7F
+// and U+80, whose notdef box does not move with the weight at all.
+//
+// Both ladders are normalised so that w == 1 and t == 0 at ${TEXT_SIZE}px, which is
+// where \`text_*\` was read: the tables and the ladders are one set, and at
+// ${TEXT_SIZE}px the model reproduces the reading exactly.
+//
+// The ladders do NOT move with the weight: the six (weight, roman) pairs each
+// solve to the same two ladders to ${spreadW.toExponential(0)} in w and ${spreadT.toExponential(0)} in t, so the two axes
+// separate and one ladder per roman covers the whole weight range. They are
+// still written per roman rather than shared: 1.2e-2 of w across the crossing
+// band is 0.03px a glyph at 24px, and a line of prose is thirty of them.
 //
 // Additive, like \`font_kerning.zig\` and \`font_variants.zig\`: this adds no
 // NAMES, so the font enumeration a probe performs cannot see it.
@@ -354,50 +419,79 @@ let zig = `// Generated by tools/fingerprint/dump-font-optical.mjs -- do not edi
 const font_metrics = @import("font_metrics.zig");
 const font_variants = @import("font_variants.zig");
 
-/// The size \`advances_*\` was measured at, and the size the two ladders are
+/// The size \`text_*\` was measured at, and the size the two ladders are
 /// normalised at.
 pub const text_size = ${num(TEXT_SIZE)};
+
+/// The weights the two masters are tabulated at. Between them the advance is
+/// linear, and outside them it is clamped -- \`font-weight\` is already 1..1000
+/// by the time it reaches here.
+pub const weight_masters = [_]f64{ ${WEIGHTS.map(num).join(', ')} };
 
 /// The swept range of the ladders. Above it \`w\` and \`t\` are both zero -- the
 /// tracking reaches zero at 80px -- so a larger size is the DISPLAY master
 /// exactly, which is what \`font_metrics.zig\` already answers.
 pub const swept_sizes = ${SIZES};
 
-/// One face's TEXT-master advances, at the same 100px basis \`font_metrics.zig\`
-/// uses, indexed by code point minus \`font_metrics.first_codepoint\`.
+/// One roman's two masters, each at the three weights in \`weight_masters\`, at
+/// the same 100px basis \`font_metrics.zig\` uses and indexed the same way: code
+/// point minus \`font_metrics.first_codepoint\`.
 ///
 /// Advances only. The ink bearings a glyph also carries are read off the canvas
 /// and the canvas cannot be trusted for this face, so an optical face keeps the
 /// DISPLAY master's bearings -- they move the ink box, not the pen, and no
-/// reading this engine is measured against has shown the difference.
+/// reading this engine is measured against has shown the difference. The
+/// bearings do not move with the weight here either, for the same reason.
 pub const Table = struct {
-    advances: []const f64 = &.{},
+    display: [weight_masters.len][]const f64 = .{ &.{}, &.{}, &.{} },
+    text: [weight_masters.len][]const f64 = .{ &.{}, &.{}, &.{} },
     /// The TEXT master's weight, per whole pixel of font size from 1 to
-    /// \`swept_sizes\`. Empty alongside \`advances\`.
+    /// \`swept_sizes\`. Empty alongside the tables.
     ///
-    /// Per face rather than one shared ladder: the four faces solve to the same
-    /// one to 1.2e-2 in the crossing band, which is small but not nothing --
+    /// Per roman rather than one shared ladder: the two solve to the same one
+    /// to 1.2e-2 in the crossing band, which is small but not nothing --
     /// 0.03px a glyph at 24px, and a line of prose is thirty of them.
     text_weight: []const f64 = &.{},
     /// The tracking in em, on the same ladder.
     tracking: []const f64 = &.{},
 
     pub fn empty(self: Table) bool {
-        return self.advances.len == 0;
+        return self.text[0].len == 0;
     }
 
-    /// The advance this face charges for \`codepoint\` at \`size\`, at the basis,
-    /// given what the DISPLAY master charges. Falls back to \`display\` for a
-    /// code point outside the tabulated range.
-    pub fn advance(self: Table, codepoint: u21, display: f64, size: f64) f64 {
-        if (self.advances.len == 0) return display;
-        const text = if (codepoint < font_metrics.first_codepoint or codepoint > font_metrics.last_codepoint)
-            display
-        else
-            self.advances[codepoint - font_metrics.first_codepoint];
-        return display + at(self.text_weight, size) * (text - display) + at(self.tracking, size) * font_metrics.basis;
+    /// The advance this face charges for \`codepoint\` at \`size\` and \`weight\`, at
+    /// the basis. Falls back to \`display\` -- what \`font_metrics\` /
+    /// \`font_variants\` answer -- for an empty table or a code point outside the
+    /// tabulated range.
+    pub fn advance(self: Table, codepoint: u21, display: f64, size: f64, weight: u16) f64 {
+        if (self.text[0].len == 0) return display;
+        if (codepoint < font_metrics.first_codepoint or codepoint > font_metrics.last_codepoint) {
+            return display;
+        }
+        const i = codepoint - font_metrics.first_codepoint;
+        const d = atWeight(self.display, i, weight);
+        const t = atWeight(self.text, i, weight);
+        return d + at(self.text_weight, size) * (t - d) + at(self.tracking, size) * font_metrics.basis;
     }
 };
+
+/// One master's value for one glyph at one weight, linear between the tabulated
+/// weights and clamped outside them.
+///
+/// A weight that IS a master comes back bit for bit: the blend below is
+/// \`lo*(1-f) + hi*f\` with f exactly 0 or 1, so nothing is added to it. That is
+/// what keeps \`font-weight: 400\` -- and every unstyled paragraph on the web --
+/// measuring exactly what it measured before this axis existed.
+fn atWeight(tables: [weight_masters.len][]const f64, i: usize, weight: u16) f64 {
+    const w: f64 = @floatFromInt(weight);
+    if (w <= weight_masters[0]) return tables[0][i];
+    if (w >= weight_masters[weight_masters.len - 1]) return tables[weight_masters.len - 1][i];
+    var hi: usize = 1;
+    while (w > weight_masters[hi]) hi += 1;
+    const lo = hi - 1;
+    const f = (w - weight_masters[lo]) / (weight_masters[hi] - weight_masters[lo]);
+    return tables[lo][i] * (1 - f) + tables[hi][i] * f;
+}
 
 /// Linear interpolation into a ladder, clamped at both ends. Chrome's own
 /// answer between two whole sizes is linear in the PER-EM advance -- 15.5px
@@ -421,22 +515,31 @@ fn at(ladder: []const f64, size: f64) f64 {
 const clean = (v) => (Math.abs(v) < 1e-9 ? 0 : Number(v.toFixed(9)));
 const arr = (name, values) => `const ${name} = [_]f64{ ${values.map(num).join(', ')} };\n`;
 const ladderArr = (name, values) => arr(name, values.map(clean));
+const slot = (t, master, w) => `${master}${WEIGHTS[w]}_${t.roman}_${t.family}`;
 for (const t of tables) {
-    const l = ladders.find((x) => x.family === t.family && x.variant === t.variant);
-    zig += arr(`advances_${t.variant}_${t.family}`, t.advances);
-    zig += ladderArr(`weight_${t.variant}_${t.family}`, l.weight);
-    zig += ladderArr(`tracking_${t.variant}_${t.family}`, l.tracking);
+    const l = ladders.find((x) => x.family === t.family && x.roman === t.roman);
+    for (let w = 0; w < WEIGHTS.length; w++) {
+        zig += arr(slot(t, 'display', w), t.display[w]);
+        zig += arr(slot(t, 'text', w), t.text[w]);
+    }
+    zig += ladderArr(`weight_${t.roman}_${t.family}`, l.weight);
+    zig += ladderArr(`tracking_${t.roman}_${t.family}`, l.tracking);
 }
 zig += `
-/// The table for a family in a variant, matched on the identity of its regular
+/// The table for a family in a roman, matched on the identity of its regular
 /// advance table the way \`font_variants.tableFor\` is: a \`Family\` is a value and
 /// its \`glyphs\` slice is the one thing unique to it.
+///
+/// Keyed on the ROMAN and not the variant, because the bold of an optical face
+/// is a weight and not a face: \`.bold\` and \`.regular\` want the same table and
+/// differ only in the weight they then ask it for.
 pub fn tableFor(family: font_metrics.Family, variant: font_variants.Variant) Table {
-    const rows = [_]struct { []const font_metrics.Glyph, font_variants.Variant, Table }{
-${tables.map((t) => `        .{ font_metrics.${t.family}.glyphs, .${t.variant}, .{ .advances = &advances_${t.variant}_${t.family}, .text_weight = &weight_${t.variant}_${t.family}, .tracking = &tracking_${t.variant}_${t.family} } },`).join('\n')}
+    const italic = variant == .italic or variant == .bold_italic;
+    const rows = [_]struct { []const font_metrics.Glyph, bool, Table }{
+${tables.map((t) => `        .{ font_metrics.${t.family}.glyphs, ${t.roman === 'italic'}, .{ .display = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'display', w)}`).join(', ')} }, .text = .{ ${WEIGHTS.map((_, w) => `&${slot(t, 'text', w)}`).join(', ')} }, .text_weight = &weight_${t.roman}_${t.family}, .tracking = &tracking_${t.roman}_${t.family} } },`).join('\n')}
     };
     for (rows) |row| {
-        if (row[0].ptr == family.glyphs.ptr and row[1] == variant) {
+        if (row[0].ptr == family.glyphs.ptr and row[1] == italic) {
             return row[2];
         }
     }
@@ -447,4 +550,5 @@ await fs.writeFile(path.join(repo, 'src/browser/font_optical.zig'), zig);
 await new Promise((done) => {
     spawn('zig', ['fmt', 'src/browser/font_optical.zig'], { cwd: repo, stdio: 'ignore' }).on('exit', done);
 });
-process.stderr.write(`wrote src/browser/font_optical.zig: ${tables.length} tables over ${optical.length} families\n`);
+process.stderr.write(`wrote src/browser/font_optical.zig: ${tables.length * WEIGHTS.length * 2} master tables ` +
+    `over ${tables.length} romans of ${optical.length} families\n`);
