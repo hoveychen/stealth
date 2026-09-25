@@ -44,6 +44,9 @@ const JsApis = bridge.JsApis;
 const Allocator = std.mem.Allocator;
 
 const MAX_CONTEXTS = if (lp.build_config.wpt_extensions) 8192 else 128;
+// Slots only a root frame may take, so that navigating away from a document
+// that used the rest is always possible. See _createContext.
+const ROOT_FRAME_RESERVE = 8;
 
 const GC_HINT_FLOOR = 1 * 1024 * 1024;
 
@@ -286,6 +289,26 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
     const T = @TypeOf(global);
     const is_frame = T == *Frame;
 
+    // The cap keeps a page from minting realms without end, but it must never
+    // be what stops the browser from *leaving* such a page: a real root
+    // navigation builds its replacement Page while the greedy document is
+    // still alive (Session.initiateRootNavigation), so a root frame refused
+    // here wedges the engine on the very document that filled the list -- for
+    // the life of the process, because nothing tears that document down until
+    // the replacement commits. Measured: one page with 150 iframes reaches 128
+    // and every navigation after it fails in 2ms, which is how an antibot
+    // sweep read 27 of its 52 stations as `TooManyContexts`. So a root frame
+    // draws on a reserve that no document's own children can reach.
+    //
+    // Checked before anything is allocated. The refusal used to happen after
+    // the v8::Context, its v8::Global and the identity-map entry had all been
+    // made, none of which the error path takes back.
+    const is_root_frame = if (comptime is_frame) global._type == .root else false;
+    const budget: usize = if (is_root_frame) MAX_CONTEXTS else MAX_CONTEXTS - ROOT_FRAME_RESERVE;
+    if (self.contexts.items.len >= budget) {
+        return error.TooManyContexts;
+    }
+
     const context_arena = try self.app.arena_pool.acquire(.medium, params.debug_name);
     errdefer context_arena.release();
 
@@ -408,9 +431,6 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
     // a v8 context, we can get our context out
     v8.v8__Context__SetAlignedPointerInEmbedderData(v8_context, 1, @ptrCast(context));
 
-    if (self.contexts.items.len >= MAX_CONTEXTS) {
-        return error.TooManyContexts;
-    }
     try self.contexts.append(self.allocator, context);
 
     {
@@ -1029,6 +1049,48 @@ test "Env: a heap limit reached during teardown does not arm a termination" {
     const granted = env.onNearHeapLimit(limit, limit);
     try testing.expectEqual(false, env.terminatePending());
     try testing.expect(granted > limit);
+}
+
+// The cap is reachable by one greedy document, and the shape that matters is
+// what happens next: a root navigation allocates its replacement while that
+// document is still alive, so if the root frame is refused too, the engine
+// never leaves the page that filled the list. Measured before the reserve: a
+// page with 150 iframes ended every later navigation with TooManyContexts for
+// the life of the process.
+test "Env: a root frame keeps a reserve the page's own realms cannot take" {
+    const frame = try testing.createFrame();
+    defer testing.test_session.closeAllPages();
+    const env = frame.js.env;
+
+    // Stand in for a document that has taken every slot a non-root realm may
+    // have. Only the length of the list is read on this path, so the padding
+    // is the one live context repeated -- and it is taken back below before
+    // anything walks the list.
+    const filler = env.contexts.items[0];
+    const pad = MAX_CONTEXTS - ROOT_FRAME_RESERVE - env.contexts.items.len;
+    for (0..pad) |_| try env.contexts.append(env.allocator, filler);
+    defer {
+        var removed: usize = 0;
+        var i: usize = env.contexts.items.len;
+        while (i > 1 and removed < pad) {
+            i -= 1;
+            if (env.contexts.items[i] == filler) {
+                _ = env.contexts.orderedRemove(i);
+                removed += 1;
+            }
+        }
+    }
+
+    // A worker is a non-root realm: it draws on the budget that is now spent.
+    try testing.expectError(error.TooManyContexts, @import("../webapi/Worker.zig").init(
+        "http://localhost:9582/src/browser/tests/testing.js",
+        null,
+        &frame.js.execution,
+    ));
+
+    // The way out of that document still works.
+    const page = try testing.test_session.createPage();
+    try testing.expect(page.frame() != null);
 }
 
 test "Env: Worker context " {
