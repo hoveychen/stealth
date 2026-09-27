@@ -38,6 +38,8 @@ const CSSStyleRule = @import("../webapi/css/CSSStyleRule.zig");
 const CSSStyleDeclaration = @import("../webapi/css/CSSStyleDeclaration.zig");
 const FontFace = @import("../webapi/css/FontFace.zig");
 const MediaQuery = @import("../css/MediaQuery.zig");
+const StyleManager = @import("../StyleManager.zig");
+const SelectorParser = @import("../webapi/selector/Parser.zig");
 const rules = @import("../webapi/css/rules.zig");
 
 const log = lp.log;
@@ -273,6 +275,32 @@ const Scan = struct {
     // requests. What `declaredFaces` runs for.
     faces_only: bool = false,
 
+    // Which ids, classes and tags the document actually carries, built once per
+    // scan. A rule whose rightmost compound names none of them cannot match
+    // anything, and saying so costs a hash lookup instead of a walk over every
+    // element in the document.
+    //
+    // The scan runs again before every `<script src>`, so the same rules are
+    // asked the same question over and over: on hollandandbarrett.com 48 scans
+    // ran 210,096 document-wide `querySelector`s between them and spent 20.9
+    // SECONDS doing it, against 29.6s for every layout pass in the same visit
+    // (`LIGHTPANDA_POSITION_PROBE`). Rebuilt rather than maintained
+    // incrementally: the document grows all through the parse, and a set that
+    // is rebuilt cannot go stale and under-fetch, which is the direction that
+    // would cost a request Chrome makes.
+    present: ?Present = null,
+
+    // Where the inventory and the parsed selectors live: a scan's own arena,
+    // released with the scan. The frame's would keep every selector this walk
+    // parsed for the life of the page, and the walk runs once per script.
+    scratch: ?Allocator = null,
+
+    const Present = struct {
+        ids: std.StringHashMapUnmanaged(void) = .empty,
+        classes: std.StringHashMapUnmanaged(void) = .empty,
+        tags: std.AutoHashMapUnmanaged(Element.Tag, void) = .empty,
+    };
+
     const Face = struct {
         family: []const u8, // lowercased, for the used_families lookup
         // The family as the rule spells it, because `document.fonts` reports
@@ -293,6 +321,7 @@ const Scan = struct {
         if (depth >= MAX_NESTING) return;
         var i: usize = 0;
         while (list.item(i)) |css_rule| : (i += 1) {
+            scan_probe.rules += 1;
             try self.rule(css_rule, depth);
         }
     }
@@ -320,6 +349,52 @@ const Scan = struct {
         }
     }
 
+    /// Everything the document wears right now, for `cannotMatch` below.
+    fn takeInventory(self: *Scan, allocator: Allocator) !Present {
+        var present: Present = .{};
+        var tw = TreeWalker.Full.Elements.init(self.frame.document.asNode(), .{});
+        while (tw.next()) |el| {
+            try present.tags.put(allocator, el.getTag(), {});
+            if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+                try present.ids.put(allocator, id, {});
+            }
+            if (el.getAttributeSafe(comptime .wrap("class"))) |class_attr| {
+                var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
+                while (it.next()) |class| try present.classes.put(allocator, class, {});
+            }
+        }
+        return present;
+    }
+
+    /// Whether no element in the document can possibly match `selector_text`.
+    ///
+    /// Only ever answers true for a certainty: a rightmost compound keyed on an
+    /// id, class or tag the document does not carry. Anything the bucket key
+    /// cannot pin down -- a dynamic pseudo-class, an attribute selector, a
+    /// custom tag -- falls through to the real match, because the cost of being
+    /// wrong here is a request Chrome makes and this engine does not.
+    fn cannotMatch(self: *Scan, allocator: Allocator, selector_text: []const u8) bool {
+        const present = &(self.present orelse return false);
+        const selectors = SelectorParser.parseList(allocator, selector_text) catch return false;
+        if (selectors.len == 0) return false;
+        // A list matches if ANY of its selectors does, so every one of them has
+        // to be impossible before the rule can be passed over.
+        for (selectors) |selector| {
+            const rightmost = if (selector.segments.len > 0)
+                selector.segments[selector.segments.len - 1].compound
+            else
+                selector.first;
+            const key = StyleManager.getBucketKey(rightmost) orelse return false;
+            switch (key) {
+                .id => |id| if (present.ids.contains(id)) return false,
+                .class => |class| if (present.classes.contains(class)) return false,
+                .tag => |tag| if (present.tags.contains(tag)) return false,
+                .other => return false,
+            }
+        }
+        return true;
+    }
+
     fn styleRule(self: *Scan, style_rule: *CSSStyleRule) Allocator.Error!void {
         // In faces-only mode nothing here is wanted: a style rule names
         // resources and families, and the only thing being collected is the
@@ -339,6 +414,12 @@ const Scan = struct {
         // the box hangs off, because no element *is* that box.
         const to_match = try self.originatingSelector(selector, style) orelse return;
 
+        // Ahead of the selector engine: the inventory above answers "nothing
+        // here wears that" without walking the document once.
+        if (self.scratch) |scratch| {
+            if (self.cannotMatch(scratch, to_match)) return;
+        }
+
         // `background-image: var(--icon)` names no file until an element
         // supplies the custom property, and a different element supplies a
         // different one -- so which elements matched is the answer, not
@@ -356,8 +437,10 @@ const Scan = struct {
             return;
         }
 
+        scan_probe.queries += 1;
         const match = Selector.querySelector(self.frame.document.asNode(), to_match, self.frame) catch null;
         if (match == null) return;
+        scan_probe.matched += 1;
 
         try self.declarations(style, null);
     }
@@ -607,7 +690,31 @@ pub fn declaredFaces(frame: *Frame, allocator: Allocator) ![]const DeclaredFace 
 
 /// Fetch what the frame's stylesheets name. Called once the document exists,
 /// because whether a rule matches anything decides whether Chrome asks.
+/// What the scan has cost this process, behind `LIGHTPANDA_POSITION_PROBE`.
+///
+/// A station that hangs needs ONE ledger for the whole visit, not a sample of a
+/// 20-second window: this scan runs during the parse and the position pass runs
+/// after it, so a sample taken early blames one and a sample taken late blames
+/// the other.
+pub var scan_probe: struct { calls: u64 = 0, rules: u64 = 0, queries: u64 = 0, matched: u64 = 0, us: u64 = 0, on: ?bool = null } = .{};
+
 pub fn requestAll(frame: *Frame) void {
+    const on = scan_probe.on orelse blk: {
+        scan_probe.on = std.c.getenv("LIGHTPANDA_POSITION_PROBE") != null;
+        break :blk scan_probe.on.?;
+    };
+    const started_us = if (on) lp.datetime.microTimestamp(.boot) else 0;
+    defer if (on) {
+        scan_probe.calls += 1;
+        scan_probe.us += lp.datetime.microTimestamp(.boot) - started_us;
+        log.warn(.telemetry, "style resource scan", .{
+            .calls = scan_probe.calls,
+            .rules = scan_probe.rules,
+            .queries = scan_probe.queries,
+            .matched = scan_probe.matched,
+            .total_us = scan_probe.us,
+        });
+    };
     scan(frame) catch |err| {
         log.warn(.http, "style subresources", .{ .err = err, .url = frame.url });
     };
@@ -618,6 +725,13 @@ fn scan(frame: *Frame) !void {
     if (frame._parse_mode == .fragment) return;
 
     var s: Scan = .{ .frame = frame, .base = frame.base() };
+
+    // One arena for the inventory and the selectors this walk parses, released
+    // when the walk ends.
+    const scratch = try frame.getArena(.medium, "style_resources.scan");
+    defer scratch.release();
+    s.scratch = scratch.allocator();
+    s.present = s.takeInventory(scratch.allocator()) catch null;
 
     const sheets = try frame.document.cascadeStyleSheets(frame);
     var i: usize = 0;
