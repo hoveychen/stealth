@@ -1,0 +1,4 @@
+<!DOCTYPE html>
+<script>
+parent.postMessage({ length: history.length, entries: navigation.entries().map((e) => e.url) }, '*');
+</script>
