@@ -23,6 +23,7 @@ const Allocator = std.mem.Allocator;
 const claimed_platform = @import("../../claimed_platform.zig");
 
 const js = @import("../js/js.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const Frame = @import("../Frame.zig");
 const Execution = js.Execution;
 
@@ -575,8 +576,10 @@ pub fn vibrate(_: *const Navigator, _: js.Value) bool {
 }
 
 // canShare is a shape check: something to share is true, an empty dictionary is
-// false (both measured).
-pub fn canShare(_: *const Navigator, data_: ?ShareData) bool {
+// false (both measured). A frame without web-share is false whatever it is
+// handed.
+pub fn canShare(_: *const Navigator, data_: ?ShareData, exec: *const Execution) bool {
+    if (!permissions_policy.execAllows(exec, "web-share")) return false;
     const data = data_ orelse return false;
     return data.title != null or data.text != null or data.url != null or data.files != null;
 }
@@ -589,9 +592,19 @@ const ShareData = struct {
     url: ?[]const u8 = null,
 };
 
-// Sharing needs a user gesture, and nothing here ever has one.
+// Sharing needs a user gesture, and nothing here ever has one. A frame without
+// web-share is refused before the gesture is looked at. Both messages are
+// Chrome 153's.
 pub fn share(_: *const Navigator, _: ?ShareData, exec: *const Execution) js.Promise {
-    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject("Navigator.share", DOMException.init(
+        if (permissions_policy.execAllows(exec, "web-share"))
+            "Failed to execute 'share' on 'Navigator': Must be handling a user gesture to perform a share request."
+        else
+            "Failed to execute 'share' on 'Navigator': Permission denied",
+        "NotAllowedError",
+    ));
+    return resolver.promise();
 }
 
 // No launcher icon to badge; Chrome resolves with nothing either way.
@@ -636,6 +649,15 @@ pub fn requestMIDIAccess(_: *const Navigator, options_: ?js.Value, exec: *const 
             });
         }
     }
+    // A frame the midi feature did not reach is refused outright.
+    if (!permissions_policy.execAllows(exec, "midi")) {
+        var refused = local.createPromiseResolver();
+        refused.reject("Navigator.requestMIDIAccess", DOMException.init(
+            "Failed to execute 'requestMIDIAccess' on 'Navigator': Midi has been disabled in this document by permissions policy.",
+            "SecurityError",
+        ));
+        return refused.promise();
+    }
     const resolver = local.createPromiseResolver();
     const promise = resolver.promise();
     promise.markAsHandled();
@@ -651,11 +673,32 @@ pub fn requestMediaKeySystemAccess(
     configurations_: ?js.Value,
     exec: *const Execution,
 ) js.Promise {
+    if (!permissions_policy.execAllows(exec, "encrypted-media")) {
+        var resolver = exec.js.local.?.createPromiseResolver();
+        resolver.reject("Navigator.requestMediaKeySystemAccess", DOMException.init(
+            "Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': requestMediaKeySystemAccess is disabled by permissions policy.",
+            "SecurityError",
+        ));
+        return resolver.promise();
+    }
     return eme.requestMediaKeySystemAccess(key_system_, configurations_, exec);
 }
 
-// Nothing is installed alongside this browser.
+// Nothing is installed alongside this browser. Any nested frame, same-origin
+// or not, is refused (Chrome 153's message).
 pub fn getInstalledRelatedApps(_: *const Navigator, exec: *const Execution) !js.Promise {
+    const nested = switch (exec.js.global) {
+        .frame => |frame| frame.parent != null,
+        .worker => false,
+    };
+    if (nested) {
+        var resolver = exec.js.local.?.createPromiseResolver();
+        resolver.reject("Navigator.getInstalledRelatedApps", DOMException.init(
+            "Failed to execute 'getInstalledRelatedApps' on 'Navigator': getInstalledRelatedApps() is only supported in top-level browsing contexts.",
+            "InvalidStateError",
+        ));
+        return resolver.promise();
+    }
     return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
 }
 

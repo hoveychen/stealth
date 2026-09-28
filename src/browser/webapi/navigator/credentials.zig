@@ -56,6 +56,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const permissions_policy = @import("../../permissions_policy.zig");
 const URL = @import("../../URL.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
@@ -1083,6 +1084,13 @@ pub const CredentialsContainer = struct {
                     prefix ++ "Failed to read the 'publicKey' property from 'CredentialRequestOptions': " ++
                         "Failed to read the 'challenge' property from 'PublicKeyCredentialRequestOptions': " ++
                         "Required member is undefined.",
+                    exec,
+                );
+                // A frame the publickey-credentials-get feature did not reach
+                // is refused with Chrome 153's wording.
+                if (!permissions_policy.execAllows(exec, "publickey-credentials-get")) return rejectDom(
+                    "NotAllowedError",
+                    "The 'publickey-credentials-get' feature is not enabled in this document. Permissions Policy may be used to delegate Web Authentication capabilities to cross-origin child frames.",
                     exec,
                 );
                 // A well-formed passkey request opens Chrome's own chooser and

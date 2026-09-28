@@ -33,6 +33,7 @@ const DOMRect = @import("../DOMRect.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Frame = @import("../../Frame.zig");
 const handler_property = @import("../handler_property.zig");
+const permissions_policy = @import("../../permissions_policy.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -140,8 +141,9 @@ pub const Bluetooth = struct {
     // True, like the reference Chrome. This is the same persona decision as the
     // fixed hardwareConcurrency of 8 in Navigator.zig: the machine being
     // described is an ordinary desktop, and ordinary desktops have a radio.
+    // A frame without the bluetooth feature answers false (measured).
     pub fn getAvailability(_: *const Bluetooth, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise(true);
+        return exec.js.local.?.resolvePromise(permissions_policy.execAllows(exec, "bluetooth"));
     }
 
     pub fn requestDevice(_: *const Bluetooth, _: ?js.Object, exec: *const Execution) js.Promise {
@@ -401,6 +403,7 @@ pub const HID = struct {
     }
 
     pub fn getDevices(_: *const HID, exec: *const Execution) !js.Promise {
+        if (policyBlocked("HID", "getDevices", "hid", exec)) |blocked| return blocked;
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
@@ -441,6 +444,7 @@ pub const Serial = struct {
     }
 
     pub fn getPorts(_: *const Serial, exec: *const Execution) !js.Promise {
+        if (policyBlocked("Serial", "getPorts", "serial", exec)) |blocked| return blocked;
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
@@ -478,6 +482,7 @@ pub const USB = struct {
     }
 
     pub fn getDevices(_: *const USB, exec: *const Execution) !js.Promise {
+        if (policyBlocked("USB", "getDevices", "usb", exec)) |blocked| return blocked;
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
@@ -518,6 +523,7 @@ pub const XRSystem = struct {
     // 150 with nothing attached answers true for it and false for the two
     // immersive modes. See webxr/session.zig for the whole entry point.
     pub fn isSessionSupported(_: *const XRSystem, mode: ?[]const u8, exec: *const Execution) !js.Promise {
+        if (policyBlocked("XRSystem", "isSessionSupported", "xr", exec)) |blocked| return blocked;
         return @import("../webxr/session.zig").isSessionSupported(mode, exec);
     }
 
@@ -543,11 +549,32 @@ pub const XRSystem = struct {
     };
 };
 
+// The rejection Chrome's device APIs give a frame the feature never reached.
+fn policyBlocked(comptime interface: []const u8, comptime method: []const u8, comptime feature: []const u8, exec: *const Execution) ?js.Promise {
+    if (permissions_policy.execAllows(exec, feature)) {
+        return null;
+    }
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject(interface ++ "." ++ method, DOMException.init(
+        "Failed to execute '" ++ method ++ "' on '" ++ interface ++ "': Access to the feature \"" ++ feature ++ "\" is disallowed by permissions policy.",
+        "SecurityError",
+    ));
+    return resolver.promise();
+}
+
 // WakeLock is not an EventTarget on Chrome; its sentinel is.
 pub const WakeLock = struct {
     _pad: bool = false,
 
     pub fn request(_: *const WakeLock, wake_lock_type: ?[]const u8, exec: *const Execution) !js.Promise {
+        if (!permissions_policy.execAllows(exec, "screen-wake-lock")) {
+            var resolver = exec.js.local.?.createPromiseResolver();
+            resolver.reject("WakeLock.request", DOMException.init(
+                "Failed to execute 'request' on 'WakeLock': Access to Screen Wake Lock features is disallowed by permissions policy",
+                "NotAllowedError",
+            ));
+            return resolver.promise();
+        }
         const sentinel = try exec._factory.eventTarget(WakeLockSentinel{
             ._proto = undefined,
             ._type = if (std.mem.eql(u8, wake_lock_type orelse "screen", "system")) .system else .screen,

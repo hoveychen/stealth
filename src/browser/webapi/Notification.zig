@@ -19,6 +19,7 @@
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const Page = @import("../Page.zig");
 
 const EventTarget = @import("EventTarget.zig");
@@ -126,8 +127,14 @@ pub fn asEventTarget(self: *Notification) *EventTarget {
 
 pub fn close(_: *Notification) void {}
 
-fn getPermission() []const u8 {
-    return "default";
+// "default" -- nobody has been asked. A cross-origin frame cannot ask, and
+// Chrome reports that as "denied" there (measured, Chrome 153); a worker's
+// answer is its owner's, which nothing here tracks.
+fn getPermission(exec: *const Execution) []const u8 {
+    return switch (exec.js.global) {
+        .frame => |frame| if (permissions_policy.inheritsSelf(frame, null)) "default" else "denied",
+        .worker => "default",
+    };
 }
 
 fn getMaxActions() u32 {
@@ -135,7 +142,7 @@ fn getMaxActions() u32 {
 }
 
 fn requestPermission(_: ?js.Function, exec: *const Execution) !js.Promise {
-    return exec.js.local.?.resolvePromise("default");
+    return exec.js.local.?.resolvePromise(getPermission(exec));
 }
 
 fn getTitle(self: *const Notification) []const u8 {

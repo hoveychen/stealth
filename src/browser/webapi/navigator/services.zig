@@ -34,6 +34,9 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const Frame = @import("../../Frame.zig");
+const DOMException = @import("../DOMException.zig");
+const permissions_policy = @import("../../permissions_policy.zig");
 const mime = @import("../media/mime.zig");
 const MediaMetadata = @import("../media/MediaMetadata.zig").MediaMetadata;
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
@@ -554,15 +557,37 @@ pub const Keyboard = struct {
     // reference Chrome hands back. Every desktop Chrome resolves a populated
     // map, so an empty one — which this used to answer — is a shape no browser
     // has; a shared layout is at worst a common machine.
-    pub fn getLayoutMap(_: *const Keyboard, exec: *const Execution) !js.Promise {
-        const map = try exec._factory.create(KeyboardLayoutMap{});
-        return exec.js.local.?.resolvePromise(map);
+    //
+    // Not in a cross-origin frame, though: keyboard-map defaults to 'self',
+    // and Chrome rejects there with this exact message (measured, Chrome 153).
+    pub fn getLayoutMap(_: *const Keyboard, frame: *Frame) !js.Promise {
+        const local = frame.js.local.?;
+        if (!permissions_policy.allows(frame, "keyboard-map")) {
+            var resolver = local.createPromiseResolver();
+            resolver.reject("Keyboard.getLayoutMap", DOMException.init(
+                "getLayoutMap() must be called from a top-level browsing context or allowed by the permission policy.",
+                "SecurityError",
+            ));
+            return resolver.promise();
+        }
+        const map = try frame._factory.create(KeyboardLayoutMap{});
+        return local.resolvePromise(map);
     }
 
     // Nothing to capture keys from, and Chrome resolves with nothing too
-    // (measured).
-    pub fn lock(_: *const Keyboard, _: ?[]const []const u8, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise({});
+    // (measured). Outside the top-level document it rejects instead, whatever
+    // the origin -- lock() is not a policy feature.
+    pub fn lock(_: *const Keyboard, _: ?[]const []const u8, frame: *Frame) !js.Promise {
+        const local = frame.js.local.?;
+        if (frame.parent != null) {
+            var resolver = local.createPromiseResolver();
+            resolver.reject("Keyboard.lock", DOMException.init(
+                "Failed to execute 'lock' on 'Keyboard': lock() must be called from a primary top-level browsing context.",
+                "InvalidStateError",
+            ));
+            return resolver.promise();
+        }
+        return local.resolvePromise({});
     }
 
     pub fn unlock(_: *const Keyboard) void {}

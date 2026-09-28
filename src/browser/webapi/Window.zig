@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 const URL = @import("../URL.zig");
 const Frame = @import("../Frame.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const Console = @import("Console.zig");
 const History = @import("History.zig");
 const Navigation = @import("navigation/Navigation.zig");
@@ -1130,7 +1131,11 @@ pub fn showDirectoryPicker(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
 
 // Window Management: asking for the permission needs a transient activation,
 // so the request never even reaches the prompt.
+// A frame without window-management is refused without the activation check.
 pub fn getScreenDetails(_: *Window, frame: *Frame) js.Promise {
+    if (!permissions_policy.allows(frame, "window-management")) {
+        return rejectWith("getScreenDetails", "NotAllowedError", "Permission denied.", frame);
+    }
     return rejectWith(
         "getScreenDetails",
         "NotAllowedError",
@@ -1140,7 +1145,16 @@ pub fn getScreenDetails(_: *Window, frame: *Frame) js.Promise {
 }
 
 // Local Font Access, same story with a shorter message.
+// A frame without local-fonts gets the policy's wording instead.
 pub fn queryLocalFonts(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    if (!permissions_policy.allows(frame, "local-fonts")) {
+        return rejectWith(
+            "queryLocalFonts",
+            "SecurityError",
+            "Failed to execute 'queryLocalFonts' on 'Window': Access to the feature \"local-fonts\" is disallowed by Permissions Policy",
+            frame,
+        );
+    }
     return rejectWith("queryLocalFonts", "SecurityError", "User activation is required.", frame);
 }
 

@@ -44,6 +44,7 @@ const Page = @import("../Page.zig");
 const URL = @import("../URL.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const handler_property = @import("handler_property.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
@@ -168,6 +169,52 @@ const TABLE = std.StaticStringMap(Answer).initComptime(.{
     } } },
 });
 
+// What a frame that did not inherit a permission's feature reports in place of
+// its top-level state (Chrome 153, cross-origin iframe with no allow=,
+// scratch/s115/pp). The policy-gated ones go to denied; notifications and push
+// are not policy features but Chrome refuses them to any cross-origin frame
+// too; background-fetch and storage-access drop from granted to prompt. The
+// rest -- the sensors, payment-handler, keyboard-lock, pointer-lock,
+// background-sync -- answer as they do at the top.
+const Framed = struct {
+    // The policy feature `allow=` would delegate, or null for "same-origin
+    // with the top, full stop".
+    feature: ?[]const u8,
+    state: State,
+};
+
+const FRAMED = std.StaticStringMap(Framed).initComptime(.{
+    .{ "geolocation", Framed{ .feature = "geolocation", .state = .denied } },
+    .{ "notifications", Framed{ .feature = null, .state = .denied } },
+    .{ "push", Framed{ .feature = null, .state = .denied } },
+    .{ "midi", Framed{ .feature = "midi", .state = .denied } },
+    .{ "camera", Framed{ .feature = "camera", .state = .denied } },
+    .{ "microphone", Framed{ .feature = "microphone", .state = .denied } },
+    .{ "background-fetch", Framed{ .feature = null, .state = .prompt } },
+    .{ "screen-wake-lock", Framed{ .feature = "screen-wake-lock", .state = .denied } },
+    .{ "display-capture", Framed{ .feature = "display-capture", .state = .denied } },
+    .{ "clipboard-read", Framed{ .feature = "clipboard-read", .state = .denied } },
+    .{ "clipboard-write", Framed{ .feature = "clipboard-write", .state = .denied } },
+    .{ "idle-detection", Framed{ .feature = "idle-detection", .state = .denied } },
+    .{ "storage-access", Framed{ .feature = null, .state = .prompt } },
+    .{ "window-management", Framed{ .feature = "window-management", .state = .denied } },
+    .{ "local-fonts", Framed{ .feature = "local-fonts", .state = .denied } },
+    .{ "captured-surface-control", Framed{ .feature = "captured-surface-control", .state = .denied } },
+    .{ "local-network-access", Framed{ .feature = "local-network-access", .state = .denied } },
+});
+
+fn framedState(name: []const u8, exec: *const Execution) ?State {
+    const framed = FRAMED.get(name) orelse return null;
+    const frame = switch (exec.js.global) {
+        .frame => |frame| frame,
+        .worker => return null,
+    };
+    if (permissions_policy.inheritsSelf(frame, framed.feature)) {
+        return null;
+    }
+    return framed.state;
+}
+
 // Every way query() can fail. They are all rejections, so they travel as a
 // value rather than as a Zig error.
 const Failure = union(enum) {
@@ -201,7 +248,10 @@ pub fn query(_: *const Permissions, descriptor_: ?js.Value, exec: *const Executi
 
             // The state a CDP Browser.grantPermissions / setPermission set wins
             // over the default, and is keyed by the name the script asked for.
-            const state = exec.session.browser.permissions.get(answer.queried) orelse answer.resolved.state;
+            // A frame the feature never reached answers for itself, grant or no.
+            const state = framedState(answer.queried, exec) orelse
+                exec.session.browser.permissions.get(answer.queried) orelse
+                answer.resolved.state;
             return local.resolvePromise(try exec._factory.eventTargetWithAllocator(
                 arena.allocator(),
                 PermissionStatus{

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A document that sent no Permissions-Policy header gets each feature's default
+allowlist. Most are 'self': the top-level document and a same-origin frame have
+them, a cross-origin <iframe> does not unless `allow=` delegates them. Chrome 153
+answers that split all over the platform; every expectation below for the
+cross-origin frame was measured there (top on 127.0.0.1 framing localhost, no
+allow=, scratch/s115/pp). DataDome's interstitial runs in exactly such a frame
+and scores getLayoutMap() resolving in it.
+-->
+
+<script id="permissions_policy" type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const ALT_ORIGIN = testing.ORIGIN.replace('127.0.0.1', 'localhost');
+
+  function probe(src, expectedOrigin, allow) {
+    return new Promise((resolve) => {
+      const iframe = document.createElement('iframe');
+      const onmsg = (e) => {
+        if (e.source !== iframe.contentWindow) return;
+        window.removeEventListener('message', onmsg);
+        resolve(e.data);
+      };
+      window.addEventListener('message', onmsg);
+      if (allow) iframe.setAttribute('allow', allow);
+      iframe.src = src;
+      document.documentElement.appendChild(iframe);
+    });
+  }
+
+  const cross = await probe(ALT_BASE + 'frames/support/policy_probe.html');
+  const same = await probe(testing.BASE_URL + 'frames/support/policy_probe.html');
+  const delegated = await probe(ALT_BASE + 'frames/support/policy_probe.html', null, 'keyboard-map; geolocation; camera \'none\'');
+  state.resolve();
+
+  await state.done(() => {
+    // The cross-origin frame.
+    testing.expectEqual('SecurityError: getLayoutMap() must be called from a top-level browsing context or allowed by the permission policy.', cross.layoutMap);
+    testing.expectEqual("InvalidStateError: Failed to execute 'lock' on 'Keyboard': lock() must be called from a primary top-level browsing context.", cross.lock);
+    testing.expectEqual('denied', cross['perm geolocation']);
+    testing.expectEqual('denied', cross['perm notifications']);
+    testing.expectEqual('denied', cross['perm camera']);
+    testing.expectEqual('denied', cross['perm clipboard-write']);
+    testing.expectEqual('denied', cross['perm screen-wake-lock']);
+    testing.expectEqual('prompt', cross['perm background-fetch']);
+    testing.expectEqual('prompt', cross['perm storage-access']);
+    // Chrome leaves the sensor permissions granted even where the policy
+    // blocks the constructors.
+    testing.expectEqual('granted', cross['perm accelerometer']);
+    testing.expectEqual(22, cross.allowedFeatures);
+    testing.expectEqual(false, cross.allowsKeyboardMap);
+    testing.expectEqual('*', cross.allowlistSyncXhr);
+    testing.expectEqual('', cross.allowlistCamera);
+    testing.expectEqual('unavailable', cross.summarizer);
+    testing.expectEqual("NotAllowedError: Failed to execute 'request' on 'WakeLock': Access to Screen Wake Lock features is disallowed by permissions policy", cross.wakeLock);
+    testing.expectEqual("SecurityError: Failed to construct 'Accelerometer': Access to sensor features is disallowed by permissions policy", cross.accelerometer);
+    testing.expectEqual("SecurityError: Failed to construct 'Gyroscope': Access to sensor features is disallowed by permissions policy", cross.gyroscope);
+    testing.expectEqual("SecurityError: Failed to execute 'getDevices' on 'USB': Access to the feature \"usb\" is disallowed by permissions policy.", cross.usb);
+    testing.expectEqual(false, cross.bluetooth);
+    testing.expectEqual('denied', cross.notification);
+    testing.expectEqual(false, cross.fullscreenEnabled);
+    testing.expectEqual(false, cross.canShare);
+    testing.expectEqual("InvalidStateError: Failed to execute 'getInstalledRelatedApps' on 'Navigator': getInstalledRelatedApps() is only supported in top-level browsing contexts.", cross.relatedApps);
+    testing.expectEqual("SecurityError: Failed to construct 'PaymentRequest': Must be in a top-level browsing context or an iframe needs to specify allow=\"payment\" explicitly", cross.payment);
+    testing.expectEqual('1 Geolocation has been disabled in this document by permissions policy.', cross.geolocation);
+
+    // A same-origin frame inherits every 'self' feature.
+    testing.expectEqual(48, same.layoutMap);
+    testing.expectEqual('prompt', same['perm geolocation']);
+    testing.expectEqual('granted', same['perm clipboard-write']);
+    testing.expectEqual(82, same.allowedFeatures);
+    testing.expectEqual(true, same.allowsKeyboardMap);
+    testing.expectEqual(testing.ORIGIN, same.allowlistCamera);
+    testing.expectEqual('downloadable', same.summarizer);
+    testing.expectEqual('screen', same.wakeLock);
+    testing.expectEqual('ok', same.accelerometer);
+    testing.expectEqual(0, same.usb);
+    testing.expectEqual('default', same.notification);
+    testing.expectEqual(true, same.fullscreenEnabled);
+    testing.expectEqual('ok', same.payment);
+    // lock() and getInstalledRelatedApps() want the top level itself.
+    testing.expectEqual("InvalidStateError: Failed to execute 'lock' on 'Keyboard': lock() must be called from a primary top-level browsing context.", same.lock);
+    testing.expectEqual("InvalidStateError: Failed to execute 'getInstalledRelatedApps' on 'Navigator': getInstalledRelatedApps() is only supported in top-level browsing contexts.", same.relatedApps);
+
+    // allow= hands a feature to a cross-origin frame; 'none' withholds it.
+    testing.expectEqual(48, delegated.layoutMap);
+    testing.expectEqual('prompt', delegated['perm geolocation']);
+    testing.expectEqual('pending', delegated.geolocation);
+    testing.expectEqual('denied', delegated['perm camera']);
+    testing.expectEqual('denied', delegated['perm clipboard-write']);
+  });
+}
+</script>
