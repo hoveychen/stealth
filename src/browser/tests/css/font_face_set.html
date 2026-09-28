@@ -51,6 +51,39 @@
 }
 </script>
 
+<!--
+A value that is not a `font` shorthand is a SyntaxError, not a `true`: `''`,
+a bare family and a bare size all throw in Chrome 153, and `load()` rejects
+with the same DOMException minus the "Failed to execute" prefix.
+-->
+<script id="document_fonts_check_rejects_a_non_font" type=module>
+{
+  const thrown = [];
+  for (const font of ['', 'serif', '12px']) {
+    try {
+      document.fonts.check(font);
+      thrown.push('none');
+    } catch (e) {
+      thrown.push([e instanceof DOMException, e.name, e.code, e.message].join('|'));
+    }
+  }
+  testing.expectEqual([
+    "true|SyntaxError|12|Failed to execute 'check' on 'FontFaceSet': Could not resolve '' as a font.",
+    "true|SyntaxError|12|Failed to execute 'check' on 'FontFaceSet': Could not resolve 'serif' as a font.",
+    "true|SyntaxError|12|Failed to execute 'check' on 'FontFaceSet': Could not resolve '12px' as a font.",
+  ].join('\n'), thrown.join('\n'));
+
+  const state = await testing.async();
+  document.fonts.load('inherit').then(
+    () => state.resolve('resolved'),
+    (e) => state.resolve([e instanceof DOMException, e.name, e.message].join('|')),
+  );
+  await state.done((seen) => {
+    testing.expectEqual("true|SyntaxError|Could not resolve 'inherit' as a font.", seen);
+  });
+}
+</script>
+
 <script id="document_fonts_constructor_name">
 {
     testing.expectEqual('FontFaceSet', document.fonts.constructor.name);
