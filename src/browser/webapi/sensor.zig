@@ -40,6 +40,7 @@ const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
 const DOMMatrix = @import("DOMMatrix.zig");
 const handler_property = @import("handler_property.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -80,12 +81,31 @@ fn throwTypeError(message: []const u8, exec: *const Execution) anyerror {
     return error.JsException;
 }
 
+// The policy features each sensor needs, all 'self' by default. A frame that
+// did not inherit one gets a SecurityError from the constructor, before the
+// options are read (measured, Chrome 153 cross-origin iframe).
+fn policyFeatures(comptime name: []const u8) []const []const u8 {
+    if (comptime std.mem.eql(u8, name, "Gyroscope")) return &.{"gyroscope"};
+    if (comptime std.mem.eql(u8, name, "AbsoluteOrientationSensor")) return &.{ "accelerometer", "gyroscope", "magnetometer" };
+    if (comptime std.mem.eql(u8, name, "RelativeOrientationSensor")) return &.{ "accelerometer", "gyroscope" };
+    return &.{"accelerometer"};
+}
+
+fn checkPolicy(comptime name: []const u8, exec: *const Execution) !void {
+    inline for (comptime policyFeatures(name)) |feature| {
+        if (!permissions_policy.execAllows(exec, feature)) {
+            return exec.js.fail(error.SecurityError, "Failed to construct '" ++ name ++ "': Access to sensor features is disallowed by permissions policy");
+        }
+    }
+}
+
 /// SensorOptions plus SpatialSensorOptions: Chrome reads both dictionaries on
 /// every concrete sensor, including the ones with no spatial meaning
 /// (measured: `new Accelerometer({referenceFrame: 'bogus'})` is a
 /// LocalCoordinateSystem enum error, not an ignored member).
 const Options = struct {
     fn read(comptime name: []const u8, options_: ?js.Value, exec: *const Execution) !void {
+        try checkPolicy(name, exec);
         const options = options_ orelse return;
         if (options.isNullOrUndefined()) {
             return;

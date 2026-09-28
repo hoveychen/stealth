@@ -40,14 +40,25 @@ pub const Code = enum(u16) {
 
 _rc: lp.RC = .{},
 _code: Code,
+// A PERMISSION_DENIED that came from Permissions Policy rather than from a
+// prompt, which Chrome words differently.
+_by_policy: bool = false,
 _arena: *lp.Arena,
 
 pub fn init(exec: *js.Execution, code: Code) !*GeolocationPositionError {
+    return initWith(exec, code, false);
+}
+
+pub fn initByPolicy(exec: *js.Execution) !*GeolocationPositionError {
+    return initWith(exec, .permission_denied, true);
+}
+
+fn initWith(exec: *js.Execution, code: Code, by_policy: bool) !*GeolocationPositionError {
     const arena = try exec.getArena(.tiny, "GeolocationPositionError");
     errdefer arena.release();
 
     const self = try arena.create(GeolocationPositionError);
-    self.* = .{ ._arena = arena, ._code = code };
+    self.* = .{ ._arena = arena, ._code = code, ._by_policy = by_policy };
     return self;
 }
 
@@ -68,6 +79,9 @@ fn getCode(self: *const GeolocationPositionError) u16 {
 }
 
 fn getMessage(self: *const GeolocationPositionError) []const u8 {
+    if (self._by_policy) {
+        return "Geolocation has been disabled in this document by permissions policy.";
+    }
     return self._code.message();
 }
 

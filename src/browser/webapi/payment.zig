@@ -47,6 +47,7 @@ const js = @import("../js/js.zig");
 const Event = @import("Event.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const String = @import("../../lightpanda.zig").String;
 const handler_property = @import("handler_property.zig");
 
@@ -138,6 +139,11 @@ pub const PaymentRequest = struct {
         // Chrome words a missing second argument as a missing dictionary member
         // rather than as an argument count (measured).
         const details_value = details_ orelse return throwTypeError(prefix ++ "required member details is undefined.", exec);
+        // Past the argument checks, a frame the payment feature did not reach is
+        // refused before anything is validated (measured, Chrome 153).
+        if (!permissions_policy.execAllows(exec, "payment")) {
+            return throwDom("SecurityError", prefix ++ "Must be in a top-level browsing context or an iframe needs to specify allow=\"payment\" explicitly", exec);
+        }
 
         if (!methods.isArray()) return throwTypeError(prefix ++ "The provided value cannot be converted to a sequence.", exec);
         const list = try methods.toZig([]const js.Value);

@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
+const permissions_policy = @import("../../permissions_policy.zig");
 const GeolocationPosition = @import("GeolocationPosition.zig");
 const GeolocationPositionError = @import("GeolocationPositionError.zig");
 
@@ -161,6 +162,13 @@ const Request = struct {
             return null;
         }
 
+        // A frame the geolocation feature did not reach is refused whatever
+        // the permission says (measured, Chrome 153 cross-origin iframe).
+        if (!permissions_policy.execAllows(self.exec, "geolocation")) {
+            self.deliverPolicyError();
+            return null;
+        }
+
         const browser = self.exec.session.browser;
 
         // Upstream treats anything short of a grant as a denial, on the grounds
@@ -213,6 +221,20 @@ const Request = struct {
 
         const exec = self.exec;
         const position_error = GeolocationPositionError.init(exec, code) catch |err| {
+            log.err(.js, "geolocation.error", .{ .err = err });
+            return;
+        };
+        position_error.acquireRef();
+        defer position_error.releaseRef(exec.page);
+
+        self.invoke(error_cb, position_error);
+    }
+
+    fn deliverPolicyError(self: *Request) void {
+        const error_cb = self.error_cb orelse return;
+
+        const exec = self.exec;
+        const position_error = GeolocationPositionError.initByPolicy(exec) catch |err| {
             log.err(.js, "geolocation.error", .{ .err = err });
             return;
         };

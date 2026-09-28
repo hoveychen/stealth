@@ -22,6 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 const URL = @import("../URL.zig");
 const Frame = @import("../Frame.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const Console = @import("Console.zig");
 const History = @import("History.zig");
 const Navigation = @import("navigation/Navigation.zig");
@@ -1130,7 +1131,11 @@ pub fn showDirectoryPicker(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
 
 // Window Management: asking for the permission needs a transient activation,
 // so the request never even reaches the prompt.
+// A frame without window-management is refused without the activation check.
 pub fn getScreenDetails(_: *Window, frame: *Frame) js.Promise {
+    if (!permissions_policy.allows(frame, "window-management")) {
+        return rejectWith("getScreenDetails", "NotAllowedError", "Permission denied.", frame);
+    }
     return rejectWith(
         "getScreenDetails",
         "NotAllowedError",
@@ -1140,7 +1145,16 @@ pub fn getScreenDetails(_: *Window, frame: *Frame) js.Promise {
 }
 
 // Local Font Access, same story with a shorter message.
+// A frame without local-fonts gets the policy's wording instead.
 pub fn queryLocalFonts(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    if (!permissions_policy.allows(frame, "local-fonts")) {
+        return rejectWith(
+            "queryLocalFonts",
+            "SecurityError",
+            "Failed to execute 'queryLocalFonts' on 'Window': Access to the feature \"local-fonts\" is disallowed by Permissions Policy",
+            frame,
+        );
+    }
     return rejectWith("queryLocalFonts", "SecurityError", "User activation is required.", frame);
 }
 
@@ -1160,18 +1174,25 @@ pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8,
     // minted in its own realm (not the source realm's object), an unserializable
     // value throws a DataCloneError to the caller, and the source-realm temp
     // doesn't leak into the destination context. Mirrors Worker.postMessage.
+    // Serialize in the sender's realm, before anything else: a failure throws
+    // there with Blink's wording ("Failed to execute 'postMessage' on 'Window':
+    // function f() {} could not be cloned.") and stays pending for the caller.
+    // DataDome compares that sentence character for character.
+    const serialized = message.serialize("Failed to execute 'postMessage' on 'Window': ") catch return error.TryCatchRethrow;
+    defer serialized.deinit();
+
     const cloned = blk: {
         var ls: js.Local.Scope = undefined;
         target_frame.js.localScope(&ls);
         defer ls.deinit();
 
-        // Contain any V8 exception from a failed serialization so it surfaces as
-        // a clean DataCloneError; deinit() (no rethrow) clears it.
+        // Contain any V8 exception from a failed deserialization so it surfaces
+        // as a clean DataCloneError; deinit() (no rethrow) clears it.
         var try_catch: js.TryCatch = undefined;
         try_catch.init(&ls.local);
         defer try_catch.deinit();
 
-        const c = message.structuredCloneTo(&ls.local, null) catch {
+        const c = js.Value.deserialize(&ls.local, serialized.bytes()) catch {
             return error.DataClone;
         };
         break :blk try c.persist();

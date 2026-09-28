@@ -39,6 +39,7 @@
 
 const js = @import("../js/js.zig");
 const DOMException = @import("DOMException.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 
 const Execution = js.Execution;
 
@@ -52,8 +53,11 @@ pub fn constructor(exec: *const Execution) !*Summarizer {
     return exec.js.fail(error.TypeError, "Failed to construct 'Summarizer': Illegal constructor");
 }
 
+// "unavailable" in a frame the summarizer feature did not reach (measured,
+// Chrome 153 cross-origin iframe).
 pub fn availability(exec: *const Execution) !js.Promise {
-    return exec.js.local.?.resolvePromise(@as([]const u8, "downloadable"));
+    const state: []const u8 = if (permissions_policy.execAllows(exec, "summarizer")) "downloadable" else "unavailable";
+    return exec.js.local.?.resolvePromise(state);
 }
 
 pub fn create(_: ?js.Value, exec: *const Execution) js.Promise {

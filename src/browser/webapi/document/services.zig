@@ -36,6 +36,7 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const URL = @import("../../URL.zig");
 const Frame = @import("../../Frame.zig");
+const permissions_policy = @import("../../permissions_policy.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const DOMRect = @import("../DOMRect.zig");
@@ -263,19 +264,33 @@ pub const FeaturePolicy = struct {
 
     // A top-level document with no Permissions-Policy header is allowed
     // everything, which is what Chrome reports: allowedFeatures() equals
-    // features().
-    pub fn allowedFeatures(_: *const FeaturePolicy) []const []const u8 {
-        return &features_list;
+    // features(). A cross-origin frame keeps only the '*' features, in the
+    // same order (measured: Chrome's 16 are its top-level list filtered).
+    pub fn allowedFeatures(_: *const FeaturePolicy, frame: *Frame) ![]const []const u8 {
+        var list: std.ArrayList([]const u8) = .empty;
+        for (features_list) |feature| {
+            if (permissions_policy.allows(frame, feature)) {
+                try list.append(frame.local_arena, feature);
+            }
+        }
+        return list.items;
     }
 
-    pub fn allowsFeature(_: *const FeaturePolicy, name: []const u8, _: ?[]const u8) bool {
-        return known(name);
+    pub fn allowsFeature(_: *const FeaturePolicy, name: []const u8, _: ?[]const u8, frame: *Frame) bool {
+        return known(name) and permissions_policy.allows(frame, name);
     }
 
-    // Every known feature is allowlisted to the document's own origin; an
-    // unknown name gets an empty list rather than an error.
+    // A '*' feature is allowlisted to "*"; a 'self' one to the document's own
+    // origin, or to nobody in a frame that did not inherit it. An unknown name
+    // gets an empty list rather than an error.
     pub fn getAllowlistForFeature(_: *const FeaturePolicy, name: []const u8, frame: *Frame) ![]const []const u8 {
         if (!known(name)) {
+            return &.{};
+        }
+        if (permissions_policy.isStarDefault(name)) {
+            return &.{"*"};
+        }
+        if (!permissions_policy.allows(frame, name)) {
             return &.{};
         }
         const origin = try URL.getOrigin(frame.local_arena, frame.url) orelse return &.{};

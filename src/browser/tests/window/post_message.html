@@ -39,3 +39,51 @@
     testing.expectEqual(true, threw);
 }
 </script>
+
+<script id=postMessageDataCloneErrorWording>
+// Blink's sentence, character for character (Chrome 153): the prefix names the
+// method and interface, the value is described the way V8 prints it, and a
+// host object -- even an empty one like Permissions -- is named by interface.
+// DataDome compares the whole message.
+{
+    const cases = [
+        [function foo() {}, 'function foo() {}'],
+        [() => 1, '() => 1'],
+        [navigator.permissions.query, 'function query() { [native code] }'],
+        [Symbol('x'), 'Symbol(x)'],
+        [window, '#<Window>'],
+        [new WeakMap(), '#<WeakMap>'],
+        [navigator, 'Navigator object'],
+        [navigator.permissions, 'Permissions object'],
+        [navigator.storage, 'StorageManager object'],
+        [new TextEncoder(), 'TextEncoder object'],
+        [document, 'HTMLDocument object'],
+        [document.documentElement, 'HTMLHtmlElement object'],
+    ];
+    for (const [value, described] of cases) {
+        let message = 'no throw';
+        try {
+            window.postMessage(value, '*');
+        } catch (e) {
+            testing.expectEqual('DataCloneError', e.name, { desc: described });
+            testing.expectEqual(25, e.code, { desc: described });
+            message = e.message;
+        }
+        testing.expectEqual("Failed to execute 'postMessage' on 'Window': " + described + ' could not be cloned.', message);
+    }
+
+    let port = 'no throw';
+    try { new MessageChannel().port1.postMessage(function () {}); } catch (e) { port = e.message; }
+    testing.expectEqual("Failed to execute 'postMessage' on 'MessagePort': function () {} could not be cloned.", port);
+
+    const bc = new BroadcastChannel('wording');
+    let channel = 'no throw';
+    try { bc.postMessage(Symbol('s')); } catch (e) { channel = e.message; }
+    bc.close();
+    testing.expectEqual("Failed to execute 'postMessage' on 'BroadcastChannel': Symbol(s) could not be cloned.", channel);
+
+    let clone = 'no throw';
+    try { structuredClone(navigator.permissions); } catch (e) { clone = e.message; }
+    testing.expectEqual("Failed to execute 'structuredClone' on 'Window': Permissions object could not be cloned.", clone);
+}
+</script>

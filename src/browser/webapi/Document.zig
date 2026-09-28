@@ -25,6 +25,7 @@ const public_suffix_list = @import("../../data/public_suffix_list.zig");
 const URL = @import("../URL.zig");
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
+const permissions_policy = @import("../permissions_policy.zig");
 const Parser = @import("../parser/Parser.zig");
 
 const Node = @import("Node.zig");
@@ -1867,8 +1868,12 @@ pub fn execCommand(self: *const Document, name: []const u8) bool {
 // page), and reporting false would be a signal of its own, so the flags are
 // true and the state is empty. The webkit* spellings are still shipped by
 // Chrome, aliases and all.
-pub fn getFullscreenEnabled(_: *const Document) bool {
-    return true;
+//
+// Except in a frame the fullscreen feature did not reach: Chrome reports false
+// there (measured, Chrome 153 cross-origin iframe without allowfullscreen).
+pub fn getFullscreenEnabled(self: *const Document, frame: *Frame) bool {
+    const doc_frame = self._frame orelse frame;
+    return permissions_policy.allows(doc_frame, "fullscreen");
 }
 
 pub fn getFullscreen(_: *const Document) bool {
