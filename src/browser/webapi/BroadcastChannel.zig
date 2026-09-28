@@ -73,19 +73,26 @@ pub fn postMessage(self: *BroadcastChannel, message: js.Value, exec: *Execution)
 
     // StructuredSerialize runs synchronously (per spec): clone the message once
     // now so an unserializable value throws a DataCloneError to the caller.
+    // Serialize in the sender's realm, before anything else: a failure throws
+    // there with Blink's wording ("Failed to execute 'postMessage' on 'BroadcastChannel':
+    // function f() {} could not be cloned.") and stays pending for the caller.
+    // DataDome compares that sentence character for character.
+    const serialized = message.serialize("Failed to execute 'postMessage' on 'BroadcastChannel': ") catch return error.TryCatchRethrow;
+    defer serialized.deinit();
+
     const snapshot = blk: {
         var ls: js.Local.Scope = undefined;
         exec.js.localScope(&ls);
         defer ls.deinit();
 
-        // Contain any V8 exception raised by a failed serialization so we can
+        // Contain any V8 exception raised by a failed deserialization so we can
         // re-raise it as a clean DataCloneError (per spec) instead of leaking a
         // stale pending exception into the caller. deinit() (no rethrow) clears it.
         var try_catch: js.TryCatch = undefined;
         try_catch.init(&ls.local);
         defer try_catch.deinit();
 
-        const cloned = message.structuredCloneTo(&ls.local, null) catch {
+        const cloned = js.Value.deserialize(&ls.local, serialized.bytes()) catch {
             return error.DataClone;
         };
         break :blk try cloned.persist();

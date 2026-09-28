@@ -431,29 +431,26 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 }
             }
 
-            if (!@hasDecl(JsApi.Meta, "empty_with_no_proto")) {
-                // The TAO contains the pointer to our Zig instance as
-                // well as any meta data we'll need to use it later.
-                // See the TaggedOpaque struct for more details.
-                // Use identity_arena so TAOs survive context destruction. V8 objects
-                // are stored in identity_map (session-level) and may be referenced
-                // after their creating context is destroyed (e.g., via microtasks).
-                const tao = try ctx.identity_arena.create(TaggedOpaque);
-                tao.* = .{
-                    .value = resolved.ptr,
-                    .prototype_chain = resolved.prototype_chain.ptr,
-                    .prototype_len = @intCast(resolved.prototype_chain.len),
-                    .subtype = if (@hasDecl(JsApi.Meta, "subtype")) JsApi.Meta.subype else .node,
-                };
+            // The TAO contains the pointer to our Zig instance as
+            // well as any meta data we'll need to use it later.
+            // See the TaggedOpaque struct for more details.
+            // Use identity_arena so TAOs survive context destruction. V8 objects
+            // are stored in identity_map (session-level) and may be referenced
+            // after their creating context is destroyed (e.g., via microtasks).
+            // An empty struct gets one too, even though fromJS never reads it:
+            // an object with no internal field is not a host object to V8's
+            // serializer, so `postMessage(navigator.permissions)` would clone
+            // it as `{}` where Chrome throws "Permissions object could not be
+            // cloned.", and the TAO is where that name comes from.
+            const tao = try ctx.identity_arena.create(TaggedOpaque);
+            tao.* = .{
+                .value = resolved.ptr,
+                .prototype_chain = resolved.prototype_chain.ptr,
+                .prototype_len = @intCast(resolved.prototype_chain.len),
+                .subtype = if (@hasDecl(JsApi.Meta, "subtype")) JsApi.Meta.subype else .node,
+            };
 
-                v8.v8__Object__SetAlignedPointerInInternalField(js_obj.handle, 0, tao);
-            } else {
-                // If the struct is empty, we don't need to do all
-                // the TOA stuff and setting the internal data.
-                // When we try to map this from JS->Zig, in
-                // TaggedOpaque, we'll also know there that
-                // the type is empty and can create an empty instance.
-            }
+            v8.v8__Object__SetAlignedPointerInInternalField(js_obj.handle, 0, tao);
 
             // dont' use js_obj.persist(), because we don't want to track this in
             // context.global_objects, we want to track it in context.identity_map.

@@ -1174,18 +1174,25 @@ pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8,
     // minted in its own realm (not the source realm's object), an unserializable
     // value throws a DataCloneError to the caller, and the source-realm temp
     // doesn't leak into the destination context. Mirrors Worker.postMessage.
+    // Serialize in the sender's realm, before anything else: a failure throws
+    // there with Blink's wording ("Failed to execute 'postMessage' on 'Window':
+    // function f() {} could not be cloned.") and stays pending for the caller.
+    // DataDome compares that sentence character for character.
+    const serialized = message.serialize("Failed to execute 'postMessage' on 'Window': ") catch return error.TryCatchRethrow;
+    defer serialized.deinit();
+
     const cloned = blk: {
         var ls: js.Local.Scope = undefined;
         target_frame.js.localScope(&ls);
         defer ls.deinit();
 
-        // Contain any V8 exception from a failed serialization so it surfaces as
-        // a clean DataCloneError; deinit() (no rethrow) clears it.
+        // Contain any V8 exception from a failed deserialization so it surfaces
+        // as a clean DataCloneError; deinit() (no rethrow) clears it.
         var try_catch: js.TryCatch = undefined;
         try_catch.init(&ls.local);
         defer try_catch.deinit();
 
-        const c = message.structuredCloneTo(&ls.local, null) catch {
+        const c = js.Value.deserialize(&ls.local, serialized.bytes()) catch {
             return error.DataClone;
         };
         break :blk try c.persist();

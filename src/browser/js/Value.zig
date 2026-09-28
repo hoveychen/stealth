@@ -387,7 +387,7 @@ pub fn jsonStringify(self: Value, jws: anytype) !void {
 /// `clone_error_prefix` is Blink's `Failed to execute '<op>' on '<Interface>': `
 /// for whoever asked -- the detail after it comes from V8 and already matches.
 /// `null` keeps the bare sentence for the paths whose wording has not been read
-/// out of Chrome (postMessage, BroadcastChannel), rather than inventing one.
+/// out of Chrome (the worker message paths), rather than inventing one.
 pub fn structuredClone(self: Value, clone_error_prefix: ?[]const u8) !Value {
     return self.structuredCloneTo(self.local, clone_error_prefix);
 }

@@ -1320,12 +1320,8 @@ fn countInternalFields(comptime JsApi: type) u8 {
         }
     }
 
-    if (@hasDecl(JsApi.Meta, "empty_with_no_proto")) {
-        return cache_count;
-    }
-
     // we need cache_count internal fields, + 1 for the TAO pointer (the v8 -> Zig)
-    // mapping) itself.
+    // mapping) itself. Empty structs included: see mapZigInstanceToJs.
     return cache_count + 1;
 }
 
