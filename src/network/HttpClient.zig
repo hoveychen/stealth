@@ -4630,7 +4630,13 @@ pub const Transfer = struct {
         if (req.resource_type == .document) {
             return if (req.nav) |n| n.initiator_origin else null;
         }
-        return self.initiatorUrl();
+        // cookie_origin is the site for SameSite checks, and inside a
+        // cross-site frame that is `.none` -- third-party, not "no initiator".
+        // An XHR there, which leaves cookie_origin to the owner, used to go
+        // out with Sec-Fetch-Site: none where Chrome says same-origin
+        // (scratch/s116/frame-echo.mjs). The initiator's own origin is still
+        // known; say that.
+        return self.initiatorUrl() orelse req.origin;
     }
 
     // The initiating document's URL, from whichever copy holds it.
@@ -4791,7 +4797,9 @@ pub const Transfer = struct {
         // it: the request's copy is null on a served page. This line could not
         // be wrong before, because initiatorOrigin's null returned above and
         // nothing reached here -- one bug hiding the other.
-        const origin_url = self.initiatorUrl() orelse return "null";
+        // Without a site for cookies (a cross-site frame), initiatorOrigin
+        // fell back to the request's origin, which is already serialized.
+        const origin_url = self.initiatorUrl() orelse return origin;
         return (try URL.getOrigin(self.arena.allocator(), origin_url)) orelse "null";
     }
 
@@ -5689,6 +5697,26 @@ test "HttpClient: seedFetchMetadata names a worker script fetch" {
     try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Mode"));
     try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Site"));
     try testing.expectString("*/*", seededValue(&transfer, "Accept"));
+}
+
+test "HttpClient: an XHR inside a cross-site frame still names its initiator" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    // A cross-site frame has no site for cookies, so nothing but the
+    // request's origin says who asked.
+    var transfer = testTransfer(arena);
+    transfer.req.url = "https://challenges.example.net/flow";
+    transfer.req.resource_type = .xhr;
+    transfer.req.method = .POST;
+    transfer.req.request_mode = .cors;
+    transfer.req.origin = "https://challenges.example.net";
+    try transfer.seedFetchMetadata();
+
+    try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Site"));
+    try testing.expectString("https://challenges.example.net", seededValue(&transfer, "Origin"));
 }
 
 test "HttpClient: seedFetchMetadata sends Chrome's set for a top-level navigation" {
