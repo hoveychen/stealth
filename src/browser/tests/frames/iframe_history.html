@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A frame's initial load does not add to the joint session history: Chrome 153
+reads history.length 1 at the top of a page with two iframes, and each iframe
+reads 1 too (scratch/s115/pp/h-top.html). Ours used to push every frame's first
+commit onto the tab's list, so the top read 1+N and a cross-origin frame's
+navigation.entries() listed the top-level URL. The runner shares one session
+across this directory, so the top is compared with itself, not with 1.
+-->
+
+<script id="iframe_history" type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const before = history.length;
+  const beforeEntries = navigation.entries().length;
+
+  function probe(src) {
+    return new Promise((resolve) => {
+      const iframe = document.createElement('iframe');
+      const onmsg = (e) => {
+        if (e.source !== iframe.contentWindow) return;
+        window.removeEventListener('message', onmsg);
+        resolve(e.data);
+      };
+      window.addEventListener('message', onmsg);
+      iframe.src = src;
+      document.documentElement.appendChild(iframe);
+    });
+  }
+
+  const cross = await probe(ALT_BASE + 'frames/support/history_probe.html');
+  const same = await probe(testing.BASE_URL + 'frames/support/history_probe.html');
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(before, history.length);
+    testing.expectEqual(beforeEntries, navigation.entries().length);
+    testing.expectEqual(1, cross.length);
+    testing.expectEqual(1, same.length);
+    testing.expectEqual([ALT_BASE + 'frames/support/history_probe.html'], cross.entries);
+    testing.expectEqual([testing.BASE_URL + 'frames/support/history_probe.html'], same.entries);
+  });
+}
+</script>

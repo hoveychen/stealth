@@ -562,6 +562,13 @@ window: *Window,
 // Window's address -- and so its entry in the JS identity map.
 _history: History = .{},
 _navigation: *Navigation,
+// A child frame's own session history. Chrome keeps one joint history per
+// tab, but a frame's initial load replaces rather than appends, so a page with
+// N iframes still reads history.length 1 at the top -- ours read 1+N when every
+// frame pushed onto the session's list. The top-level frame keeps using
+// session.navigation_state (it survives the frame being replaced on
+// navigation); children get this one.
+_own_navigation_state: Navigation.State = .{},
 document: *Document,
 
 // The document timeline, held rather than read. See `animationTime`.
@@ -708,10 +715,10 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._frame_id = frame_id,
         ._page = page,
         ._session = session,
-        // Only the entry list behind it belongs to the session.
+        // Only the top-level frame's entry list belongs to the session.
         ._navigation = try factory.eventTarget(Navigation{
             ._proto = undefined,
-            ._state = &session.navigation_state,
+            ._state = if (parent == null) &session.navigation_state else &self._own_navigation_state,
         }),
         ._loader_id = session.nextLoaderId(),
         ._factory = factory,
@@ -1439,7 +1446,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         });
 
         if (self.parent == null) {
-            session.navigation_state._current_navigation_kind = opts.kind;
+            self._navigation._state._current_navigation_kind = opts.kind;
             try self._navigation.commitNavigation(self);
         }
 
@@ -1559,7 +1566,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
     // Record telemetry for navigation
     self.recordNavigateTelemetry(std.ascii.startsWithIgnoreCase(self.url, "https://"));
 
-    session.navigation_state._current_navigation_kind = opts.kind;
+    self._navigation._state._current_navigation_kind = opts.kind;
 
     transfer.submit() catch |err| {
         log.err(.frame, "navigate request", .{ .url = self.url, .err = err, .type = self._type });
