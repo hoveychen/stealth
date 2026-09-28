@@ -1685,7 +1685,7 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
     }
 }
 
-const BucketKey = union(enum) {
+pub const BucketKey = union(enum) {
     id: []const u8,
     class: []const u8,
     tag: Tag,
@@ -1695,7 +1695,7 @@ const BucketKey = union(enum) {
 /// Returns the best bucket key for a compound selector, or null if it contains
 /// a dynamic pseudo-class we should skip (hover, active, focus, etc.)
 /// Priority: id > class > tag > other
-fn getBucketKey(compound: Selector.Compound) ?BucketKey {
+pub fn getBucketKey(compound: Selector.Compound) ?BucketKey {
     var best_key: BucketKey = .other;
 
     for (compound.parts) |part| {

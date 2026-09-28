@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A url() whose rule matches nothing yet, and then does.
+
+  The scan that decides what a stylesheet's url()s are worth asking for skips a
+  rule whose rightmost compound names an id, class or tag the document does not
+  carry -- on hollandandbarrett.com that skip is the difference between 4377
+  document-wide `querySelector`s per scan and 773, and between 435ms and 117ms
+  spent per scan.
+
+  The risk it introduces is under-fetching, which is the same kind of tell as
+  the over-fetching `style_subresources.html` guards: a request Chrome makes and
+  this engine does not shows up in the origin's access log. The inventory is
+  therefore rebuilt per scan rather than maintained as the document grows, and
+  this page is that promise written down -- the class below does not exist while
+  the parser is running and exists by the time the document is ready.
+
+  `subres-late-never` is the control: nothing ever wears it, so a scan that
+  stopped consulting the document at all would show up here as a spurious path.
+-->
+<style>
+  .subres-late { background-image: url(/wire/subres-late.png); }
+  .subres-late-never { background-image: url(/wire/subres-late-never.png); }
+</style>
+
+<div id="host">no class here yet</div>
+
+<script>
+  // Runs while the parser is still going, so the scans that fire ahead of the
+  // remaining scripts see a document with no `.subres-late` in it at all.
+  const late = document.createElement('div');
+  late.className = 'subres-late';
+  document.getElementById('host').appendChild(late);
+</script>
+
+<script id="a_class_added_after_the_first_scan_still_fetches" type=module>
+{
+  const asked = () => new Set(
+    performance.getEntriesByType('resource').map((e) => e.name.split('/').pop()));
+
+  const test = await testing.async();
+  const deadline = Date.now() + 600;
+  while (Date.now() < deadline) {
+    if (asked().has('subres-late.png')) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  test.resolve(asked());
+
+  await test.done((seen) => {
+    testing.expectEqual('asked: true', 'asked: ' + seen.has('subres-late.png'));
+    testing.expectEqual('spurious: false', 'spurious: ' + seen.has('subres-late-never.png'));
+  });
+}
+</script>

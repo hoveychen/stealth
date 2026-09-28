@@ -2160,6 +2160,7 @@ fn fillPositionTables(self: *Frame) bool {
     const version = self._page.liveVersion();
     if (!self.position_table_filled or self.position_table_version != version) {
         const root = self.document.getDocumentElement() orelse return false;
+        const probe_started_us = lp.datetime.microTimestamp(.boot);
 
         // The pass shares one set of measurements, for the same reason the hit
         // test does and with the same safety argument: no script runs while it
@@ -2193,9 +2194,30 @@ fn fillPositionTables(self: *Frame) bool {
         // filled at this version and returns without rebuilding.
         self.position_table_building = false;
         Element.layoutPassPositionedSubtrees(self, &self.position_table, &self.static_position_table);
+        if (position_rebuild_probe orelse blk: {
+            position_rebuild_probe = std.c.getenv("LIGHTPANDA_POSITION_PROBE") != null;
+            break :blk position_rebuild_probe.?;
+        }) {
+            position_rebuilds += 1;
+            position_rebuild_us += lp.datetime.microTimestamp(.boot) - probe_started_us;
+            log.warn(.telemetry, "position table rebuild", .{
+                .n = position_rebuilds,
+                .placed = self.position_table.count(),
+                .us = lp.datetime.microTimestamp(.boot) - probe_started_us,
+                .total_us = position_rebuild_us,
+            });
+        }
     }
     return true;
 }
+
+/// How many document-wide position passes this process has run, and whether
+/// anyone asked to hear about them (`LIGHTPANDA_POSITION_PROBE`). One pass on a
+/// heavy station costs hundreds of milliseconds and a station that reads
+/// geometry in a loop pays it per read, which is the shape this reports.
+var position_rebuild_probe: ?bool = null;
+var position_rebuilds: u64 = 0;
+var position_rebuild_us: u64 = 0;
 
 /// Time one document-wide layout pass and report what it cost.
 ///
@@ -6362,6 +6384,11 @@ test "WebApi: Frame" {
 test "WebApi: css style subresources" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("css/style_subresources.html", .{});
+}
+
+test "WebApi: css style subresources for a class added later" {
+    testing.silenceLog(&.{.http});
+    try testing.htmlRunner("css/style_subresources_late_class.html", .{});
 }
 
 test "WebApi: css style subresources behind var" {
