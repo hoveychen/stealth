@@ -51,7 +51,7 @@ and scores getLayoutMap() resolving in it.
     // Chrome leaves the sensor permissions granted even where the policy
     // blocks the constructors.
     testing.expectEqual('granted', cross['perm accelerometer']);
-    testing.expectEqual(22, cross.allowedFeatures);
+    testing.expectEqual(16, cross.allowedFeatures);
     testing.expectEqual(false, cross.allowsKeyboardMap);
     testing.expectEqual('*', cross.allowlistSyncXhr);
     testing.expectEqual('', cross.allowlistCamera);
@@ -72,7 +72,7 @@ and scores getLayoutMap() resolving in it.
     testing.expectEqual(48, same.layoutMap);
     testing.expectEqual('prompt', same['perm geolocation']);
     testing.expectEqual('granted', same['perm clipboard-write']);
-    testing.expectEqual(82, same.allowedFeatures);
+    testing.expectEqual(76, same.allowedFeatures);
     testing.expectEqual(true, same.allowsKeyboardMap);
     testing.expectEqual(testing.ORIGIN, same.allowlistCamera);
     testing.expectEqual('downloadable', same.summarizer);

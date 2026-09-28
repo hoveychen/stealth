@@ -159,8 +159,12 @@ pub const DocumentTimeline = struct {
 pub const FeaturePolicy = struct {
     _pad: bool = false,
 
-    // The 82 permission-policy features a headed Chrome 150 reports at a
-    // top-level document, in Chrome's own iteration order. That order is stable
+    // The 76 permission-policy features a headed Chrome 153 reports at a
+    // top-level document, in Chrome's own iteration order. Chrome 150 had 82;
+    // 153 dropped the six Privacy Sandbox ones (shared-storage[-select-url],
+    // run-ad-auction, join-ad-interest-group, private-aggregation,
+    // attribution-reporting), and Cloudflare's challenge page reads this list
+    // (prop_read, scratch/s116/fp-ch153.json). That order is stable
     // across processes (verified over two separate launches) and the list is a
     // sharp version fingerprint — features arrive and leave with nearly every
     // milestone — so it is reproduced verbatim rather than sorted or invented.
@@ -172,7 +176,6 @@ pub const FeaturePolicy = struct {
         "on-device-speech-recognition",
         "translator",
         "publickey-credentials-get",
-        "shared-storage-select-url",
         "ch-ua-arch",
         "bluetooth",
         "compute-pressure",
@@ -181,9 +184,7 @@ pub const FeaturePolicy = struct {
         "usb",
         "ch-save-data",
         "publickey-credentials-create",
-        "shared-storage",
         "deferred-fetch-minimal",
-        "run-ad-auction",
         "ch-downlink",
         "ch-ua-form-factors",
         "otp-credentials",
@@ -200,7 +201,6 @@ pub const FeaturePolicy = struct {
         "ch-ua-platform-version",
         "idle-detection",
         "language-model",
-        "private-aggregation",
         "interest-cohort",
         "ch-viewport-height",
         "captured-surface-control",
@@ -213,7 +213,6 @@ pub const FeaturePolicy = struct {
         "gamepad",
         "display-capture",
         "keyboard-map",
-        "join-ad-interest-group",
         "aria-notify",
         "local-network",
         "ch-ua-high-entropy-values",
@@ -231,7 +230,6 @@ pub const FeaturePolicy = struct {
         "ch-dpr",
         "ch-prefers-color-scheme",
         "ch-ua-wow64",
-        "attribution-reporting",
         "fullscreen",
         "identity-credentials-get",
         "private-state-token-redemption",
