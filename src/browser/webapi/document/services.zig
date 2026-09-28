@@ -301,10 +301,15 @@ pub const FeaturePolicy = struct {
         pub const bridge = js.Bridge(FeaturePolicy);
 
         pub const Meta = struct {
-            pub const name = "FeaturePolicy";
+            // Chrome 153 names the interface PermissionsPolicy and keeps
+            // FeaturePolicy as the very same function object (measured:
+            // window.FeaturePolicy === window.PermissionsPolicy, and
+            // document.featurePolicy reads `[object PermissionsPolicy]`).
+            pub const name = "PermissionsPolicy";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
             pub const empty_with_no_proto = true;
+            pub const constructor_aliases = [_][]const u8{"FeaturePolicy"};
         };
 
         pub const allowedFeatures = bridge.function(FeaturePolicy.allowedFeatures, .{});

@@ -297,7 +297,11 @@
     // document's own origin. The list itself is a version fingerprint, so it is
     // reproduced in Chrome's own iteration order.
     const fp = document.featurePolicy;
-    testing.expectEqual('FeaturePolicy', fp.constructor.name);
+    // Chrome 153 calls the interface PermissionsPolicy; FeaturePolicy is the
+    // same function object under its old name.
+    testing.expectEqual('PermissionsPolicy', fp.constructor.name);
+    testing.expectEqual('[object PermissionsPolicy]', Object.prototype.toString.call(fp));
+    testing.expectEqual(true, window.FeaturePolicy === window.PermissionsPolicy);
     testing.expectEqual(['allowedFeatures', 'allowsFeature', 'features', 'getAllowlistForFeature', 'constructor'],
                         Object.getOwnPropertyNames(FeaturePolicy.prototype));
     testing.expectEqual(76, fp.features().length);
@@ -410,7 +414,7 @@
   {
     // Only DocumentTimeline is constructible; the rest report an illegal
     // constructor, as Chrome does.
-    for (const name of ['FeaturePolicy', 'FragmentDirective', 'ViewTransition',
+    for (const name of ['FeaturePolicy', 'PermissionsPolicy', 'FragmentDirective', 'ViewTransition',
                         'ViewTransitionTypeSet', 'CaretPosition']) {
       testing.expectError('TypeError', () => new window[name]());
     }
