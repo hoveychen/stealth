@@ -28,6 +28,7 @@ const Event = @import("../Event.zig");
 const EventManagerBase = @import("../../EventManagerBase.zig");
 const EventTarget = @import("../EventTarget.zig");
 
+const DOMException = @import("../DOMException.zig");
 const FontFace = @import("FontFace.zig");
 const style_resources = @import("../../frame/style_resources.zig");
 
@@ -373,7 +374,14 @@ fn pending(exec: *const Execution) usize {
 /// Only the family matters here. The size, style and weight in the shorthand
 /// are parsed off and dropped: matching a face's weight against the
 /// shorthand's is a further question, and nothing measured yet turns on it.
-pub fn check(self: *FontFaceSet, font: []const u8, exec: *const Execution) bool {
+pub fn check(self: *FontFaceSet, font: []const u8, exec: *const Execution) !bool {
+    if (!isFontShorthand(font)) {
+        return exec.js.fail(error.SyntaxError, try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'check' on 'FontFaceSet': Could not resolve '{s}' as a font.",
+            .{font},
+        ));
+    }
     self.syncDeclared(exec);
     var it = familyList(font);
     while (it.next()) |family| {
@@ -384,6 +392,227 @@ pub fn check(self: *FontFaceSet, font: []const u8, exec: *const Execution) bool 
             if (std.mem.eql(u8, face.getStatus(), "loaded")) break;
             return false;
         }
+    }
+    return true;
+}
+
+/// Whether `font` parses as a CSS `font` shorthand, which is what `check()` and
+/// `load()` ask before anything else: a value that does not is a SyntaxError,
+/// not a `true`. Answering true for `''`, `serif` and `12px` used to put us one
+/// `try` apart from Chrome, which throws on all three.
+///
+/// The grammar is the one Chrome 153 was measured accepting (46 values,
+/// scratch/s116/fcheck.js): a lone system keyword, or up to four prefix slots
+/// (style with an optional oblique angle, small-caps, weight, stretch --
+/// `normal` filling any of them), a size, an optional `/line-height`, and a
+/// family list whose every entry is one string or a run of identifiers. A
+/// CSS-wide keyword anywhere, or a `var()`, fails.
+fn isFontShorthand(font: []const u8) bool {
+    const input = std.mem.trim(u8, font, &std.ascii.whitespace);
+    if (input.len == 0) return false;
+    if (std.ascii.indexOfIgnoreCase(input, "var(") != null) return false;
+
+    for (system_font_keywords) |keyword| {
+        if (std.ascii.eqlIgnoreCase(input, keyword)) return true;
+    }
+
+    var buf: [64][]const u8 = undefined;
+    const tokens = tokenize(input, &buf) orelse return false;
+    var i: usize = 0;
+
+    var slots: u8 = 0;
+    var style = false;
+    var variant = false;
+    var weight = false;
+    var stretch = false;
+    while (i < tokens.len) : (i += 1) {
+        const token = tokens[i];
+        const flag: ?*bool = if (eqlAny(token, &.{"normal"}))
+            null
+        else if (eqlAny(token, &.{ "italic", "oblique" }))
+            &style
+        else if (eqlAny(token, &.{"small-caps"}))
+            &variant
+        else if (eqlAny(token, &.{ "bold", "bolder", "lighter" }) or isWeightNumber(token))
+            &weight
+        else if (eqlAny(token, &stretch_keywords))
+            &stretch
+        else
+            break;
+        if (flag) |seen| {
+            if (seen.*) return false;
+            seen.* = true;
+        }
+        slots += 1;
+        if (slots > 4) return false;
+        if (std.ascii.eqlIgnoreCase(token, "oblique") and i + 1 < tokens.len and isAngle(tokens[i + 1])) {
+            i += 1;
+        }
+    }
+
+    if (i >= tokens.len or !isSize(tokens[i])) return false;
+    i += 1;
+    if (i < tokens.len and std.mem.eql(u8, tokens[i], "/")) {
+        i += 1;
+        if (i >= tokens.len or !isLineHeight(tokens[i])) return false;
+        i += 1;
+    }
+
+    // The family list: at least one entry, none of them empty.
+    if (i >= tokens.len) return false;
+    var idents: usize = 0;
+    var quoted = false;
+    while (i < tokens.len) : (i += 1) {
+        const token = tokens[i];
+        if (std.mem.eql(u8, token, ",")) {
+            if (idents == 0 and !quoted) return false;
+            idents = 0;
+            quoted = false;
+            continue;
+        }
+        if (token[0] == '"' or token[0] == '\'') {
+            if (quoted or idents != 0) return false;
+            if (token.len < 2 or token[token.len - 1] != token[0]) return false;
+            quoted = true;
+            continue;
+        }
+        if (quoted or !isIdent(token) or eqlAny(token, &css_wide_keywords)) return false;
+        idents += 1;
+    }
+    return idents != 0 or quoted;
+}
+
+const system_font_keywords = [_][]const u8{ "caption", "icon", "menu", "message-box", "small-caption", "status-bar" };
+const css_wide_keywords = [_][]const u8{ "inherit", "initial", "unset", "revert", "revert-layer" };
+const stretch_keywords = [_][]const u8{
+    "ultra-condensed", "extra-condensed", "condensed",      "semi-condensed",
+    "semi-expanded",   "expanded",        "extra-expanded", "ultra-expanded",
+};
+const size_keywords = [_][]const u8{
+    "xx-small", "x-small",  "small",     "medium", "large",
+    "x-large",  "xx-large", "xxx-large", "larger", "smaller",
+};
+const length_units = [_][]const u8{
+    "px",   "pt",  "pc",    "in",    "cm",  "mm",  "q",   "em",  "rem", "ex",  "rex",
+    "ch",   "rch", "cap",   "rcap",  "ic",  "ric", "lh",  "rlh", "vw",  "vh",  "vmin",
+    "vmax", "vi",  "vb",    "svw",   "svh", "lvw", "lvh", "dvw", "dvh", "cqw", "cqh",
+    "cqi",  "cqb", "cqmin", "cqmax",
+};
+
+/// Splits on whitespace, and makes `,` and `/` tokens of their own. A quoted
+/// string and a parenthesised function stay one token each. Null when there
+/// are more tokens than `buf` holds or a quote or paren is left open.
+fn tokenize(input: []const u8, buf: [][]const u8) ?[]const []const u8 {
+    var n: usize = 0;
+    var at: usize = 0;
+    while (at < input.len) {
+        const c = input[at];
+        if (std.ascii.isWhitespace(c)) {
+            at += 1;
+            continue;
+        }
+        const start = at;
+        if (c == ',' or c == '/') {
+            at += 1;
+        } else if (c == '"' or c == '\'') {
+            at += 1;
+            while (at < input.len and input[at] != c) : (at += 1) {
+                if (input[at] == '\\') at += 1;
+            }
+            if (at >= input.len) return null;
+            at += 1;
+        } else {
+            var depth: usize = 0;
+            while (at < input.len) : (at += 1) {
+                const d = input[at];
+                if (d == '(') depth += 1;
+                if (d == ')') {
+                    if (depth == 0) return null;
+                    depth -= 1;
+                }
+                if (depth == 0 and (std.ascii.isWhitespace(d) or d == ',' or d == '/' or d == '"' or d == '\'')) break;
+            }
+            if (depth != 0) return null;
+        }
+        if (n == buf.len) return null;
+        buf[n] = input[start..at];
+        n += 1;
+    }
+    return buf[0..n];
+}
+
+fn eqlAny(token: []const u8, comptime words: []const []const u8) bool {
+    for (words) |word| {
+        if (std.ascii.eqlIgnoreCase(token, word)) return true;
+    }
+    return false;
+}
+
+fn isNumber(token: []const u8) ?f64 {
+    if (token.len == 0) return null;
+    // parseFloat also takes `inf`, `nan` and hex, none of which CSS spells.
+    const c = token[0];
+    if (!(std.ascii.isDigit(c) or c == '.' or c == '+' or c == '-')) return null;
+    if (std.mem.indexOfAny(u8, token, "xXnN") != null) return null;
+    return std.fmt.parseFloat(f64, token) catch null;
+}
+
+fn isWeightNumber(token: []const u8) bool {
+    const value = isNumber(token) orelse return false;
+    return value >= 1 and value <= 1000;
+}
+
+fn isMathFunction(token: []const u8) bool {
+    if (token.len == 0 or token[token.len - 1] != ')') return false;
+    const open = std.mem.indexOfScalar(u8, token, '(') orelse return false;
+    return eqlAny(token[0..open], &.{ "calc", "min", "max", "clamp" });
+}
+
+/// A non-negative number followed by `unit`, where `unit` is one of `units`.
+fn isDimension(token: []const u8, comptime units: []const []const u8) bool {
+    for (units) |unit| {
+        if (token.len <= unit.len or !std.ascii.endsWithIgnoreCase(token, unit)) continue;
+        // `2rem` also ends in `em`; that reading leaves `2r`, so try the next.
+        const value = isNumber(token[0 .. token.len - unit.len]) orelse continue;
+        return value >= 0;
+    }
+    return false;
+}
+
+fn isSize(token: []const u8) bool {
+    if (eqlAny(token, &size_keywords) or isMathFunction(token)) return true;
+    if (isDimension(token, &length_units) or isDimension(token, &.{"%"})) return true;
+    const zero = isNumber(token) orelse return false;
+    return zero == 0;
+}
+
+fn isLineHeight(token: []const u8) bool {
+    if (std.ascii.eqlIgnoreCase(token, "normal") or isMathFunction(token)) return true;
+    if (isDimension(token, &length_units) or isDimension(token, &.{"%"})) return true;
+    const value = isNumber(token) orelse return false;
+    return value >= 0;
+}
+
+fn isAngle(token: []const u8) bool {
+    for ([_][]const u8{ "deg", "grad", "rad", "turn" }) |unit| {
+        if (token.len <= unit.len or !std.ascii.endsWithIgnoreCase(token, unit)) continue;
+        if (isNumber(token[0 .. token.len - unit.len]) != null) return true;
+    }
+    return false;
+}
+
+/// A CSS identifier: not starting with a digit, nor with `-` and a digit.
+fn isIdent(token: []const u8) bool {
+    var rest = token;
+    if (rest[0] == '-') {
+        rest = rest[1..];
+        if (rest.len == 0) return false;
+        if (rest[0] == '-') return true;
+    }
+    if (std.ascii.isDigit(rest[0])) return false;
+    for (rest) |c| {
+        if (std.ascii.isAlphanumeric(c) or c == '-' or c == '_' or c >= 0x80 or c == '\\') continue;
+        return false;
     }
     return true;
 }
@@ -426,9 +655,15 @@ const FamilyIterator = struct {
 
 // load(font, text?) - resolves immediately with an empty array.
 pub fn load(self: *FontFaceSet, font: []const u8, exec: *const Execution) !js.Promise {
+    // A value that does not parse rejects before any event goes out.
+    if (!isFontShorthand(font)) {
+        var resolver = exec.js.local.?.createPromiseResolver();
+        const message = try std.fmt.allocPrint(exec.arena, "Could not resolve '{s}' as a font.", .{font});
+        resolver.reject("FontFaceSet.load", DOMException.init(message, "SyntaxError"));
+        return resolver.promise();
+    }
     // TODO parse font to check if the font has been added before dispatching
     // events.
-    _ = font;
 
     const target = self.asEventTarget();
     try dispatch(exec, target, "loading");
@@ -588,6 +823,36 @@ const handler_property = @import("../handler_property.zig");
 /// handler store rather than in a field here.
 fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
     return handler_property.accessors(T, which);
+}
+
+test "FontFaceSet: the font shorthand check() and load() accept" {
+    // Every row measured on Chrome 153 (scratch/s116/fcheck.js).
+    const valid = [_][]const u8{
+        "12px serif",            "bold 12px serif",      "italic bold 12px/1.5 Arial, sans-serif",
+        "12px \"Courier New\"",  "caption",              "menu",
+        "0px serif",             "1e1px serif",          "12PX serif",
+        "small-caps 12px serif", "condensed 12px serif", "12px/normal serif",
+        "large serif",           "larger serif",         "50% serif",
+        "1em serif",             "2rem serif",           "calc(10px + 2px) serif",
+        "12px a b c",            "  12px   serif  ",     "oblique 10deg 12px serif",
+        "100 12px serif",        "1000 12px serif",      "normal normal normal normal 12px serif",
+        "12px system-ui",        "12px /1 serif",
+    };
+    const invalid = [_][]const u8{
+        "",                     "serif",        "12px",            "inherit",
+        "initial",              "12px inherit", "12 serif",        "-1px serif",
+        "12px serif,",          "12px ,serif",  "12px serif, ,x",  "foo 12px serif",
+        "bold bold 12px serif", "12px/ serif",  "12px 123",        "12px \"a\" b",
+        "12px var(--x)",        "12px serif;",  "1001 12px serif", "normal normal normal normal normal 12px serif",
+    };
+    for (valid) |font| {
+        errdefer std.debug.print("rejected {s}\n", .{font});
+        try std.testing.expect(isFontShorthand(font));
+    }
+    for (invalid) |font| {
+        errdefer std.debug.print("accepted {s}\n", .{font});
+        try std.testing.expect(!isFontShorthand(font));
+    }
 }
 
 test "WebApi: FontFaceSet" {
