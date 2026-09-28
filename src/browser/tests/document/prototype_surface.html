@@ -292,18 +292,24 @@
   {
     testing.expectEqual('object', typeof document.featurePolicy);
     testing.expectEqual('function', typeof window.FeaturePolicy);
-    // document.featurePolicy. Chrome 150 reports 82 permission-policy features
+    // document.featurePolicy. Chrome 153 reports 76 permission-policy features
     // at a top-level document, all of them allowed, each allowlisted to the
     // document's own origin. The list itself is a version fingerprint, so it is
     // reproduced in Chrome's own iteration order.
     const fp = document.featurePolicy;
-    testing.expectEqual('FeaturePolicy', fp.constructor.name);
+    // Chrome 153 calls the interface PermissionsPolicy; FeaturePolicy is the
+    // same function object under its old name.
+    testing.expectEqual('PermissionsPolicy', fp.constructor.name);
+    testing.expectEqual('[object PermissionsPolicy]', Object.prototype.toString.call(fp));
+    testing.expectEqual(true, window.FeaturePolicy === window.PermissionsPolicy);
     testing.expectEqual(['allowedFeatures', 'allowsFeature', 'features', 'getAllowlistForFeature', 'constructor'],
                         Object.getOwnPropertyNames(FeaturePolicy.prototype));
-    testing.expectEqual(82, fp.features().length);
+    testing.expectEqual(76, fp.features().length);
     testing.expectEqual('geolocation', fp.features()[0]);
-    testing.expectEqual('microphone', fp.features()[81]);
-    testing.expectEqual(82, fp.allowedFeatures().length);
+    testing.expectEqual('microphone', fp.features()[75]);
+    testing.expectEqual(76, fp.allowedFeatures().length);
+    // Retired in 153 with the rest of the Privacy Sandbox ads APIs.
+    testing.expectEqual(false, fp.features().includes('run-ad-auction'));
     testing.expectEqual(true, fp.allowsFeature('camera'));
     testing.expectEqual(false, fp.allowsFeature('bogus-xyz'));
     testing.expectEqual([location.origin], fp.getAllowlistForFeature('camera'));
@@ -408,7 +414,7 @@
   {
     // Only DocumentTimeline is constructible; the rest report an illegal
     // constructor, as Chrome does.
-    for (const name of ['FeaturePolicy', 'FragmentDirective', 'ViewTransition',
+    for (const name of ['FeaturePolicy', 'PermissionsPolicy', 'FragmentDirective', 'ViewTransition',
                         'ViewTransitionTypeSet', 'CaretPosition']) {
       testing.expectError('TypeError', () => new window[name]());
     }

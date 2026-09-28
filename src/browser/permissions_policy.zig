@@ -20,11 +20,8 @@ const std = @import("std");
 
 const Frame = @import("Frame.zig");
 
-// The features whose default allowlist is '*'. The first sixteen are what
-// Chrome 153 lists in a cross-origin frame's allowedFeatures(); the last six
-// are the Privacy Sandbox features, '*' by their specs, which that Chrome build
-// did not carry at all but the headed Chrome the feature list was taken from
-// does.
+// The features whose default allowlist is '*': the sixteen Chrome 153 lists
+// in a cross-origin frame's allowedFeatures().
 const star_default = [_][]const u8{
     "ch-save-data",
     "deferred-fetch-minimal",
@@ -42,13 +39,6 @@ const star_default = [_][]const u8{
     "storage-access",
     "sync-xhr",
     "picture-in-picture",
-
-    "shared-storage-select-url",
-    "shared-storage",
-    "run-ad-auction",
-    "private-aggregation",
-    "join-ad-interest-group",
-    "attribution-reporting",
 };
 
 pub fn isStarDefault(feature: []const u8) bool {

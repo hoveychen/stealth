@@ -50,7 +50,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(20, secure.gated.length);
       testing.expectEqual(7, secure.ungated.length);
       testing.expectEqual(true, secure.navCpuPerformance);
-      testing.expectEqual(1207, secure.count);
+      testing.expectEqual(1208, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -79,7 +79,9 @@ insecure origin this suite can reach without a second listener.
       // totals parted company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(969, insecure.count);
+      // 1208 once PermissionsPolicy became the interface's name, with
+      // FeaturePolicy kept as an alias; neither is [SecureContext].
+      testing.expectEqual(970, insecure.count);
     });
   }
 </script>
@@ -111,7 +113,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
       testing.expectEqual(false, grandchild.navCpuPerformance);
-      testing.expectEqual(969, grandchild.count);
+      testing.expectEqual(970, grandchild.count);
     });
   }
 </script>

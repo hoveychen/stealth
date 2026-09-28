@@ -72,7 +72,7 @@ Every default below is measured on a headed Chrome 151
 <script id="iframe_feature_policy_and_svg_document">
   {
     const f = document.createElement('iframe');
-    testing.expectEqual('FeaturePolicy', f.featurePolicy.constructor.name);
+    testing.expectEqual('PermissionsPolicy', f.featurePolicy.constructor.name);
     // Chrome hands back the same object every time.
     testing.expectEqual(true, f.featurePolicy === f.featurePolicy);
 
