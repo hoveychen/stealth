@@ -181,6 +181,57 @@ export const ANTIBOT = [
     // which is also why the SDK script is not on its own a challenge mark.
     { name: 'aw-binance', vendor: 'awswaf', url: 'https://www.binance.com/en', settleMs: 25000, guards: 'challenge' },
     { name: 'aw-hollandandbarrett', vendor: 'awswaf', url: 'https://www.hollandandbarrett.com/', settleMs: 25000, guards: 'none' },
+
+    // --- the fifth batch (2026-09-29): screened by running the JavaScript ---
+    //
+    // The third batch's note says it outright: Akamai, PerimeterX, Imperva
+    // and Kasada mostly guard with a sensor that runs in the page, so a bare
+    // curl answers 200 and the candidate screens out even though it is a
+    // guard in a browser. These were screened the other way: headed-UA Chrome
+    // loaded each page and the vendor was read off what was actually served --
+    // cookie names (`_abck`/`bm_sv`, `_px*`, `incap_ses`/`reese84`,
+    // `aws-waf-token`, `datadome`), script and resource hosts (`/px/`,
+    // Kasada's fixed `/149e9513-…/` path, `ponos.zeronaught.com` for Shape,
+    // `/cdn-cgi/challenge-platform/`). Never a CSP entry.
+    //
+    // A site can carry more than one vendor: walmart sets PerimeterX, Akamai
+    // and F5 cookies at once, nike and sephora both Akamai and Kasada. The
+    // name's prefix is the vendor whose refusal the site is known to show.
+    // Ten of thirty-five candidates did not make it: Chrome itself was served
+    // a block, challenge or geo page (britishairways, dickssportinggoods,
+    // grubhub, footlocker, chewy, ssense), or nothing served named a vendor (starbucks,
+    // ticketmaster, ryanair, wizzair). nordstrom keeps the `x-` prefix: it
+    // has Shape-shaped randomised cookie names and a 237KB inline script, but
+    // no Shape host.
+    //
+    // `guards: 'sensor'` is new here: the page is served to anyone and the
+    // guard's say comes from its script, so a pass on this row is only a
+    // reading of the first page load.
+    { name: 'ak-bestbuy', vendor: 'akamai', url: 'https://www.bestbuy.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-lowes', vendor: 'akamai', url: 'https://www.lowes.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-united', vendor: 'akamai', url: 'https://www.united.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-walgreens', vendor: 'akamai', url: 'https://www.walgreens.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-delta', vendor: 'akamai', url: 'https://www.delta.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-kroger', vendor: 'akamai', url: 'https://www.kroger.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-lululemon', vendor: 'akamai', url: 'https://www.lululemon.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ak-rei', vendor: 'akamai', url: 'https://www.rei.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'px-walmart', vendor: 'perimeterx', url: 'https://www.walmart.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'px-target', vendor: 'perimeterx', url: 'https://www.target.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'px-fiverr', vendor: 'perimeterx', url: 'https://www.fiverr.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'px-priceline', vendor: 'perimeterx', url: 'https://www.priceline.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-nike', vendor: 'kasada', url: 'https://www.nike.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-sephora', vendor: 'kasada', url: 'https://www.sephora.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-twitch', vendor: 'kasada', url: 'https://www.twitch.tv/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-costco', vendor: 'kasada', url: 'https://www.costco.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-realestate', vendor: 'kasada', url: 'https://www.realestate.com.au/', settleMs: 25000, guards: 'sensor' },
+    { name: 'ks-realtor', vendor: 'kasada', url: 'https://www.realtor.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'im-pepsico', vendor: 'imperva', url: 'https://www.pepsico.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'im-imperva', vendor: 'imperva', url: 'https://www.imperva.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'sh-southwest', vendor: 'shape', url: 'https://www.southwest.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'x-nordstrom', vendor: 'unknown', url: 'https://www.nordstrom.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'aw-booking', vendor: 'awswaf', url: 'https://www.booking.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'dd-whitepages', vendor: 'datadome', url: 'https://www.whitepages.com/', settleMs: 25000, guards: 'sensor' },
+    { name: 'cf-stockx', vendor: 'cloudflare', url: 'https://stockx.com/', settleMs: 25000, guards: 'sensor' },
 ];
 
 // What a guard's own page looks like from inside it. Signals are recorded raw
