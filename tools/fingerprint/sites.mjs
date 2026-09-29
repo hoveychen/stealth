@@ -207,6 +207,13 @@ export const ANTIBOT = [
     // `guards: 'sensor'` is new here: the page is served to anyone and the
     // guard's say comes from its script, so a pass on this row is only a
     // reading of the first page load.
+    //
+    // Measured the day they went in, one station at a time with the arm that
+    // goes first alternating: 23 of the 25 pass on both arms, ak-kroger
+    // passes this engine and answers headed-UA Chrome 429, and cf-stockx
+    // refuses whichever arm it likes -- a 403 "Please log in to verify you
+    // are not a bot" on the first document request, Chrome 2 in 5 and this
+    // engine 2 in 4, so it is a rate on both and not a door.
     { name: 'ak-bestbuy', vendor: 'akamai', url: 'https://www.bestbuy.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-lowes', vendor: 'akamai', url: 'https://www.lowes.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-united', vendor: 'akamai', url: 'https://www.united.com/', settleMs: 25000, guards: 'sensor' },
