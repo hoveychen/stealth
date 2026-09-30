@@ -214,12 +214,19 @@ export const ANTIBOT = [
     // refuses whichever arm it likes -- a 403 "Please log in to verify you
     // are not a bot" on the first document request, Chrome 2 in 5 and this
     // engine 2 in 4, so it is a rate on both and not a door.
+    //
+    // ak-kroger and sh-southwest were dropped on 2026-09-30. From this
+    // machine's resolver both apexes answer SERVFAIL (bestbuy on the same
+    // resolver answers fine), so both arms stop at DNS -- Chrome on
+    // ERR_NAME_NOT_RESOLVED, this engine on CouldntResolveHost -- and neither
+    // row ever measured a guard. DoH through the tunnel resolves them, so the
+    // sites are up; it is the address this sweep runs from that cannot reach
+    // them. That leaves the table without a Shape station.
     { name: 'ak-bestbuy', vendor: 'akamai', url: 'https://www.bestbuy.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-lowes', vendor: 'akamai', url: 'https://www.lowes.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-united', vendor: 'akamai', url: 'https://www.united.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-walgreens', vendor: 'akamai', url: 'https://www.walgreens.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-delta', vendor: 'akamai', url: 'https://www.delta.com/', settleMs: 25000, guards: 'sensor' },
-    { name: 'ak-kroger', vendor: 'akamai', url: 'https://www.kroger.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-lululemon', vendor: 'akamai', url: 'https://www.lululemon.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'ak-rei', vendor: 'akamai', url: 'https://www.rei.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'px-walmart', vendor: 'perimeterx', url: 'https://www.walmart.com/', settleMs: 25000, guards: 'sensor' },
@@ -234,7 +241,6 @@ export const ANTIBOT = [
     { name: 'ks-realtor', vendor: 'kasada', url: 'https://www.realtor.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'im-pepsico', vendor: 'imperva', url: 'https://www.pepsico.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'im-imperva', vendor: 'imperva', url: 'https://www.imperva.com/', settleMs: 25000, guards: 'sensor' },
-    { name: 'sh-southwest', vendor: 'shape', url: 'https://www.southwest.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'x-nordstrom', vendor: 'unknown', url: 'https://www.nordstrom.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'aw-booking', vendor: 'awswaf', url: 'https://www.booking.com/', settleMs: 25000, guards: 'sensor' },
     { name: 'dd-whitepages', vendor: 'datadome', url: 'https://www.whitepages.com/', settleMs: 25000, guards: 'sensor' },
