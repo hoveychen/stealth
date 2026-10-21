@@ -89,6 +89,18 @@ pub fn onLinkDisconnect(self: *const Driver, err: ?anyerror) void {
     self.wakeup();
 }
 
+// server loop. A close frame was consumed: onReadable already pushed .close and
+// woke the worker. That is enough for a worker that gets back to its inbox, and
+// a worker running page JS never does -- a `for (;;) {}` held a whole core, a
+// browser and a --cdp-max-connections slot until the watchdog fired (30s by
+// default, measured stalled_ms=30878) after the client had already hung up.
+// The peer is leaving either way, so cut the JS short the way a dropped socket
+// does: .close is already queued, which is what tick() pops once it sees the
+// pending terminate, and it still answers with CLOSE_NORMAL.
+pub fn onCloseFrame(self: *const Driver) void {
+    self.browser.env.requestTerminate();
+}
+
 // server loop. We used to send a nice WS close frame here but (a) it isn't strictly
 // required and (b) we'd have to protect against an interleaved write from
 // the worker thread.

@@ -183,6 +183,23 @@ driver: ?Driver = null,
 // until _tick is called and picks it up.
 disconnected: bool = false,
 
+// Set by the fetches the HTML parser stops for (a parser-blocking
+// <script src>, a blocking stylesheet) for as long as it waits. Chrome's main
+// thread is free while its parser waits on the network, so DevTools gets
+// answers; ours sat in the .sync_wait drain, which dispatches nothing but Fetch
+// interception, and a script that never arrived took every CDP command down
+// with it -- Runtime.evaluate included, so a crawler that timed out could not
+// even read the half-built DOM. While this is set (and nothing else is on the
+// stack, see mayServeWhileParserBlocked) the head of the inbox is dispatched
+// too if it is a read-only command. The parser itself stays where it is.
+parser_blocked: bool = false,
+
+// > 0 while drainInbox is inside a driver dispatch. A command handler that
+// parses a document with a blocking script in it (Page.setDocumentContent)
+// waits on the network from inside the dispatch, and a second command handled
+// there would reset the CDP message arena the first one is still using.
+dispatch_depth: u32 = 0,
+
 // Test-only: an inbox for a client with no driver (the shared test browser),
 // so the pending-teardown checks can be exercised without a CDP connection.
 test_inbox: if (lp.IS_TEST) ?*Inbox else void = if (lp.IS_TEST) null else {},
@@ -1752,17 +1769,29 @@ fn drainInbox(self: *Client, mode: DrainMode) !void {
     while (true) {
         const msg = switch (mode) {
             .all => inbox.pop(),
-            .sync_wait => inbox.popIf(allowDuringSyncWait),
+            .sync_wait => inbox.popIf(allowDuringSyncWait) orelse blk: {
+                if (self.mayServeWhileParserBlocked(driver) == false) {
+                    break :blk null;
+                }
+                // The head only: a read-only command queued behind one that
+                // has to wait (a navigation) waits with it, so the client
+                // still sees its commands run in the order it sent them.
+                break :blk inbox.popFirstIf(allowWhileParserBlocked);
+            },
             .terminal => inbox.popIf(isTerminal),
         } orelse return;
 
         defer msg.deinit();
 
         switch (msg.payload) {
-            .cdp, .bidi => driver.onMessage(msg) catch |err| {
-                // A single malformed/failed dispatch shouldn't poison
-                // the rest of the batch — log and continue.
-                log.err(.app, "client dispatch", .{ .err = err });
+            .cdp, .bidi => {
+                self.dispatch_depth += 1;
+                defer self.dispatch_depth -= 1;
+                driver.onMessage(msg) catch |err| {
+                    // A single malformed/failed dispatch shouldn't poison
+                    // the rest of the batch — log and continue.
+                    log.err(.app, "client dispatch", .{ .err = err });
+                };
             },
             .ping => |body| driver.onPing(body),
             .close => {
@@ -1799,6 +1828,68 @@ fn allowDuringSyncWait(msg: *Inbox.Message) bool {
         // safe to dispatch from inside a JS callback.
         .bidi => false,
     };
+}
+
+// Whether this .sync_wait may also serve the commands of
+// allowWhileParserBlocked. Only the parser's own waits opt in, and only when
+// that wait is all that is on the stack:
+//  - script on the stack (document.write of a <script src>, a sync XHR made by
+//    an evaluated expression) would have Runtime.evaluate run nested inside it;
+//  - a dispatch on the stack (Page.setDocumentContent parsing a blocking
+//    script) would have a second command reset the first one's arena.
+// Every other sync wait (sync XHR, module imports, importScripts) still serves
+// nothing, which is also what Chrome's main thread does for a sync XHR.
+fn mayServeWhileParserBlocked(self: *const Client, driver: *const Driver) bool {
+    if (self.parser_blocked == false or self.dispatch_depth > 0) {
+        return false;
+    }
+    return driver.browser.env.scriptOnStack() == false;
+}
+
+fn allowWhileParserBlocked(msg: *Inbox.Message) bool {
+    return switch (msg.payload) {
+        .cdp => |c| isReadOnlyWhileParserBlocked(c.input.method),
+        .ping, .close, .disconnect, .bidi => false,
+    };
+}
+
+// Commands that can run with the parser parked on the stack: they read the
+// page as far as it has been parsed, or run the client's own expression
+// against it, and none of them navigates, closes or replaces anything the
+// waiting parser holds. Runtime evaluation is the reason this exists -- it is
+// how a crawler takes the partial DOM once its deadline passes -- and the rest
+// are the reads that come with it (the service asks for the markdown and the
+// cookies alongside the HTML). An evaluated expression can do what any page
+// script can do mid-parse; what it cannot do from here is reach the parser:
+// document.open() is a no-op while the document is parsing, so a stray
+// document.write() is dropped rather than spliced into the waiting parse.
+fn isReadOnlyWhileParserBlocked(method: []const u8) bool {
+    const methods = [_][]const u8{
+        "Runtime.evaluate",
+        "Runtime.callFunctionOn",
+        "Runtime.getProperties",
+        "Runtime.releaseObject",
+        "Runtime.releaseObjectGroup",
+        "LP.getMarkdown",
+        "Network.getAllCookies",
+        "Network.getCookies",
+        "Storage.getCookies",
+        "DOM.getDocument",
+        "DOM.querySelector",
+        "DOM.querySelectorAll",
+        "DOM.getOuterHTML",
+        "DOM.describeNode",
+        "Page.getFrameTree",
+        "Target.getTargets",
+        "Target.getTargetInfo",
+        "Browser.getVersion",
+    };
+    for (methods) |m| {
+        if (std.mem.eql(u8, method, m)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn isTerminal(msg: *Inbox.Message) bool {
@@ -2926,6 +3017,16 @@ pub const Transfer = struct {
         // a previous interrupted fetch. The first tickSync below would fail
         // anyway; bail before submitting and notifying CDP.
         if (client.hasPendingTeardown()) {
+            self.deinit();
+            return error.SyncWaitInterrupted;
+        }
+
+        // One blocking request per frame. A second one can only be started by
+        // script that runs while the parser waits on the first -- an
+        // expression a CDP client evaluated meanwhile, making a sync XHR (see
+        // parser_blocked). Taking the slot would gate the parser's own fetch
+        // behind it; refuse instead, and the XHR throws a NetworkError.
+        if (client.blocking_requests.contains(self.req.frame_id)) {
             self.deinit();
             return error.SyncWaitInterrupted;
         }

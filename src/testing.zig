@@ -617,6 +617,14 @@ test "tests:beforeAll" {
             .ws_max_concurrent = 50,
             .load_resources = .{ .worker = true, .iframe = true },
             .watchdog_ms = 0,
+            // V8 puts an isolate's JS stack limit at the thread's stack start
+            // minus --stack-size (984 KB), and a Debug build on x86_64 Linux
+            // is already deeper than that when beforeAll builds test_browser
+            // on the main thread: its first Script::Compile failed with
+            // "Maximum call stack size exceeded" and not one test ran (see
+            // Snapshot.create for the same trap at startup). No test reads
+            // the recursion depth this moves.
+            .v8_flags_unsafe = if (@import("builtin").target.os.tag == .linux) "--stack-size=4000" else null,
         },
     });
 

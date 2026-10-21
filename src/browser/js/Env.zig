@@ -783,6 +783,18 @@ pub fn terminatePending(self: *const Env) bool {
     return self.terminate_requested.load(.acquire);
 }
 
+/// True while script is on the stack in any realm: a native call made from JS,
+/// or JS called from native, is still in progress somewhere (the same
+/// call_depth runMicrotasks consults before cancelling a terminate).
+pub fn scriptOnStack(self: *const Env) bool {
+    for (self.contexts.items) |ctx| {
+        if (ctx.call_depth > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 pub fn terminate(self: *Env) void {
     self.terminate_mutex.lockUncancelable(lp.io);
     defer self.terminate_mutex.unlock(lp.io);

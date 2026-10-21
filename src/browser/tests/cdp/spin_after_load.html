@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<!-- Driven by Server.zig's "a close frame ends a page that is stuck in script".
+     Spins for six seconds once the page has loaded, then stops: long enough
+     that a close answered only after the spin reads as a failure, short enough
+     that a broken build fails the test instead of hanging the suite. -->
+<p id="spinning">spinning</p>
+<script>
+  setTimeout(() => {
+    const end = Date.now() + 6000;
+    while (Date.now() < end) {}
+  }, 0);
+</script>
