@@ -58,7 +58,7 @@ const EventTarget = @import("EventTarget.zig");
 const Event = @import("Event.zig");
 const DOMException = @import("DOMException.zig");
 const dictionary = @import("dictionary.zig");
-const mime = @import("../mime.zig");
+const Mime = @import("../Mime.zig");
 const Factory = @import("../Factory.zig");
 const Window = @import("Window.zig");
 const DedicatedWorkerGlobalScope = @import("DedicatedWorkerGlobalScope.zig");
@@ -649,7 +649,7 @@ pub const FileEntry = struct {
         errdefer arena.release();
 
         const handle = try Factory.chainedWithAllocator(arena.allocator(), .{
-            try Blob.buildValueFromBytes(arena, node.contents, mime.fromExtension(node.name)),
+            try Blob.buildValueFromBytes(arena, node.contents, Mime.fromExtension(node.name)),
             File{
                 ._proto = undefined,
                 ._name = try arena.dupe(u8, node.name),
