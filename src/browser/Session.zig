@@ -189,14 +189,14 @@ pub fn deinit(self: *Session) void {
 
     self.cookie_jar.deinit();
 
-    {
-        // Every context is disposed; this GC must not arm a termination.
-        const env = &self.browser.env;
-        const was_tearing_down = env.tearing_down;
-        env.tearing_down = true;
-        defer env.tearing_down = was_tearing_down;
-        env.memoryPressureNotification(.critical);
-    }
+    // No GC hint here, and none in Page.deinit: V8 collects the disposed
+    // contexts on its own schedule. A critical notification on every closed
+    // session (one per crawl on a reused CDP connection) emptied V8's
+    // process-wide page pool, which the next page refilled under the same
+    // mutex; at 64 connections the workers spent 39% of their time asleep
+    // on it and throughput halved. The moderate one Page.deinit used to send
+    // has to stay out too: on its own it starts a memory-reducing incremental
+    // mark for every page, and that measured slower than sending both.
 
     self.storage_shed.deinit(self.browser.app.allocator);
     self.idb.deinit();

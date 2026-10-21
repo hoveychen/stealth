@@ -341,29 +341,41 @@ number of sessions there are (on disk, or in memory without `SESSION_DIR`),
 ## Scaling
 
 One container is one engine process and one Node process, and both have a
-per-process ceiling (`service/bench/`, measured on a 512-core host):
+per-process ceiling (`service/bench/`, small pages, measured on a 512-core
+host):
 
-- the service tops out around 800–850 small pages a second (one Node core),
-- the engine around 1,900 small pages a second, whatever `POOL_SIZE` is,
+- the service tops out around 1,000–1,100 small pages a second (one Node
+  core): 700–760 with `POOL_SIZE=16`, 930–1,050 with 32, 1,000–1,100 with 64,
+- the engine alone (`bench.mjs --mode cdp`) is well above that: 1,250 / 2,100 /
+  3,300 small pages a second at 16 / 32 / 64 connections, 1,500 / 2,900 / 4,800
+  with the container on one NUMA node (see [NUMA](#numa)),
 - heavy pages queue on the engine's shared HTTP connection pool unless it is
   raised, which the image does (`LP_HTTP_MAX_CONCURRENT=255`; with the
   engine's default of 40, 64 concurrent Wikipedia-sized loads ran at 16
   pages/s instead of 52).
 
 So **add containers for more concurrency, not slots**: `POOL_SIZE=16` per
-container, at most 32. Four containers of 16 served 2,500–2,600 small pages a
-second where one container of 64 served 800.
+container, 32 where memory allows (a quarter to a half more small pages a
+second for twice the memory), and no more: past 32 the Node process is the
+limit and a slot adds memory, not throughput. Four containers of 16 served
+2,500–2,600 small pages a second where one container of 64 served 800.
 
 Budget per slot, by the pages crawled:
 
 | page | engine memory per slot | CPU per busy slot |
 |---|---|---|
-| small (~35 KB, a script and a stylesheet) | ~6 MB | ~1.3 cores (the page's thread plus V8's background threads) |
+| small (~35 KB, a script and a stylesheet) | ~20 MB | ~1 core (the page's thread plus V8's background threads) |
 | large (a ~400 KB Wikipedia article, CPU-bound) | ~85 MB | ~1 core |
 
 and give each container `--cpus` of at least 1.3 × `POOL_SIZE`: below that,
 CFS throttling costs more than the cores taken away (16 slots on 16 cores lost
 27% on small pages; on 8 cores large pages ran at 6 pages/s instead of ~9).
+
+The small-page memory is V8 heap the engine no longer collects after every
+crawl. It used to ask V8 for a full GC each time a crawl's browser context
+closed, which kept a slot at ~6 MB but cost every small page about a third
+of its CPU time (18 → 11 ms at 16 slots, 17 → 12 ms at 64). V8 now collects
+on its own schedule; the heap levels off (see [Memory](#memory)).
 
 `compose.yaml` has a `crawl-multi` service (profile `multi`) that runs
 `CRAWL_REPLICAS` copies of the container on a range of host ports; put any
@@ -376,6 +388,36 @@ CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 docker compose -f service/compose.yaml --
 Sessions are per process: a replica keeps the jars it has loaded in memory, so
 send all requests of one `session_id` to the same replica (hash on it in the
 load balancer), or the replicas will each have their own copy of it.
+
+### NUMA
+
+On a host with more than one NUMA node, pin each container to the cores of one
+node. A container left free spreads its threads over every node, where they
+share V8's process-wide locks and the process's memory map across sockets
+(the likely cause; not measured directly). Pinned, the same container served
+(pages a second, same time window, 2 × 128-core EPYC host):
+
+| | 16 | 32 | 64 |
+|---|---|---|---|
+| engine alone (`--mode cdp`) | +23% | +36% | +47% |
+| through the service | −8% | +12% | +10% |
+
+Through the service at 16 slots the Node process is the limit either way; the
+gain is in the engine and grows with the slots. Find the nodes' cores with
+`lscpu | grep NUMA` or `/sys/devices/system/node/node*/cpulist`, then give
+each container one node (`docker run --cpuset-cpus`, or `CRAWL_CPUSET` in
+`compose.yaml`). With replicas, run one compose project per node:
+
+```bash
+for n in 0 1; do
+  CRAWL_CPUSET=$(cat /sys/devices/system/node/node$n/cpulist) CRAWL_REPLICAS=2 \
+  CRAWL_PORTS=808$((2 * n + 1))-808$((2 * n + 2)) \
+    docker compose -f service/compose.yaml -p crawl-node$n --profile multi up -d crawl-multi
+done
+```
+
+Each project gets its own `crawl-data` volume, which is fine: sessions are per
+replica anyway.
 
 ### Memory
 
@@ -402,6 +444,25 @@ object with a finalizer, an inspector id per in-place first navigation, and 4–
 bytes V8 kept per forced GC), and on one reused connection 1.07 million small
 pages over 40 minutes moved the engine from 96 to 94 MB (0.9 bytes a page,
 against 184 before).
+
+Since the engine stopped forcing a GC after every crawl (see
+[Scaling](#scaling)), V8 keeps more heap per slot, and it levels off. Same
+host, one container per row in the same 70-minute window, then 10 idle
+minutes, engine RSS:
+
+| load | before | now | now, glibc |
+|---|---|---|---|
+| small pages only, 8 slots, `--cpus 12` (10-minute means over 70 min) | 94–96 MB | 185–189 MB | – |
+| small pages: pages served / a second | 2.18 M / 522 | 2.61 M / 624 | – |
+| mixed, 16 slots, `--cpus 24` (mean and range, 30–70 min) | 778 MB (561–1,026) | 938 MB (781–1,179) | 2,094 MB (1,754–2,376) |
+| mixed, after 10 idle minutes | 256 MB | 298 MB | 1,547 MB |
+
+On small pages the engine went from 185 to 189 MB over 2.6 million pages
+(0.4 bytes a page); the mixed load's 10-minute means stayed within 900–962 MB
+with no trend. jemalloc is still the right allocator: glibc holds more than
+twice as much and gives little back, and with 64 connections on one NUMA node
+it served 3,735 small pages a second against jemalloc's 4,945 (at 16, 1,492
+against 1,528).
 
 ## How a crawl runs
 

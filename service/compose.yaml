@@ -7,6 +7,13 @@
 #
 #   CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 \
 #     docker compose -f service/compose.yaml --profile multi up -d crawl-multi
+#
+# On a host with more than one NUMA node, pin each container to one node's
+# cores with CRAWL_CPUSET (one compose project per node; see "NUMA" in
+# README.md). Unset, the containers may run on any core.
+#
+#   CRAWL_CPUSET=$(cat /sys/devices/system/node/node0/cpulist) CRAWL_REPLICAS=2 CRAWL_PORTS=8081-8082 \
+#     docker compose -f service/compose.yaml -p crawl-node0 --profile multi up -d crawl-multi
 x-crawl-env: &crawl-env
   POOL_SIZE: 4                  # concurrent crawls; for more, add containers (16 each, at most 32)
   QUEUE_MAX: 100                # waiting requests before 503 queue_full
@@ -36,6 +43,7 @@ services:
     # no network of its own, and creating one fails on a daemon whose address
     # pools are used up ("all predefined address pools have been fully subnetted").
     network_mode: bridge
+    cpuset: ${CRAWL_CPUSET:-}       # e.g. one NUMA node's cores; empty: any core
     ports:
       - "${CRAWL_PORT:-8080}:8080"   # host port; the engine's CDP port is not published
     volumes:
@@ -52,6 +60,7 @@ services:
     profiles: [multi]
     restart: unless-stopped
     network_mode: bridge
+    cpuset: ${CRAWL_CPUSET:-}
     ports:
       - "${CRAWL_PORTS:-8081-8084}:8080"
     volumes:

@@ -9,7 +9,8 @@
 #
 # Environment: IMAGE (lp-crawl:bench), NAME, POOL (POOL_SIZE, 16), CPUS
 # (docker --cpus, 24), C (load workers, POOL+4), MIX, PHASES, SAMPLE (30 s),
-# ENGINE_ARGS (--http-max-concurrent 255), SERVICE_ENV (extra `-e K=V ...`).
+# ENGINE_ARGS (--http-max-concurrent 255), SERVICE_ENV (extra `-e K=V ...`),
+# CPUSET (docker --cpuset-cpus, e.g. one NUMA node's cores).
 set -eu
 cd "$(dirname "$0")"
 IMAGE=${IMAGE:-lp-crawl:bench}
@@ -18,12 +19,12 @@ POOL=${POOL:-16}
 CPUS=${CPUS:-24}
 C=${C:-$((POOL + 4))}
 PAGE_HOST=${PAGE_HOST:-172.17.0.1}
-PAGE_PORT=${PAGE_PORT:-29890}
+PAGE_PORT=${PAGE_PORT:-29790}
 OUT=${OUT:-$NAME.jsonl}
 ENGINE_ARGS=${ENGINE_ARGS:---http-max-concurrent 255}
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
-docker run -d --name "$NAME" --cpus "$CPUS" -e POOL_SIZE="$POOL" ${SERVICE_ENV:-} "$IMAGE" $ENGINE_ARGS >/dev/null
+docker run -d --name "$NAME" --cpus "$CPUS" ${CPUSET:+--cpuset-cpus "$CPUSET"} -e POOL_SIZE="$POOL" ${SERVICE_ENV:-} "$IMAGE" $ENGINE_ARGS >/dev/null
 ip=$(docker inspect -f '{{.NetworkSettings.IPAddress}}' "$NAME")
 i=0; until curl -sf "http://$ip:8080/health" >/dev/null; do
   i=$((i + 1)); [ $i -gt 100 ] && { echo "container did not come up" >&2; exit 1; }; sleep 0.1; done

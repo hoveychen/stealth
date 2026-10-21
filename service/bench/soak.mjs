@@ -14,7 +14,7 @@
 // keep sampling, to see whether memory comes back.
 //
 // Classes (pages come from pagesrv.mjs):
-//   hn       small page, html + meta
+//   hn       small page (site/list.html), html + meta
 //   wiki     395 KB page, html + meta
 //   js       small page plus a script that builds 2,000 DOM nodes, eval + markdown
 //   throw    small page plus a script that throws (still a 200)
@@ -67,20 +67,23 @@ const JS_DOM = `(async () => {
 })()`;
 
 const P = o.pages;
+// The small page. The class keeps its old name: it was a snapshot of the
+// Hacker News front page, which list.html replaced (see README.md).
+const SMALL = 'list.html';
 const hangTimeout = +o['hang-timeout'];
 const CLASSES = {
-    hn: { url: `${P}/hn.html` },
+    hn: { url: `${P}/${SMALL}` },
     wiki: { url: `${P}/wiki.html` },
-    js: { url: `${P}/hn.html`, js: JS_DOM, formats: ['eval', 'markdown', 'meta'] },
-    throw: { url: `${P}/hn.html`, js: '(() => { throw new Error("soak") })()' },
+    js: { url: `${P}/${SMALL}`, js: JS_DOM, formats: ['eval', 'markdown', 'meta'] },
+    throw: { url: `${P}/${SMALL}`, js: '(() => { throw new Error("soak") })()' },
     hang: { url: `${P}/hang.html`, timeout: hangTimeout },
     hangdoc: { url: `${P}/hang`, timeout: hangTimeout },
     refused: { url: o.refused },
     spin: { url: `${P}/spin.html`, timeout: hangTimeout },
-    hnmin: { url: `${P}/hn.html`, formats: ['html'] },
+    hnmin: { url: `${P}/${SMALL}`, formats: ['html'] },
     empty: { url: `${P}/empty.html`, formats: ['html'] },
-    ev: { url: `${P}/hn.html`, js: 'window.__keep = Array.from({ length: 1000 }, () => new Event("x")).length', formats: ['eval', 'meta'] },
-    evgc: { url: `${P}/hn.html`, js: '(() => { let n = 0; for (let i = 0; i < 1000; i++) n += new Event("x").bubbles ? 1 : 0; return n })()', formats: ['eval', 'meta'] },
+    ev: { url: `${P}/${SMALL}`, js: 'window.__keep = Array.from({ length: 1000 }, () => new Event("x")).length', formats: ['eval', 'meta'] },
+    evgc: { url: `${P}/${SMALL}`, js: '(() => { let n = 0; for (let i = 0; i < 1000; i++) n += new Event("x").bubbles ? 1 : 0; return n })()', formats: ['eval', 'meta'] },
 };
 
 const mix = o.mix.split(',').map((kv) => {
