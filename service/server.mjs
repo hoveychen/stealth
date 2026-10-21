@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { Pool } from './lib/pool.mjs';
 import { crawl, normalizeRequest, RequestError } from './lib/crawl.mjs';
-import { normalizeProxyUrl, parseProxyList, ProxyPool } from './lib/proxies.mjs';
-import { SessionStore } from './lib/sessions.mjs';
+import { normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool } from './lib/proxies.mjs';
+import { SESSION_ID, SessionStore } from './lib/sessions.mjs';
 
 const env = (name, fallback) => process.env[name] ?? fallback;
 const int = (name, fallback) => {
@@ -38,7 +38,21 @@ const config = {
     partialGraceMs: nonNegInt('PARTIAL_GRACE_MS', 2000),
     proxyPoolDefault: bool('PROXY_POOL_DEFAULT', 'false'),
     sessionDir: env('SESSION_DIR', '') || null,
+    // Idle time after which a session's cookie jar is dropped (0: never).
+    // A week: long enough for a job that comes back daily or weekly to find
+    // its login, short enough that one-off session ids don't pile up on disk.
+    sessionTtlMs: nonNegInt('SESSION_TTL_MS', 7 * 24 * 3600 * 1000),
+    sessionSweepMs: int('SESSION_SWEEP_MS', 10 * 60 * 1000),
+    proxyRetries: nonNegInt('PROXY_POOL_RETRIES', 2),
+    proxyProbe: null,
 };
+if (env('PROXY_PROBE', '')) {
+    try {
+        config.proxyProbe = parseHostPort(process.env.PROXY_PROBE);
+    } catch (e) {
+        throw new Error(`PROXY_PROBE: ${e.message}`);
+    }
+}
 
 // Proxy pool: PROXY_POOL and the lines of PROXY_POOL_FILE, together.
 const proxyUrls = parseProxyList(env('PROXY_POOL', ''));
@@ -57,8 +71,15 @@ const proxies = proxyUrls.length
     : null;
 config.proxyPool = proxies;
 
-const sessions = new SessionStore({ dir: config.sessionDir });
+const sessions = new SessionStore({ dir: config.sessionDir, ttlMs: config.sessionTtlMs });
 await sessions.init();
+const sweepSessions = () =>
+    sessions.sweep().then(
+        (n) => n && log({ msg: 'sessions expired', count: n, ttlMs: config.sessionTtlMs }),
+        (e) => console.error(`session sweep failed: ${e.message}`),
+    );
+await sweepSessions();
+if (config.sessionTtlMs) setInterval(sweepSessions, config.sessionSweepMs).unref();
 
 const pool = new Pool({ cdpUrl: config.cdpUrl, size: config.poolSize, queueMax: config.queueMax });
 
@@ -115,7 +136,7 @@ async function handleCrawl(req, res) {
     }
     const t0 = Date.now();
     try {
-        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs });
+        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe });
         reply(res, 200, { url: params.url, ...out });
         log({ url: params.url, status: 200, ms: Date.now() - t0 });
     } catch (e) {
@@ -138,6 +159,22 @@ const server = http.createServer((req, res) => {
         });
         return;
     }
+    if (req.method === 'DELETE' && path.startsWith('/sessions/')) {
+        let id = path.slice('/sessions/'.length);
+        try {
+            id = decodeURIComponent(id);
+        } catch {}
+        if (!SESSION_ID.test(id)) return reply(res, 400, { error: { code: 'bad_request', message: 'session_id must be 1-128 characters of A-Z a-z 0-9 . _ -' } });
+        sessions.delete(id).then(
+            (had) => {
+                if (had) reply(res, 200, { deleted: id });
+                else reply(res, 404, { error: { code: 'not_found', message: `no session ${id}` } });
+                log({ msg: 'session delete', id, found: had });
+            },
+            (e) => reply(res, 500, { error: { code: 'internal', message: e.message } }),
+        );
+        return;
+    }
     if (req.method === 'GET' && path === '/health') {
         return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats() });
     }
@@ -147,7 +184,7 @@ const server = http.createServer((req, res) => {
 // Requests may legitimately hold for MAX_TIMEOUT_MS plus queueing.
 server.requestTimeout = 0;
 server.listen(config.port, config.host, 1024, () => {
-    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, sessionDir: config.sessionDir });
+    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs });
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {

@@ -58,13 +58,16 @@ export function startHttpProxy({ host = '127.0.0.1', port = 0, auth, broken = fa
         if (broken) return sock.end('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n');
         if (a === 'missing' || a === 'bad') return sock.end(DENY);
         const [h, p] = req.url.split(':');
+        let open = false;
         const up = net.connect(Number(p) || 443, h, () => {
+            open = true;
             sock.write('HTTP/1.1 200 Connection Established\r\n\r\n');
             if (head.length) up.write(head);
             up.pipe(sock);
             sock.pipe(up);
         });
-        up.on('error', () => sock.destroy());
+        // A target it can't reach gets a 502, as from squid or tinyproxy.
+        up.on('error', () => (open ? sock.destroy() : sock.end('HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n')));
         sock.on('error', () => up.destroy());
     });
     return listen(server, host, port, log);

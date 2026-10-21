@@ -129,7 +129,7 @@ async function loadOnce() {
     }
     if (mode === 'cdp') {
         const req = normalizeRequest({ url: pageUrl, timeout: timeoutMs }, { defaultTimeoutMs: timeoutMs, maxTimeoutMs: timeoutMs });
-        const out = await crawl(pool, req);
+        const out = await crawl(pool, req, { proxies: null, sessions: null, partialGraceMs: 0 });
         if (out.meta?.status !== 200) throw new Error(`page status ${out.meta?.status}`);
         return out.html.length;
     }

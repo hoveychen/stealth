@@ -3,7 +3,7 @@
 # with N connections each, one bench.mjs per container, all at once. Compare
 # with `multi.sh 1 K*N ...` to see what one engine process costs over several.
 #
-#   OUT=multi.jsonl sh service/bench/multi.sh 4 16 hn --http-max-concurrent 255
+#   OUT=multi.jsonl sh service/bench/multi.sh 4 16 list --http-max-concurrent 255
 #
 # Arguments after the page are passed to `lightpanda serve`. Environment: IMAGE,
 # NAME (container name prefix), MODE (cdp or service), PAGE_HOST, PAGE_PORT,

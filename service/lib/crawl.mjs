@@ -5,7 +5,7 @@
 // the next request on that slot starts from a new browser.
 
 import { CdpError } from './cdp.mjs';
-import { isProxyError, normalizeProxyUrl, proxyRejectsCredentials, redact } from './proxies.mjs';
+import { diagnoseProxyFailure, isProxyError, normalizeProxyUrl, redact } from './proxies.mjs';
 import { SESSION_ID } from './sessions.mjs';
 
 export const FORMATS = ['html', 'markdown', 'eval', 'meta'];
@@ -75,50 +75,101 @@ function contextParams(proxyUrl) {
 
 const HTML_EXPR = 'document.documentElement ? document.documentElement.outerHTML : ""';
 
-// deps: { proxies: ProxyPool | null, sessions: SessionStore, partialGraceMs }
-export async function crawl(pool, req, { proxies, sessions, partialGraceMs }) {
+// deps: { proxies: ProxyPool | null, sessions: SessionStore, partialGraceMs,
+// proxyRetries, proxyProbe }. With `proxy: "pool"`, a crawl that fails
+// because of its proxy is run again on the next pool proxy, up to
+// `proxyRetries` more times and within the same deadline, on the same slot.
+export async function crawl(pool, req, { proxies, sessions, partialGraceMs, proxyRetries = 0, proxyProbe = null }) {
     const t0 = Date.now();
     const deadline = t0 + req.timeout;
+    const tried = new Set();
+    const nextPoolProxy = () => {
+        const e = proxies.pick(tried);
+        if (e) tried.add(e);
+        return e;
+    };
     let poolProxy = null;
     if (req.proxy.mode === 'pool') {
-        poolProxy = proxies.pick();
+        poolProxy = nextPoolProxy();
         if (!poolProxy) throw new CdpError('no_proxy_available', `all ${proxies.size} pool proxies are ejected after repeated failures; see GET /health`);
     }
-    const proxyUrl = poolProxy?.url ?? (req.proxy.mode === 'url' ? req.proxy.url : null);
+    let proxyUrl = poolProxy?.url ?? (req.proxy.mode === 'url' ? req.proxy.url : null);
     const startCookies = req.sessionId ? await sessions.load(req.sessionId) : null;
     // Filled in as the crawl goes: the CDP session id, the cookies to save
-    // and, after a timeout, whatever snapshot could still be taken.
-    const page = { proxyUrl, startCookies, cookies: null, partial: null };
+    // and, after a timeout, whatever snapshot could still be taken. One per
+    // attempt; the cookies are the last ones any attempt read.
+    let page, cookies = null;
 
     let slot, keep = false;
     try {
         slot = await pool.acquire(deadline);
         const queueMs = Date.now() - t0;
-        const out = await runInContext(slot.conn, req, page, deadline, partialGraceMs, (ok) => (keep = ok));
-        if (out.meta) out.meta.timing = { queueMs, ...out.meta.timing, totalMs: Date.now() - t0 };
-        if (poolProxy) proxies.succeeded(poolProxy);
-        return out;
+        for (let attempt = 1; ; attempt++) {
+            page = { proxyUrl, startCookies, cookies: null, partial: null };
+            keep = false;
+            try {
+                const out = await runInContext(slot.conn, req, page, deadline, partialGraceMs, (ok) => (keep = ok));
+                cookies = page.cookies ?? cookies;
+                if (out.meta) out.meta.timing = { queueMs, ...out.meta.timing, totalMs: Date.now() - t0 };
+                if (poolProxy) proxies.succeeded(poolProxy);
+                return out;
+            } catch (e) {
+                cookies = page.cookies ?? cookies;
+                const { err, charge, retry } = await explainFailure(e, req, proxyUrl, deadline, proxyProbe);
+                if (poolProxy && charge) proxies.failed(poolProxy, err.message);
+                const next = poolProxy && retry && attempt <= proxyRetries && deadline > Date.now() ? nextPoolProxy() : null;
+                if (!next) {
+                    if (tried.size > 1) err.message += ` (tried ${tried.size} pool proxies)`;
+                    throw err;
+                }
+                poolProxy = next;
+                proxyUrl = next.url;
+                if (!keep) await pool.reset(slot, deadline);
+            }
+        }
     } catch (e) {
         let err = e;
-        if (e.code === 'navigation_failed' && proxyUrl && isProxyError(e.errorText)) {
-            err = (await proxyRejectsCredentials(proxyUrl))
-                ? new CdpError('proxy_auth_failed', `proxy ${redact(proxyUrl)} rejected the credentials (${e.errorText})`)
-                : new CdpError('proxy_failed', `proxy ${redact(proxyUrl)} failed: ${e.errorText} (${req.url})`);
-        }
-        if (poolProxy && (err.code === 'proxy_failed' || err.code === 'proxy_auth_failed')) proxies.failed(poolProxy, err.message);
         if (err.code === 'timeout') {
             err = new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout (${e.message})`);
             const partial = {};
-            if (req.formats.includes('html')) partial.html = page.partial?.html ?? null;
-            if (req.formats.includes('markdown')) partial.markdown = page.partial?.markdown ?? null;
+            if (req.formats.includes('html')) partial.html = page?.partial?.html ?? null;
+            if (req.formats.includes('markdown')) partial.markdown = page?.partial?.markdown ?? null;
             if (Object.keys(partial).length) err.partial = partial;
         }
         throw err;
     } finally {
         if (slot) pool.release(slot, { discard: !keep });
-        if (req.sessionId && page.cookies) {
-            await sessions.save(req.sessionId, startCookies, page.cookies).catch((e) => console.error(`session ${req.sessionId}: could not save cookies: ${e.message}`));
+        if (req.sessionId && cookies) {
+            await sessions.save(req.sessionId, startCookies, cookies).catch((e) => console.error(`session ${req.sessionId}: could not save cookies: ${e.message}`));
         }
+    }
+}
+
+// What a failed attempt means. `charge`: count it against the pool proxy;
+// `retry`: another pool proxy might do better. A proxy-type engine error is
+// checked with the proxy itself (diagnoseProxyFailure): only a proxy that is
+// down or rejects the credentials is charged; a target the proxy can't reach
+// while it reaches the probe is the target's failure; and when that can't be
+// told (no probe, or the tunnel opens fine when asked again) nothing is
+// charged but the next proxy is still tried.
+async function explainFailure(e, req, proxyUrl, deadline, probe) {
+    if (e.code === 'proxy_auth_failed') return { err: e, charge: true, retry: true };
+    if (!(e.code === 'navigation_failed' && proxyUrl && isProxyError(e.errorText))) return { err: e, charge: false, retry: false };
+    const left = deadline - Date.now();
+    const verdict = left > 0 ? await diagnoseProxyFailure(proxyUrl, req.url, { probe, timeoutMs: Math.min(2000, left) }) : 'unknown';
+    const name = redact(proxyUrl);
+    const host = new URL(req.url).host;
+    switch (verdict) {
+        case 'auth':
+            return { err: new CdpError('proxy_auth_failed', `proxy ${name} rejected the credentials (${e.errorText})`), charge: true, retry: true };
+        case 'proxy_down':
+            return { err: new CdpError('proxy_failed', `proxy ${name} failed: ${e.errorText} (${req.url})`), charge: true, retry: true };
+        case 'target_down': {
+            const err = navigationFailed(req.url, `${e.errorText}; proxy ${name} is up and reaches the probe address but not ${host}`);
+            return { err, charge: false, retry: false };
+        }
+        default:
+            return { err: new CdpError('proxy_failed', `proxy ${name} failed: ${e.errorText} (${req.url}); the proxy answers, so ${host} may be down instead${probe ? '' : ' (set PROXY_PROBE to tell them apart)'}`), charge: false, retry: true };
     }
 }
 

@@ -11,6 +11,13 @@
 // started with and no longer has is deleted, and a cookie it left alone is
 // not touched — so a cookie another crawl changed in the meantime survives.
 // When two crawls change the same cookie, the one that finishes last wins.
+//
+// A jar not used (loaded or saved) for `ttlMs` expires as a whole: sweep()
+// drops it from memory and deletes its file, and a load that finds it past
+// its TTL before the next sweep starts from an empty jar. On disk "last used"
+// is the file's mtime, which loads touch too. delete() drops a jar at once.
+// Either way, a crawl that loaded the jar before it was dropped does not
+// bring it back when it finishes.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -33,29 +40,56 @@ const expired = (c, nowS) => typeof c.expires === 'number' && c.expires > 0 && c
 
 export class SessionStore {
     // dir: where jars are persisted; null keeps them in memory only.
-    constructor({ dir = null } = {}) {
+    // ttlMs: idle time after which a jar expires; 0 never expires one.
+    constructor({ dir = null, ttlMs = 0, now = Date.now } = {}) {
         this.dir = dir;
-        this.jars = new Map(); // id -> Map(key -> cookie)
+        this.ttlMs = ttlMs;
+        this.now = now;
+        this.jars = new Map(); // id -> { cookies: Map(key -> cookie), lastUsed }
+        this.onDisk = new Set(); // ids with a file in dir
+        this.epochs = new Map(); // id -> times it was dropped
+        this.bases = new WeakMap(); // array load() returned -> epoch at the time
         this.writes = new Map(); // id -> promise of the last write
         this.saves = 0;
         this.writeErrors = 0;
+        this.expired = 0;
+        this.deleted = 0;
+        this.lastSweep = null;
     }
 
     async init() {
-        if (this.dir) await fs.mkdir(this.dir, { recursive: true });
+        if (!this.dir) return;
+        await fs.mkdir(this.dir, { recursive: true });
+        for (const name of await fs.readdir(this.dir)) if (name.endsWith('.json')) this.onDisk.add(name.slice(0, -5));
     }
 
     file(id) {
         return path.join(this.dir, `${id}.json`);
     }
 
+    stale(lastUsed) {
+        return this.ttlMs > 0 && this.now() - lastUsed >= this.ttlMs;
+    }
+
     async jar(id) {
         let jar = this.jars.get(id);
+        if (jar && this.stale(jar.lastUsed)) {
+            await this.drop(id);
+            this.expired++;
+            jar = null;
+        }
         if (jar) return jar;
         let cookies = [];
+        let lastUsed = this.now();
         if (this.dir) {
             try {
-                cookies = JSON.parse(await fs.readFile(this.file(id), 'utf8')).cookies ?? [];
+                const [text, st] = await Promise.all([fs.readFile(this.file(id), 'utf8'), fs.stat(this.file(id))]);
+                if (this.stale(st.mtimeMs)) {
+                    await this.drop(id);
+                    this.expired++;
+                } else {
+                    cookies = JSON.parse(text).cookies ?? [];
+                }
             } catch (e) {
                 if (e.code !== 'ENOENT') throw e;
             }
@@ -63,50 +97,73 @@ export class SessionStore {
         // Another load of the same id may have finished while this one read.
         jar = this.jars.get(id);
         if (jar) return jar;
-        jar = new Map(cookies.map((c) => [key(c), c]));
+        jar = { cookies: new Map(cookies.map((c) => [key(c), c])), lastUsed };
         this.jars.set(id, jar);
         return jar;
     }
 
+    touch(id, jar) {
+        jar.lastUsed = this.now();
+        if (this.dir && this.onDisk.has(id)) {
+            const t = new Date(jar.lastUsed);
+            fs.utimes(this.file(id), t, t).catch(() => {});
+        }
+    }
+
     // The cookies to put into a new browser context for this session.
     async load(id) {
-        const nowS = Date.now() / 1000;
-        return [...(await this.jar(id)).values()].filter((c) => !expired(c, nowS));
+        const nowS = this.now() / 1000;
+        const jar = await this.jar(id);
+        this.touch(id, jar);
+        const base = [...jar.cookies.values()].filter((c) => !expired(c, nowS));
+        this.bases.set(base, this.epochs.get(id) ?? 0);
+        return base;
     }
 
     // base: what load() returned for this crawl; final: getAllCookies at its end.
+    // A crawl whose jar was deleted or expired since it loaded saves nothing.
     async save(id, base, final) {
+        if (this.bases.has(base) && this.bases.get(base) !== (this.epochs.get(id) ?? 0)) return;
         const jar = await this.jar(id);
         const start = new Map(base.map((c) => [key(c), c]));
         const end = new Map(final.map((c) => [key(c), storable(c)]));
         for (const [k, c] of end) {
             const was = start.get(k);
-            if (!was || !same(was, c)) jar.set(k, c);
+            if (!was || !same(was, c)) jar.cookies.set(k, c);
         }
         for (const [k, c] of start) {
-            if (!end.has(k) && jar.has(k) && same(jar.get(k), c)) jar.delete(k);
+            if (!end.has(k) && jar.cookies.has(k) && same(jar.cookies.get(k), c)) jar.cookies.delete(k);
         }
-        const nowS = Date.now() / 1000;
-        for (const [k, c] of jar) if (expired(c, nowS)) jar.delete(k);
+        const nowS = this.now() / 1000;
+        for (const [k, c] of jar.cookies) if (expired(c, nowS)) jar.cookies.delete(k);
+        jar.lastUsed = this.now();
         this.saves++;
         if (this.dir) await this.persist(id);
     }
 
     // Writes are chained per session so an older snapshot never lands after a
-    // newer one; each write takes the jar as it is when its turn comes.
+    // newer one; each write takes the jar as it is when its turn comes, and a
+    // jar dropped in the meantime is not written back.
     persist(id) {
-        const prev = this.writes.get(id) ?? Promise.resolve();
-        const next = prev.then(async () => {
+        return this.chain(id, async () => {
+            const jar = this.jars.get(id);
+            if (!jar) return;
             const tmp = `${this.file(id)}.${process.pid}.tmp`;
-            const body = JSON.stringify({ id, updatedAt: new Date().toISOString(), cookies: [...this.jars.get(id).values()] });
+            const body = JSON.stringify({ id, updatedAt: new Date(this.now()).toISOString(), cookies: [...jar.cookies.values()] });
             try {
                 await fs.writeFile(tmp, body);
                 await fs.rename(tmp, this.file(id));
+                this.onDisk.add(id);
             } catch (e) {
                 this.writeErrors++;
                 throw e;
             }
         });
+    }
+
+    chain(id, fn) {
+        const prev = this.writes.get(id) ?? Promise.resolve();
+        const next = prev.then(fn);
         const settled = next.catch(() => {});
         this.writes.set(id, settled);
         settled.then(() => {
@@ -115,7 +172,80 @@ export class SessionStore {
         return next;
     }
 
+    // Forgets the jar in memory and on disk. Resolves to whether there was one.
+    async drop(id) {
+        const had = this.jars.delete(id) | this.onDisk.has(id);
+        this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1);
+        if (!this.dir) return !!had;
+        // After any write in flight, so it cannot land after the unlink.
+        return this.chain(id, async () => {
+            this.onDisk.delete(id);
+            try {
+                await fs.unlink(this.file(id));
+                return true;
+            } catch (e) {
+                if (e.code === 'ENOENT') return !!had;
+                throw e;
+            }
+        });
+    }
+
+    async delete(id) {
+        const had = await this.drop(id);
+        if (had) this.deleted++;
+        return had;
+    }
+
+    // Drops every jar idle for ttlMs: those in memory by their last use, the
+    // files of the others by their mtime. Also removes temporary files a
+    // crashed write left behind.
+    async sweep() {
+        if (!this.ttlMs) return 0;
+        let n = 0;
+        for (const [id, jar] of [...this.jars]) {
+            if (this.stale(jar.lastUsed) && !this.writes.has(id)) {
+                await this.drop(id);
+                n++;
+            }
+        }
+        if (this.dir) {
+            for (const name of await fs.readdir(this.dir)) {
+                const id = name.endsWith('.json') ? name.slice(0, -5) : null;
+                if (id && this.jars.has(id)) continue;
+                if (!id && !name.endsWith('.tmp')) continue;
+                let st;
+                try {
+                    st = await fs.stat(path.join(this.dir, name));
+                } catch {
+                    continue;
+                }
+                if (!this.stale(st.mtimeMs)) continue;
+                if (id) {
+                    await this.drop(id);
+                    n++;
+                } else {
+                    await fs.unlink(path.join(this.dir, name)).catch(() => {});
+                }
+            }
+        }
+        this.expired += n;
+        this.lastSweep = new Date(this.now()).toISOString();
+        return n;
+    }
+
     stats() {
-        return { persisted: !!this.dir, dir: this.dir, loaded: this.jars.size, saves: this.saves, writeErrors: this.writeErrors };
+        const stored = this.dir ? new Set([...this.onDisk, ...this.jars.keys()]).size : this.jars.size;
+        return {
+            persisted: !!this.dir,
+            dir: this.dir,
+            ttlMs: this.ttlMs,
+            stored,
+            loaded: this.jars.size,
+            saves: this.saves,
+            writeErrors: this.writeErrors,
+            expired: this.expired,
+            deleted: this.deleted,
+            lastSweep: this.lastSweep,
+        };
     }
 }
