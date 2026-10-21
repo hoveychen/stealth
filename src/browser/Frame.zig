@@ -3665,6 +3665,14 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const http_client = &session.browser.http_client;
 
+    // Both waits below hold the parser when the link came from the markup, and
+    // the CDP connection is answered meanwhile, as for a parser-blocking
+    // script. A link appended by script waits with that script on the stack,
+    // which HttpClient.mayServeWhileParserBlocked turns away by itself.
+    const outer_parser_blocked = http_client.parser_blocked;
+    http_client.parser_blocked = true;
+    defer http_client.parser_blocked = outer_parser_blocked;
+
     // Already in this document's memory cache: no request, and no second
     // resource-timing entry either -- Chrome files one entry for the pair
     // (measured with `wire-census.mjs --entries`, which reads the page's own

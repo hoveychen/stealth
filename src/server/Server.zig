@@ -472,7 +472,9 @@ fn processWebSocketEvent(self: *Server, ws: *WebSocket, rw: IOEvent.ReadWrite) v
         };
         if (keep == false) {
             // Close frame consumed: the framer already pushed .close, the
-            // worker will reply and disconnect itself.
+            // worker will reply and disconnect itself -- once it is out of
+            // any page JS, which onCloseFrame sees to.
+            driver.onCloseFrame();
             return self.dropWebSocket(ws, null, false);
         }
     } else if (rw.hangup) {
@@ -1757,6 +1759,220 @@ test "Client: close message" {
         // fin | close, masked | len, 4-byte mask
         &.{ 136, 128, 0, 0, 0, 0 },
     );
+}
+
+// A page stuck in script used to outlive the client that loaded it. A close
+// frame queued .close for the worker and left it at that, and a worker running
+// page JS never gets back to its inbox: a `for (;;) {}` kept a core, a browser
+// and a connection slot until the watchdog fired -- 30s on the crawl service
+// (stalled_ms=30878), and never in this suite, which runs without one. The page
+// spins for six seconds; the close has to be answered well before that.
+test "server: a close frame ends a page that is stuck in script" {
+    var c = try createTestClient();
+    defer c.deinit();
+    try c.handshake("/");
+
+    var page = try CdpPage.open(&c, "cdp/spin_after_load.html");
+    defer page.deinit();
+    // the spin starts on the first timer after the load
+    lp.io.sleep(.fromMilliseconds(500), .awake) catch {};
+
+    const start = lp.datetime.milliTimestamp(.boot);
+    // fin | close, masked | len 0, 4-byte mask
+    try sys_net.writeAll(c.socket, &.{ 136, 128, 0, 0, 0, 0 });
+    while (true) {
+        const msg = try nextFrame(&c);
+        defer if (msg.cleanup_fragment) c.reader.cleanup();
+        if (msg.type == .close) break;
+    }
+    const elapsed = lp.datetime.milliTimestamp(.boot) - start;
+    if (elapsed > 2000) {
+        std.debug.print("the close was answered after {d}ms, once the script let go\n", .{elapsed});
+        return error.CloseWaitedForTheScript;
+    }
+}
+
+// A parser-blocking <script src> that was slow to arrive took the connection
+// with it: the parser's wait dispatched nothing but Fetch interception, so a
+// Runtime.evaluate went unanswered until the script landed -- forever, for one
+// that never does, which is how the crawl service came back with an empty
+// partial snapshot. Chrome's main thread is free while its parser waits, and
+// these reads are answered now. The script takes five seconds; the answers have
+// to come while the parser is still parked on it.
+test "server: CDP reads are answered while the parser waits on a script" {
+    var c = try createTestClient();
+    defer c.deinit();
+    try c.handshake("/");
+
+    var page = try CdpPage.open(&c, "cdp/parser_blocked.html");
+    defer page.deinit();
+    // the document is in; give the parser time to reach the script
+    lp.io.sleep(.fromMilliseconds(500), .awake) catch {};
+
+    {
+        const start = lp.datetime.milliTimestamp(.boot);
+        const reply = try page.call(&c, "Runtime.evaluate",
+            \\{"expression":"[!!document.getElementById('before'), !!document.getElementById('after'), window.blockedScriptRan === true].join()","returnByValue":true}
+        );
+        defer reply.deinit();
+        const elapsed = lp.datetime.milliTimestamp(.boot) - start;
+        const value = (try cdpResult(reply)).get("result").?.object.get("value").?.string;
+        if (elapsed > 1000 or std.mem.eql(u8, value, "true,false,false") == false) {
+            std.debug.print("Runtime.evaluate answered after {d}ms with \"{s}\"\n", .{ elapsed, value });
+            return error.EvaluateWaitedForTheParser;
+        }
+    }
+
+    {
+        const reply = try page.call(&c, "LP.getMarkdown", "{}");
+        defer reply.deinit();
+        const markdown = (try cdpResult(reply)).get("markdown").?.string;
+        try testing.expect(std.mem.indexOf(u8, markdown, "before the script") != null);
+        try testing.expect(std.mem.indexOf(u8, markdown, "after the script") == null);
+    }
+
+    {
+        const reply = try page.call(&c, "Network.getAllCookies", "{}");
+        defer reply.deinit();
+        _ = try cdpResult(reply);
+    }
+
+    {
+        // Not a read: closing the page ends the parser's wait instead.
+        const start = lp.datetime.milliTimestamp(.boot);
+        const reply = try page.browserCall(&c, "Target.closeTarget", page.target_id);
+        defer reply.deinit();
+        const elapsed = lp.datetime.milliTimestamp(.boot) - start;
+        if (elapsed > 1000) {
+            std.debug.print("Target.closeTarget answered after {d}ms\n", .{elapsed});
+            return error.CloseTargetWaitedForTheParser;
+        }
+        _ = try cdpResult(reply);
+    }
+}
+
+// A page opened over a real CDP connection: a browser context, a target in
+// it, and a flat session attached to it, navigated to a test page.
+const CdpPage = struct {
+    next_id: i64 = 1,
+    target_id: []const u8 = "",
+    session_id: []const u8 = "",
+
+    fn open(c: *TestClient, path: []const u8) !CdpPage {
+        var self: CdpPage = .{};
+        errdefer self.deinit();
+        // createTestClient's 1KB suits BiDi's replies, not CDP's events
+        c.reader.max_message_size = 8 * 1024;
+
+        const bc = try self.send(c, "{\"method\":\"Target.createBrowserContext\"}", .{});
+        defer bc.deinit();
+        const bc_id = (try cdpResult(bc)).get("browserContextId").?.string;
+
+        {
+            const params = try std.fmt.allocPrint(testing.allocator, "{{\"url\":\"about:blank\",\"browserContextId\":\"{s}\"}}", .{bc_id});
+            defer testing.allocator.free(params);
+            const target = try self.rawCall(c, "Target.createTarget", params, null);
+            defer target.deinit();
+            self.target_id = try testing.allocator.dupe(u8, (try cdpResult(target)).get("targetId").?.string);
+        }
+        {
+            const params = try std.fmt.allocPrint(testing.allocator, "{{\"targetId\":\"{s}\",\"flatten\":true}}", .{self.target_id});
+            defer testing.allocator.free(params);
+            const attached = try self.rawCall(c, "Target.attachToTarget", params, null);
+            defer attached.deinit();
+            self.session_id = try testing.allocator.dupe(u8, (try cdpResult(attached)).get("sessionId").?.string);
+        }
+        {
+            const params = try std.fmt.allocPrint(testing.allocator, "{{\"url\":\"http://127.0.0.1:9582/src/browser/tests/{s}\"}}", .{path});
+            defer testing.allocator.free(params);
+            const navigated = try self.call(c, "Page.navigate", params);
+            defer navigated.deinit();
+            _ = try cdpResult(navigated);
+        }
+        return self;
+    }
+
+    fn deinit(self: *CdpPage) void {
+        if (self.target_id.len > 0) testing.allocator.free(self.target_id);
+        if (self.session_id.len > 0) testing.allocator.free(self.session_id);
+    }
+
+    // A command on the page's session.
+    fn call(self: *CdpPage, c: *TestClient, method: []const u8, params: []const u8) !std.json.Parsed(std.json.Value) {
+        return self.rawCall(c, method, params, self.session_id);
+    }
+
+    // A browser-level command naming the page's target.
+    fn browserCall(self: *CdpPage, c: *TestClient, method: []const u8, target_id: []const u8) !std.json.Parsed(std.json.Value) {
+        const params = try std.fmt.allocPrint(testing.allocator, "{{\"targetId\":\"{s}\"}}", .{target_id});
+        defer testing.allocator.free(params);
+        return self.rawCall(c, method, params, null);
+    }
+
+    fn rawCall(self: *CdpPage, c: *TestClient, method: []const u8, params: []const u8, session_id: ?[]const u8) !std.json.Parsed(std.json.Value) {
+        const payload = if (session_id) |sid|
+            try std.fmt.allocPrint(testing.allocator, "{{\"method\":\"{s}\",\"params\":{s},\"sessionId\":\"{s}\"", .{ method, params, sid })
+        else
+            try std.fmt.allocPrint(testing.allocator, "{{\"method\":\"{s}\",\"params\":{s}", .{ method, params });
+        defer testing.allocator.free(payload);
+        return self.send(c, payload, .{ .open = true });
+    }
+
+    // `payload` is a JSON object without its id (and, unless `open`, closed):
+    // the id goes in here, and the reply carrying it is returned, past any
+    // events that arrive first.
+    fn send(self: *CdpPage, c: *TestClient, payload: []const u8, opts: struct { open: bool = false }) !std.json.Parsed(std.json.Value) {
+        const id = self.next_id;
+        self.next_id += 1;
+
+        const body = if (opts.open) payload else payload[0 .. payload.len - 1];
+        const framed = try std.fmt.allocPrint(testing.allocator, "{s},\"id\":{d}}}", .{ body, id });
+        defer testing.allocator.free(framed);
+        // the same masked text frame BiDi sends
+        try c.bidiCommand(framed);
+
+        while (true) {
+            const msg = try nextFrame(c);
+            defer if (msg.cleanup_fragment) c.reader.cleanup();
+            if (msg.type != .text) {
+                return error.UnexpectedFrame;
+            }
+            const parsed = try std.json.parseFromSlice(std.json.Value, testing.allocator, msg.data, .{ .allocate = .alloc_always });
+            const got = parsed.value.object.get("id") orelse {
+                parsed.deinit();
+                continue;
+            };
+            if (got.integer == id) {
+                return parsed;
+            }
+            parsed.deinit();
+        }
+    }
+};
+
+// The `result` of a CDP reply, or the error it carried, printed.
+fn cdpResult(reply: std.json.Parsed(std.json.Value)) !std.json.ObjectMap {
+    if (reply.value.object.get("result")) |result| {
+        return result.object;
+    }
+    std.debug.print("CDP error reply: {f}\n", .{std.json.fmt(reply.value, .{})});
+    return error.CdpErrorReply;
+}
+
+// readWebsocketMessage for a client that reads more than one buffer's worth:
+// the reader only reuses its buffer once it is compacted.
+fn nextFrame(c: *TestClient) !WS.Message {
+    while (true) {
+        if (try c.reader.next()) |msg| {
+            return msg;
+        }
+        c.reader.compact();
+        const n = try posix.read(c.socket, c.reader.readBuf());
+        if (n == 0) {
+            return error.Closed;
+        }
+        c.reader.len += n;
+    }
 }
 
 test "server: 404" {

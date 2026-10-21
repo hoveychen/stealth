@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<!-- Driven by Server.zig's "CDP reads are answered while the parser waits on a
+     script". The test server holds the script back for five seconds, and the
+     parser stops at it: #before is in the document meanwhile, #after is not. -->
+<p id="before">before the script</p>
+<script src="parser_blocked.js?delay_ms=5000"></script>
+<p id="after">after the script</p>

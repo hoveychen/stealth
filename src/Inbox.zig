@@ -113,6 +113,22 @@ pub fn popIf(self: *Inbox, predicate: *const fn (*Message) bool) ?*Message {
     return null;
 }
 
+// Pop the head of the queue, but only if `predicate(msg)` accepts it. Unlike
+// popIf this never reaches past a message it refuses, so whatever it lets
+// through still runs in the order the peer sent it.
+pub fn popFirstIf(self: *Inbox, predicate: *const fn (*Message) bool) ?*Message {
+    self.mutex.lockUncancelable(lp.io);
+    defer self.mutex.unlock(lp.io);
+    const node = self.queue.first orelse return null;
+    const msg: *Message = @fieldParentPtr("node", node);
+    if (predicate(msg) == false) {
+        return null;
+    }
+    self.queue.remove(node);
+    self.queued_bytes -= msg.payload.size();
+    return msg;
+}
+
 pub const Message = struct {
     arena: *lp.Arena,
     payload: Payload,
@@ -361,6 +377,40 @@ test "Inbox: popIf picks first match in FIFO order" {
     const m = inbox.popIf(testIsPing).?;
     defer m.deinit();
     try testing.expectEqual("first", m.payload.ping);
+}
+
+test "Inbox: popFirstIf never reaches past a refused head" {
+    const arena_pool = &testing.test_app.arena_pool;
+    var inbox = Inbox{};
+    defer inbox.deinit();
+
+    {
+        const arena = try arena_pool.acquire(.tiny, "popfirstif test");
+        inbox.push(arena, .{ .disconnect = null });
+    }
+    {
+        const arena = try arena_pool.acquire(.tiny, "popfirstif test");
+        inbox.push(arena, .{ .ping = try arena.dupe(u8, "behind") });
+    }
+
+    // A ping is queued, but behind a disconnect the predicate refuses.
+    try testing.expect(inbox.popFirstIf(testIsPing) == null);
+    try testing.expectEqual(6, inbox.queuedBytes());
+
+    {
+        const m = inbox.pop().?;
+        defer m.deinit();
+        try testing.expect(m.payload.disconnect == null);
+    }
+
+    // Now it's the head.
+    {
+        const m = inbox.popFirstIf(testIsPing).?;
+        defer m.deinit();
+        try testing.expectEqual("behind", m.payload.ping);
+    }
+    try testing.expectEqual(0, inbox.queuedBytes());
+    try testing.expect(inbox.popFirstIf(testIsPing) == null);
 }
 
 test "Inbox: queued bytes track the payloads" {

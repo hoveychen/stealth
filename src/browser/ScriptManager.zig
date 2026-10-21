@@ -465,6 +465,14 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
             // request -- Frame._image_cache keys on the resolved URL.
             Frame.style_resources.requestAll(frame);
 
+            // Only the parser waits here (a script that isn't parser-inserted
+            // is never .normal), so the CDP connection keeps being answered
+            // for as long as the fetch takes. See HttpClient.parser_blocked.
+            const client = self.base.client;
+            const outer_parser_blocked = client.parser_blocked;
+            client.parser_blocked = true;
+            defer client.parser_blocked = outer_parser_blocked;
+
             if (self.waitForPreload(remote_url)) |pre| {
                 // There was a preloaded script, we borrow it's source and status
                 consumed_preload = pre;
