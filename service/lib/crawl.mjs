@@ -5,6 +5,8 @@
 // the next request on that slot starts from a new browser.
 
 import { CdpError } from './cdp.mjs';
+import { isProxyError, normalizeProxyUrl, proxyRejectsCredentials, redact } from './proxies.mjs';
+import { SESSION_ID } from './sessions.mjs';
 
 export const FORMATS = ['html', 'markdown', 'eval', 'meta'];
 export const WAIT_UNTIL = { load: 'load', domcontentloaded: 'DOMContentLoaded', networkidle: 'networkIdle' };
@@ -12,7 +14,9 @@ export const WAIT_UNTIL = { load: 'load', domcontentloaded: 'DOMContentLoaded', 
 export class RequestError extends Error {}
 
 // Validates a POST /crawl body; throws RequestError with a message for 400.
-export function normalizeRequest(body, { defaultTimeoutMs, maxTimeoutMs }) {
+// `proxyPool` is the configured pool (or null); `proxyPoolDefault` says
+// whether a request without a `proxy` field uses it.
+export function normalizeRequest(body, { defaultTimeoutMs, maxTimeoutMs, proxyPool = null, proxyPoolDefault = false }) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) throw new RequestError('body must be a JSON object');
     const { url, js } = body;
     if (typeof url !== 'string') throw new RequestError('url is required');
@@ -40,36 +44,87 @@ export function normalizeRequest(body, { defaultTimeoutMs, maxTimeoutMs }) {
     const waitUntil = body.waitUntil ?? 'load';
     if (!(waitUntil in WAIT_UNTIL)) throw new RequestError(`waitUntil must be one of ${Object.keys(WAIT_UNTIL).join(', ')}`);
 
-    return { url: parsed.href, formats, js, timeout, waitUntil };
+    let proxy;
+    if (body.proxy === undefined) proxy = { mode: proxyPool && proxyPoolDefault ? 'pool' : 'direct' };
+    else if (body.proxy === 'direct' || body.proxy === null) proxy = { mode: 'direct' };
+    else if (body.proxy === 'pool') {
+        if (!proxyPool) throw new RequestError('proxy "pool" needs a proxy pool (PROXY_POOL or PROXY_POOL_FILE), and none is configured');
+        proxy = { mode: 'pool' };
+    } else {
+        try {
+            proxy = { mode: 'url', url: normalizeProxyUrl(body.proxy) };
+        } catch (e) {
+            throw new RequestError(e.message);
+        }
+    }
+
+    const sessionId = body.session_id;
+    if (sessionId !== undefined && (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId))) {
+        throw new RequestError('session_id must be 1-128 characters of A-Z a-z 0-9 . _ -');
+    }
+
+    return { url: parsed.href, formats, js, timeout, waitUntil, proxy, sessionId };
 }
 
-// Parameters for Target.createBrowserContext. Per-request options that live
-// on the context (a proxy, for one) belong here.
-function contextParams(_req) {
-    return {};
+// Parameters for Target.createBrowserContext. The engine applies proxyServer
+// to this connection's HTTP client only, and restores it when the context is
+// disposed.
+function contextParams(proxyUrl) {
+    return proxyUrl ? { proxyServer: proxyUrl } : {};
 }
 
-export async function crawl(pool, req) {
+const HTML_EXPR = 'document.documentElement ? document.documentElement.outerHTML : ""';
+
+// deps: { proxies: ProxyPool | null, sessions: SessionStore, partialGraceMs }
+export async function crawl(pool, req, { proxies, sessions, partialGraceMs }) {
     const t0 = Date.now();
     const deadline = t0 + req.timeout;
-    const slot = await pool.acquire(deadline);
-    const queueMs = Date.now() - t0;
-    let keep = false;
+    let poolProxy = null;
+    if (req.proxy.mode === 'pool') {
+        poolProxy = proxies.pick();
+        if (!poolProxy) throw new CdpError('no_proxy_available', `all ${proxies.size} pool proxies are ejected after repeated failures; see GET /health`);
+    }
+    const proxyUrl = poolProxy?.url ?? (req.proxy.mode === 'url' ? req.proxy.url : null);
+    const startCookies = req.sessionId ? await sessions.load(req.sessionId) : null;
+    // Filled in as the crawl goes: the CDP session id, the cookies to save
+    // and, after a timeout, whatever snapshot could still be taken.
+    const page = { proxyUrl, startCookies, cookies: null, partial: null };
+
+    let slot, keep = false;
     try {
-        const out = await runInContext(slot.conn, req, deadline, (ok) => (keep = ok));
+        slot = await pool.acquire(deadline);
+        const queueMs = Date.now() - t0;
+        const out = await runInContext(slot.conn, req, page, deadline, partialGraceMs, (ok) => (keep = ok));
         if (out.meta) out.meta.timing = { queueMs, ...out.meta.timing, totalMs: Date.now() - t0 };
+        if (poolProxy) proxies.succeeded(poolProxy);
         return out;
     } catch (e) {
-        if (e.code === 'timeout') throw new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout (${e.message})`);
-        throw e;
+        let err = e;
+        if (e.code === 'navigation_failed' && proxyUrl && isProxyError(e.errorText)) {
+            err = (await proxyRejectsCredentials(proxyUrl))
+                ? new CdpError('proxy_auth_failed', `proxy ${redact(proxyUrl)} rejected the credentials (${e.errorText})`)
+                : new CdpError('proxy_failed', `proxy ${redact(proxyUrl)} failed: ${e.errorText} (${req.url})`);
+        }
+        if (poolProxy && (err.code === 'proxy_failed' || err.code === 'proxy_auth_failed')) proxies.failed(poolProxy, err.message);
+        if (err.code === 'timeout') {
+            err = new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout (${e.message})`);
+            const partial = {};
+            if (req.formats.includes('html')) partial.html = page.partial?.html ?? null;
+            if (req.formats.includes('markdown')) partial.markdown = page.partial?.markdown ?? null;
+            if (Object.keys(partial).length) err.partial = partial;
+        }
+        throw err;
     } finally {
-        pool.release(slot, { discard: !keep });
+        if (slot) pool.release(slot, { discard: !keep });
+        if (req.sessionId && page.cookies) {
+            await sessions.save(req.sessionId, startCookies, page.cookies).catch((e) => console.error(`session ${req.sessionId}: could not save cookies: ${e.message}`));
+        }
     }
 }
 
 // `setReusable(true)` is called only once the context has been disposed
 // cleanly, which is what makes the connection safe to hand to the next request.
-async function runInContext(conn, req, deadline, setReusable) {
+async function runInContext(conn, req, page, deadline, graceMs, setReusable) {
     const left = () => {
         const ms = deadline - Date.now();
         if (ms <= 0) throw new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout`);
@@ -77,12 +132,21 @@ async function runInContext(conn, req, deadline, setReusable) {
     };
     const send = (method, params, sessionId) => conn.send(method, params, sessionId, left());
 
-    const { browserContextId } = await send('Target.createBrowserContext', contextParams(req));
+    const { browserContextId } = await send('Target.createBrowserContext', contextParams(page.proxyUrl));
+    page.browserContextId = browserContextId;
     let result, failure;
     try {
-        result = await navigateAndCollect(conn, req, send, left, browserContextId);
+        result = await navigateAndCollect(conn, req, page, send, left);
     } catch (e) {
         failure = e;
+    }
+    if (failure?.code === 'timeout') {
+        await snapshotAfterTimeout(conn, req, page, graceMs);
+    } else if (failure && failure.code !== 'engine_disconnected' && req.sessionId && page.sessionId) {
+        // A failed navigation can still have set cookies (a redirect hop).
+        try {
+            page.cookies = (await conn.sendOnce('Network.getAllCookies', {}, page.sessionId, 1000)).cookies ?? null;
+        } catch {}
     }
     // A timed-out or disconnected page may be wedged in script; don't wait on
     // it, drop the connection instead.
@@ -96,9 +160,28 @@ async function runInContext(conn, req, deadline, setReusable) {
     return result;
 }
 
-async function navigateAndCollect(conn, req, send, left, browserContextId) {
-    const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId });
+// After the deadline, give the page `graceMs` more to hand over what it has:
+// the requested html/markdown, and the cookies when there is a session. The
+// commands go out together, without retries, and whatever has not answered
+// when the grace runs out is left null. A page stuck in script answers
+// nothing; the connection is dropped afterwards either way.
+async function snapshotAfterTimeout(conn, req, page, graceMs) {
+    if (!page.sessionId || conn.closed || graceMs <= 0) return;
+    const ask = (method, params, pick) =>
+        conn.sendOnce(method, params, page.sessionId, graceMs).then(pick, () => null);
+    const [html, markdown, cookies] = await Promise.all([
+        req.formats.includes('html') ? ask('Runtime.evaluate', { expression: HTML_EXPR, returnByValue: true }, (r) => (r.exceptionDetails ? null : (r.result?.value ?? null))) : null,
+        req.formats.includes('markdown') ? ask('LP.getMarkdown', {}, (r) => r.markdown ?? null) : null,
+        req.sessionId ? ask('Network.getAllCookies', {}, (r) => r.cookies ?? null) : null,
+    ]);
+    page.partial = { html, markdown };
+    if (cookies) page.cookies = cookies;
+}
+
+async function navigateAndCollect(conn, req, page, send, left) {
+    const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId: page.browserContextId });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
+    page.sessionId = sessionId;
 
     const events = [];
     let wake = () => {};
@@ -112,10 +195,11 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
         await send('Page.enable', {}, sessionId);
         await send('Network.enable', {}, sessionId);
         await send('Page.setLifecycleEventsEnabled', { enabled: true }, sessionId);
+        if (page.startCookies?.length) await send('Network.setCookies', { cookies: page.startCookies.map(setCookieParam) }, sessionId);
 
         const tNav = Date.now();
         const nav = await send('Page.navigate', { url: req.url }, sessionId);
-        if (nav.errorText) throw new CdpError('navigation_failed', `${req.url}: ${nav.errorText}`);
+        if (nav.errorText) throw navigationFailed(req.url, nav.errorText);
         const { loaderId } = nav;
         const lifecycle = WAIT_UNTIL[req.waitUntil];
 
@@ -125,7 +209,7 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
                 const { method, params } = events[seen];
                 if (method === 'Page.lifecycleEvent' && params.loaderId === loaderId && params.name === lifecycle) break;
                 if (method === 'Network.loadingFailed' && params.requestId === loaderId) {
-                    throw new CdpError('navigation_failed', `${req.url}: ${params.errorText || 'loading failed'}`);
+                    throw navigationFailed(req.url, params.errorText || 'loading failed');
                 }
             }
             if (seen < events.length) break;
@@ -140,6 +224,12 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
             });
         }
         const navigateMs = Date.now() - tNav;
+        const doc = events.findLast((m) => m.method === 'Network.responseReceived' && m.params.requestId === loaderId)?.params.response;
+        // Through a proxy, an http:// URL with missing or wrong credentials
+        // loads the proxy's 407 page instead of the target.
+        if (page.proxyUrl && doc?.status === 407) {
+            throw new CdpError('proxy_auth_failed', `proxy ${redact(page.proxyUrl)} answered 407 Proxy Authentication Required`);
+        }
 
         const evaluate = async (expression, awaitPromise = false) => {
             const r = await send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true }, sessionId);
@@ -155,14 +245,17 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
         // before the HTML and markdown snapshots are taken.
         if (req.formats.includes('eval')) out.eval = await evaluate(req.js, true);
         if (req.formats.includes('html')) {
-            out.html = (await evaluate('document.documentElement ? document.documentElement.outerHTML : ""')).value ?? '';
+            out.html = (await evaluate(HTML_EXPR)).value ?? '';
         }
         if (req.formats.includes('markdown')) out.markdown = (await send('LP.getMarkdown', {}, sessionId)).markdown ?? '';
+        let cookies;
+        if (req.formats.includes('meta') || req.sessionId) {
+            cookies = (await send('Network.getAllCookies', {}, sessionId)).cookies ?? [];
+            page.cookies = cookies;
+        }
         if (req.formats.includes('meta')) {
-            const doc = events.findLast((m) => m.method === 'Network.responseReceived' && m.params.requestId === loaderId)?.params.response;
             const hops = events.filter((m) => m.method === 'Network.requestWillBeSent' && m.params.requestId === loaderId).map((m) => m.params.request.url);
             const page = (await evaluate('({ url: location.href, title: document.title })')).value ?? {};
-            const { cookies } = await send('Network.getAllCookies', {}, sessionId);
             out.meta = {
                 url: page.url ?? doc?.url ?? null,
                 title: page.title ?? null,
@@ -170,7 +263,7 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
                 statusText: doc?.statusText ?? null,
                 headers: doc?.headers ?? {},
                 redirects: hops.slice(0, -1),
-                cookies: cookies ?? [],
+                cookies,
                 timing: { navigateMs },
             };
         }
@@ -179,4 +272,21 @@ async function navigateAndCollect(conn, req, send, left, browserContextId) {
         unsubscribe();
         unsubscribeClose();
     }
+}
+
+function navigationFailed(url, errorText) {
+    const e = new CdpError('navigation_failed', `${url}: ${errorText}`);
+    e.errorText = errorText;
+    return e;
+}
+
+// A cookie as getAllCookies reported it, in the form setCookies recreates it
+// exactly. A host-only cookie reads back with a bare domain ("example.com",
+// no leading dot); passing that as `domain` would make it a domain cookie,
+// which the site's own Set-Cookie (host-only) then no longer overwrites or
+// deletes. Giving a `url` instead keeps it host-only.
+function setCookieParam(c) {
+    if (c.domain.startsWith('.')) return c;
+    const { domain, ...rest } = c;
+    return { ...rest, url: `${c.secure ? 'https' : 'http'}://${domain}${c.path}` };
 }

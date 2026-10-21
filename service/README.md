@@ -27,9 +27,10 @@ curl -s localhost:8080/crawl -d '{"url":"https://example.com/","formats":["markd
 ```
 
 or `docker compose -f service/compose.yaml up -d --build` (`CRAWL_PORT` picks
-the host port). On a daemon whose address pools are used up ("all predefined
-address pools have been fully subnetted"), add an override file that sets
-`network_mode: bridge` on the `crawl` service.
+the host port). The compose file puts the container on Docker's default
+`bridge` network (`network_mode: bridge`) rather than a network of its own, so
+it also starts on a daemon whose address pools are used up, and mounts the
+`crawl-data` volume on `/data` for session cookies.
 
 The build compiles the engine (ReleaseFast) and needs ~12 GB of RAM; a cold
 build downloads Rust, Zig, a prebuilt V8 (~130 MB from GitHub) and the
@@ -53,6 +54,7 @@ Image environment, on top of the service variables above:
 | `LP_CDP_MAX_CONNECTIONS`       | `2*POOL_SIZE+4`    | engine connection cap. Keep it well above `POOL_SIZE`: after a timeout the service reconnects at once while the engine may still be tearing down the old connection |
 | `LP_LOG_LEVEL`                 | `info`             | engine log level |
 | `LP_RESTART_DELAY`             | `1`                | seconds before restarting a dead engine |
+| `SESSION_DIR`                  | `/data/sessions`   | where session cookie jars are kept; mount a volume on `/data` |
 | `LP_HOST` / `LP_PORT`          | `127.0.0.1` / `9222` | where the engine listens inside the container |
 | `LIGHTPANDA_DISABLE_TELEMETRY` | `true`             | telemetry is off whenever this variable exists, whatever its value; the engine logs `telemetry status disabled=true` at startup |
 
@@ -71,6 +73,13 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `MAX_TIMEOUT_MS`     | `120000`                | largest `timeout` a request may ask for |
 | `HOST` / `PORT`      | `0.0.0.0` / `8080`      | where this service listens |
 | `MAX_BODY_BYTES`     | `1048576`               | request body limit |
+| `PARTIAL_GRACE_MS`   | `2000`                  | after a timeout, how long to try for the page's html/markdown so far (see [Timeouts](#timeouts-and-partial-results)); `0` turns it off |
+| `PROXY_POOL`         |                         | proxy URLs for the pool, separated by commas, spaces or newlines |
+| `PROXY_POOL_FILE`    |                         | a file of proxy URLs, one or more per line, `#` comments; added to `PROXY_POOL` |
+| `PROXY_POOL_DEFAULT` | `false`                 | `true`: requests without a `proxy` field use the pool |
+| `PROXY_MAX_FAILS`    | `3`                     | consecutive failures that eject a proxy from the pool |
+| `PROXY_RETRY_AFTER_MS` | `60000`               | how long an ejected proxy sits out |
+| `SESSION_DIR`        | (none: memory only)     | directory for session cookie jars, one `<session_id>.json` each |
 
 There is no authentication.
 
@@ -82,7 +91,9 @@ There is no authentication.
   "formats": ["html", "markdown", "eval", "meta"],
   "js": "(async () => document.querySelectorAll('a').length)()",
   "timeout": 30000,
-  "waitUntil": "load"
+  "waitUntil": "load",
+  "proxy": "http://user:pass@10.0.0.1:3128",
+  "session_id": "shop-login-1"
 }
 ```
 
@@ -93,6 +104,8 @@ There is no authentication.
 | `js`        | for `eval` | a JavaScript **expression** evaluated in the page after it loads. A returned promise is awaited, so wrap statements in `(async () => { ... })()`. The value must be JSON-serialisable |
 | `timeout`   | no       | milliseconds for the whole request, time spent queued included |
 | `waitUntil` | no       | `load` (default), `domcontentloaded` or `networkidle` |
+| `proxy`     | no       | a proxy URL (see [Proxies](#proxies)), `"pool"` for the next proxy from the pool, or `"direct"` / `null` for none. Omitted: `"direct"`, or `"pool"` when `PROXY_POOL_DEFAULT=true` |
+| `session_id`| no       | 1-128 characters of `A-Za-z0-9._-`. Crawls with the same id share cookies (see [Sessions](#sessions)) |
 
 The script runs before the HTML and markdown are captured, so it can change
 the page (click, expand, scroll) and the snapshots will show the result.
@@ -142,22 +155,133 @@ Only the requested formats are present.
 | 502  | `navigation_failed`   | the main document could not be fetched (DNS, refused, TLS, ...) |
 | 502  | `engine_disconnected` | the engine connection dropped mid-crawl |
 | 502  | `cdp_error`           | the engine rejected a command |
+| 502  | `proxy_failed`        | the proxy could not be used: unreachable, unresolvable, SOCKS handshake failed, or it refused the CONNECT |
+| 502  | `proxy_auth_failed`   | the proxy rejected the credentials (or wanted some and got none) |
+| 503  | `no_proxy_available`  | `proxy: "pool"` and every proxy in the pool is ejected |
 | 503  | `queue_full`          | `QUEUE_MAX` requests already waiting |
 | 503  | `engine_unavailable`  | could not connect to the engine before the deadline |
 | 504  | `timeout`             | the deadline passed (queued, loading, or evaluating) |
 
+Proxy error messages show the proxy with its password replaced by `***`.
+
+### Timeouts and partial results
+
+A request that runs out of `timeout` gets a 504. If it asked for `html` or
+`markdown`, the service then spends up to `PARTIAL_GRACE_MS` more asking the
+page for them as they are, and puts them in `partial`; what doesn't answer in
+time is `null`. Only the requested ones are present, and there is no `partial`
+when neither was requested. The response therefore comes at most
+`timeout + PARTIAL_GRACE_MS` after the request (plus a few ms), and the
+connection is dropped afterwards whatever happened.
+
+```json
+{ "error": { "code": "timeout", "message": "..." }, "partial": { "html": "<html>...</html>", "markdown": "# ..." } }
+```
+
+What there is to get depends on where the page is stuck:
+
+- loaded but the load event never comes (a script or other resource that
+  never arrives, `waitUntil` that is never reached), or `js` that never
+  settles: `partial` has the page as it is.
+- the main document is still downloading or never answered: the engine keeps
+  the previous `about:blank` until the whole body is in, so `html` and
+  `markdown` are `""`.
+- a script that never yields (`for (;;) {}`), or a synchronous `<script src>`
+  that never arrives: the engine answers no CDP command, so both are `null`.
+  The engine's watchdog terminates the script after `--watchdog-ms` (30 s by
+  default); until then that worker keeps one CPU core busy and holds one of
+  the engine's connections, which is what the headroom in
+  `LP_CDP_MAX_CONNECTIONS` is for. `docker run lp-crawl --watchdog-ms 10000`
+  shortens it.
+
+## Proxies
+
+`proxy` (or a pool entry) is passed to the engine as `proxyServer` of
+`Target.createBrowserContext`. It applies to that crawl's connection only —
+every request, subresources included, goes through it — and is undone when the
+context is disposed. Credentials go in the URL and are sent up front, on the
+first request:
+
+| proxy URL | works | checked with |
+|-----------|-------|--------------|
+| `http://host:port`, `http://user:pass@host:port` | yes: plain requests for `http://` pages, `CONNECT` tunnels for `https://` | test suite |
+| `https://host:port` (TLS to the proxy) | yes with `--insecure-disable-tls-host-verification` (which turns verification off for every site too); with verification on, a self-signed proxy certificate fails with `PeerFailedVerification`. A CA-issued certificate should verify but has not been tried | by hand, self-signed |
+| `socks5://[user:pass@]host:port` | yes; the engine resolves the target name itself | test suite |
+| `socks5h://[user:pass@]host:port` | yes; the proxy resolves the name | by hand |
+| `socks4://`, `socks4a://` | not verified, so rejected with a 400 | |
+
+Characters in the username or password that are special in URLs (`@ : / %`)
+must be percent-encoded.
+
+A wrong password shows up two ways: a `http://` page through an HTTP proxy
+loads the proxy's 407 page, and anything through `CONNECT` or SOCKS fails with
+a generic connect error. In the second case the service asks the proxy
+directly whether it rejects the credentials, so both end as
+`proxy_auth_failed`.
+
+### Pool
+
+`PROXY_POOL` and `PROXY_POOL_FILE` list the proxies. A request with
+`"proxy": "pool"` gets the next proxy in round-robin order, skipping ejected
+ones. Requests without `proxy` go direct unless `PROXY_POOL_DEFAULT=true`:
+opting in per request means a request's network path never changes just
+because a pool was configured, and the pool's failures never show up in
+callers that didn't ask for it.
+
+A crawl is a failure of its proxy when it ends in `proxy_failed` or
+`proxy_auth_failed`, and a success when the page was fetched (any HTTP
+status). Timeouts and other errors count as neither. After `PROXY_MAX_FAILS`
+consecutive failures a proxy is ejected for `PROXY_RETRY_AFTER_MS`; then it is
+offered again, and a single further failure ejects it again (a success resets
+the count). Note that an `https://` site that is down, behind an HTTP proxy,
+looks to the engine like a refused `CONNECT` and is charged to the proxy. There
+is no retry on another proxy; the caller gets the error.
+
+## Sessions
+
+Crawls with the same `session_id` share a cookie jar. The jar is loaded into
+the new browser context before the navigation (`Network.setCookies`) and
+written back from it before the context is disposed (`Network.getAllCookies`),
+after a timeout too when the page still answers. With `SESSION_DIR` set (the
+image sets `/data/sessions`) every jar is also written to
+`SESSION_DIR/<session_id>.json` before the response goes out, so it survives
+a restart. Only cookies are kept, not localStorage or the cache. Jars are never
+expired as a whole; delete the file (with the service stopped) to drop one.
+
+Two crawls on one session at the same time each start from the jar as it was,
+and when each finishes its changes are merged in per cookie (name, domain,
+path): cookies it set or changed are written, cookies it started with and no
+longer has (the site deleted them, or they expired) are removed, and cookies
+it left alone are not touched — so a change made by the other crawl in the
+meantime survives. If both changed the same cookie, the one that finished
+last wins.
+
 ## `GET /health`
 
 ```json
-{ "ok": true, "pool": { "size": 4, "busy": 1, "connected": 3, "queued": 0, "reconnects": 0 } }
+{
+  "ok": true,
+  "pool": { "size": 4, "busy": 1, "connected": 3, "queued": 0, "reconnects": 0 },
+  "proxies": {
+    "size": 2, "active": 1, "maxFails": 3, "retryAfterMs": 60000,
+    "proxies": [
+      { "proxy": "http://user:***@10.0.0.1:3128", "state": "active", "uses": 41, "ok": 40, "failed": 1, "consecutiveFails": 0, "lastError": "..." },
+      { "proxy": "socks5://10.0.0.2:1080", "state": "ejected", "retryInMs": 42000, "uses": 3, "ok": 0, "failed": 3, "consecutiveFails": 3, "lastError": "proxy socks5://10.0.0.2:1080 failed: CouldntConnect (https://...)" }
+    ]
+  },
+  "sessions": { "persisted": true, "dir": "/data/sessions", "loaded": 12, "saves": 340, "writeErrors": 0 }
+}
 ```
+
+`proxies` is `null` when no pool is configured.
 
 ## How a crawl runs
 
 Each request leases one connection, creates a fresh browser context on it
-(`Target.createBrowserContext`), opens a page, navigates, collects, and
-disposes the context. Nothing — cookies, storage, cache — carries over from one
-request to the next.
+(`Target.createBrowserContext`, with the proxy if there is one), opens a page,
+loads the session's cookies if it has a `session_id`, navigates, collects, and
+disposes the context. Apart from those session cookies, nothing — storage,
+cache — carries over from one request to the next.
 
 If anything leaves the browser in an unknown state (timeout, dropped
 connection, failed dispose), the connection is closed instead of reused, and
@@ -172,21 +296,27 @@ with `engine_unavailable` at their deadline).
 LP_BIN=/path/to/lightpanda node service/test/run.mjs
 ```
 
-Starts local fixture pages, a `lightpanda serve` and this service on free
-ports, then checks all four outputs, a redirect, a 404, a throwing script,
-bad input, a timeout, an unreachable host, more concurrent requests than slots,
-and killing and restarting the engine. Use a ReleaseFast engine build; the
-Debug build in `zig-out` is about 3.5× slower.
+Starts local fixture pages, test proxies (HTTP with and without a password,
+SOCKS5), a `lightpanda serve` and this service on free ports, then checks all
+four outputs, a redirect, a 404, a throwing script, bad input, a timeout, an
+unreachable host, more concurrent requests than slots, per-request proxies
+and their credentials, the pool's rotation and ejection, session cookies
+(across requests, concurrent requests, and a service restart), partial results
+after a timeout, killing and restarting the engine, and pages stuck in script.
+Use a ReleaseFast engine build; the Debug build in `zig-out` is about 3.5×
+slower.
 
-Against the container instead: start it with `LP_RESTART_DELAY=4` (the
-"engine down" check needs the engine to stay down for a few seconds), serve
-the fixture pages on an address the container can reach (the Docker bridge
-gateway), and tell the test how to kill the engine:
+Against the container instead, on the Docker host:
 
 ```bash
-docker run -d --name lp-crawl-test -p 127.0.0.1:18080:8080 -e POOL_SIZE=3 -e LP_RESTART_DELAY=4 lp-crawl
-LP_SERVICE_URL=http://127.0.0.1:18080 \
-FIXTURE_HOST=172.17.0.1 FIXTURE_URL_HOST=172.17.0.1 \
-LP_ENGINE_KILL="docker exec lp-crawl-test sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
-node service/test/run.mjs
+service/test/docker-test.sh lp-crawl     # NAME, PORT, TEST_PROXY_BASE override the defaults
 ```
+
+It starts the image with a test proxy pool and a session volume, serves the
+fixture pages and proxies on the bridge gateway, runs `run.mjs` against it
+(re-creating the container on the same volume for the restart check), and
+removes the container and volume. The header of `run.mjs` lists what it needs
+when you set it up by hand.
+
+`node service/test/unit.mjs` checks the pool and the cookie merge without an
+engine.

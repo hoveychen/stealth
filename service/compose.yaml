@@ -9,12 +9,28 @@ services:
       context: ..
       dockerfile: service/Dockerfile
     restart: unless-stopped
+    # The default bridge instead of a compose-made network: one container needs
+    # no network of its own, and creating one fails on a daemon whose address
+    # pools are used up ("all predefined address pools have been fully subnetted").
+    network_mode: bridge
     ports:
       - "${CRAWL_PORT:-8080}:8080"   # host port; the engine's CDP port is not published
+    volumes:
+      - crawl-data:/data             # session cookie jars (SESSION_DIR=/data/sessions)
+      # - ./proxies.txt:/etc/lp-crawl/proxies.txt:ro
     environment:
       POOL_SIZE: 4                  # concurrent crawls
       QUEUE_MAX: 100                # waiting requests before 503 queue_full
       DEFAULT_TIMEOUT_MS: 30000
       MAX_TIMEOUT_MS: 120000
+      PARTIAL_GRACE_MS: 2000        # extra time after a timeout to fetch partial html/markdown
+      # PROXY_POOL: "http://user:pass@10.0.0.1:3128,socks5://10.0.0.2:1080"
+      # PROXY_POOL_FILE: /etc/lp-crawl/proxies.txt
+      # PROXY_POOL_DEFAULT: "true"  # requests without "proxy" use the pool
+      # PROXY_MAX_FAILS: 3
+      # PROXY_RETRY_AFTER_MS: 60000
       # LP_CDP_MAX_CONNECTIONS: 12  # default 2*POOL_SIZE+4
       LP_LOG_LEVEL: info
+
+volumes:
+  crawl-data:
