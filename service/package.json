@@ -1,0 +1,13 @@
+{
+  "name": "lightpanda-crawl-service",
+  "private": true,
+  "type": "module",
+  "description": "HTTP crawl service over a pool of CDP connections to one lightpanda serve process",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/run.mjs"
+  }
+}
