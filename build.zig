@@ -82,6 +82,12 @@ pub fn build(b: *Build) !void {
     // Hot-code layout for the Linux release artifacts, see orderfile/README.md.
     // Opt-in (CI passes it): it needs LLD and costs link time on every build.
     const orderfile = b.option([]const u8, "orderfile", "Linker script packing hot sections, e.g. orderfile/lightpanda.ld (Linux/LLD release builds)");
+    // Dropping debug info cuts what LLVM holds for the one large ReleaseFast
+    // compile: on linux/arm64 the snapshot_creator compile finished in 13 min
+    // within ~12GB (RAM + swap) with it, and was past 15GB and still running
+    // at 37 min without. service/Dockerfile passes it so the image builds in a
+    // Docker Desktop VM. Off by default: stack traces then lose symbols.
+    const strip = b.option(bool, "strip", "Omit debug info from the executables");
 
     const version = resolveVersion(b);
     std.debug.print("Lightpanda {f}\n", .{version});
@@ -103,6 +109,7 @@ pub fn build(b: *Build) !void {
         .link_libcpp = true,
         .sanitize_c = enable_csan,
         .sanitize_thread = enable_tsan,
+        .strip = strip,
     });
     lightpanda_module.addImport("lightpanda", lightpanda_module); // allow circular "lightpanda" import
     lightpanda_module.addImport("build_config", opts.createModule());
@@ -164,6 +171,7 @@ pub fn build(b: *Build) !void {
         .orderfile = orderfile,
         .sanitize_c = enable_csan,
         .sanitize_thread = enable_tsan,
+        .strip = strip,
     };
 
     {
@@ -234,6 +242,7 @@ const ExeConfig = struct {
     orderfile: ?[]const u8,
     sanitize_c: ?std.zig.SanitizeC,
     sanitize_thread: bool,
+    strip: ?bool,
 };
 
 fn addExe(b: *Build, config: ExeConfig, name: []const u8, check_name: []const u8, root_source_file: []const u8) *Build.Step.Compile {
@@ -246,6 +255,7 @@ fn addExe(b: *Build, config: ExeConfig, name: []const u8, check_name: []const u8
             .optimize = config.optimize,
             .sanitize_c = config.sanitize_c,
             .sanitize_thread = config.sanitize_thread,
+            .strip = config.strip,
             .imports = &.{
                 .{ .name = "lightpanda", .module = config.lightpanda_module },
             },
