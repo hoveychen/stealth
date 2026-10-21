@@ -1523,6 +1523,29 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return res.end();
     }
 
+    if (std.mem.eql(u8, path, "/partial_body/streaming.html")) {
+        // No charset on the header, so the one the document declares only
+        // counts once it has arrived. The first chunk stops one byte into the
+        // two-byte "é" of the paragraph, and carries everything that writes to
+        // the frame or asks the network for something when it is parsed.
+        var send_buffer: [1024]u8 = undefined;
+        var res = try req.respondStreaming(&send_buffer, .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = "text/html" },
+                },
+            },
+        });
+        try res.writer.writeAll("<html><head><meta charset=\"utf-8\"><meta name=\"referrer\" content=\"no-referrer\"><base href=\"/elsewhere/\"><title>Partial</title></head>" ++
+            "<body><h1>H\xc3\xa9llo</h1><script>window.__partial_ran = true;</script><img src=\"/partial_body/img.gif\"><p>first paragraph <a href=\"next.html\">next</a> caf\xc3");
+        try res.writer.flush();
+        try res.flush();
+        lp.io.sleep(.fromMilliseconds(1000), .awake) catch {};
+        try res.writer.writeAll("\xa9</p><p id=second>second</p></body></html>");
+        try res.writer.flush();
+        return res.end();
+    }
+
     if (std.mem.eql(u8, path, "/sse/streaming")) {
         sse_flag.store(false, .release);
         var send_buffer: [1024]u8 = undefined;

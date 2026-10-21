@@ -2651,6 +2651,88 @@ fn declaredCharset(html: []const u8) ?[]const u8 {
     return null;
 }
 
+// The encoding an HTML document starts out with, from its Content-Type and
+// its first bytes, as an encoding_rs canonical name.
+fn initialCharset(mime: *const Mime, data: []const u8) struct { name: []const u8, tentative: bool } {
+    // A BOM outranks the Content-Type header and any <meta>.
+    // encoding_rs already decodes by the BOM whatever label it was
+    // handed, so this only keeps document.characterSet honest.
+    if (bomCharset(data)) |name| {
+        return .{ .name = name, .tentative = false };
+    }
+    const charset_str = mime.charsetString();
+    const header_info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
+    if (!mime.is_default_charset and header_info.isValid()) {
+        return .{ .name = header_info.name(), .tentative = false };
+    }
+    // Nothing authoritative has named an encoding: either the
+    // header declared none, or the label it declared answers to
+    // no encoding, which amounts to the same thing (measured:
+    // Chrome honours a <meta> under a
+    // `charset=not-a-real-encoding` header). The fallback
+    // stands for now, and `parse` gives the document itself its
+    // turn once the whole body is in hand.
+    return .{ .name = default_html_charset, .tentative = true };
+}
+
+pub const ArrivedBody = struct {
+    bytes: []const u8,
+    // The encoding the parse would decode `bytes` with if they were the whole
+    // body: a tentative charset is settled by the document's own declaration,
+    // as far as it has arrived.
+    charset: []const u8,
+};
+
+// The HTML body of this frame's navigation as far as it has arrived, while it
+// has not been parsed; null once it has, or when it is not HTML. Nothing of it
+// is in the document before then: the HTTP client hands a document over only
+// once its body is complete (until then the bytes sit on the transfer, and a
+// navigation that replaces a page has not committed), and the frame holds it
+// back again for the parse in frameDoneCallback. Read-only: nothing is settled
+// on the frame or the transfer, so looking changes nothing the parse later
+// does.
+pub fn arrivedBody(self: *const Frame) ?ArrivedBody {
+    switch (self._parse_state) {
+        .html => |html| {
+            const bytes = html.buffer.items;
+            var charset = self.charset;
+            if (self._charset_tentative) {
+                if (declaredCharset(bytes)) |name| {
+                    charset = name;
+                }
+            }
+            return .{ .bytes = bytes, .charset = charset };
+        },
+        .pre => {},
+        else => return null,
+    }
+
+    const transfer = self._session.browser.http_client.findTransfer(self._req_id) orelse return null;
+    const arrived = transfer.arrivedSoFar() orelse return null;
+    const bytes = arrived.body;
+    if (bytes.len == 0) {
+        return null;
+    }
+    // The same reading of the type frameDataCallback makes of the first chunk.
+    const mime: Mime = blk: {
+        if (arrived.content_type) |ct| {
+            break :blk Mime.parseLenient(ct) catch Mime.sniff(bytes);
+        }
+        break :blk Mime.sniff(bytes);
+    } orelse return null;
+    if (mime.content_type != .text_html) {
+        return null;
+    }
+    const initial = initialCharset(&mime, bytes);
+    var charset = initial.name;
+    if (initial.tentative) {
+        if (declaredCharset(bytes)) |name| {
+            charset = name;
+        }
+    }
+    return .{ .bytes = bytes, .charset = charset };
+}
+
 fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     var self: *Frame = @ptrCast(@alignCast(transfer.req.ctx));
 
@@ -2716,29 +2798,9 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
 
         switch (mime.content_type) {
             .text_html => {
-                // Normalize and store the charset using encoding_rs canonical names
-                // A BOM outranks the Content-Type header and any <meta>.
-                // encoding_rs already decodes by the BOM whatever label it was
-                // handed, so this only keeps document.characterSet honest.
-                const charset_str = mime.charsetString();
-                const header_info = h5e.encoding_for_label(charset_str.ptr, charset_str.len);
-                if (bomCharset(data)) |name| {
-                    self.charset = name;
-                    self._charset_tentative = false;
-                } else if (!mime.is_default_charset and header_info.isValid()) {
-                    self.charset = header_info.name();
-                    self._charset_tentative = false;
-                } else {
-                    // Nothing authoritative has named an encoding: either the
-                    // header declared none, or the label it declared answers to
-                    // no encoding, which amounts to the same thing (measured:
-                    // Chrome honours a <meta> under a
-                    // `charset=not-a-real-encoding` header). The fallback
-                    // stands for now, and `parse` gives the document itself its
-                    // turn once the whole body is in hand.
-                    self.charset = default_html_charset;
-                    self._charset_tentative = true;
-                }
+                const charset = initialCharset(&mime, data);
+                self.charset = charset.name;
+                self._charset_tentative = charset.tentative;
                 self._parse_state = .{ .html = .{
                     .buffer = .empty,
                     .arena = try self.getArena(.large, "Frame.navigate"),

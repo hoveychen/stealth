@@ -397,15 +397,20 @@ if (EXTERNAL) {
 
 // 14. Timeouts hand back what the page had. A page whose load event never
 // comes (an async script that never arrives) has its html and markdown; a
-// document whose body never finishes has nothing yet (the engine keeps the
-// old about:blank until the body is in); a page that never answers likewise.
+// document whose body never finishes is not parsed yet, so it has the source
+// that arrived, without anything in it being fetched; a page that never
+// answers has nothing.
 const GRACE = 2000;
 {
     const { status, body, ms } = await crawl({ url: `${F}/slow-load`, formats: ['html', 'markdown', 'meta'], timeout: 1500 });
-    check('partial: load never fires -> 504 with partial html and markdown', status === 504 && body.error?.code === 'timeout' && body.partial?.html?.includes('<h1>Loaded body</h1>') && /^# Loaded body$/m.test(body.partial?.markdown ?? ''), `${status} ${ms}ms partial=${JSON.stringify(body.partial)?.slice(0, 200)}`);
+    check('partial: load never fires -> 504 with partial html and markdown', status === 504 && body.error?.code === 'timeout' && body.partial?.html?.includes('<h1>Loaded body</h1>') && /^# Loaded body$/m.test(body.partial?.markdown ?? '') && body.partial?.source === 'dom', `${status} ${ms}ms partial=${JSON.stringify(body.partial)?.slice(0, 200)}`);
     check('partial: answered within timeout + grace', ms < 1500 + GRACE + 1000, `${ms}ms`);
     const stall = await crawl({ url: `${F}/stall`, formats: ['html', 'markdown'], timeout: 1500 });
-    check('partial: body never finishes -> 504 with partial keys, within timeout + grace', stall.status === 504 && 'html' in (stall.body.partial ?? {}) && 'markdown' in stall.body.partial && stall.ms < 1500 + GRACE + 1000, `${stall.status} ${stall.ms}ms partial=${JSON.stringify(stall.body.partial)?.slice(0, 120)}`);
+    check('partial: body never finishes -> 504 within timeout + grace', stall.status === 504 && stall.ms < 1500 + GRACE + 1000, `${stall.status} ${stall.ms}ms`);
+    check('partial: body never finishes -> the arrived source and its markdown, marked raw-body', stall.body.partial?.source === 'raw-body' && stall.body.partial.html?.startsWith('<!doctype html><html><head><title>Stalled</title>') && stall.body.partial.html.includes('<h1>Partial content</h1>') && /^# Partial content$/m.test(stall.body.partial.markdown ?? '') && /more is coming/.test(stall.body.partial.markdown ?? ''), `partial=${JSON.stringify(stall.body.partial)?.slice(0, 300)}`);
+    const stallHtml = await crawl({ url: `${F}/stall?html-only`, formats: ['html'], timeout: 1500 });
+    check('partial: nothing the unparsed source names is fetched', fixture.stats.stallAssetHits === 0, `${fixture.stats.stallAssetHits} requests for /stall-asset.gif`);
+    check('partial: body never finishes, html only -> raw-body html, no markdown key', stallHtml.status === 504 && stallHtml.body.partial?.source === 'raw-body' && stallHtml.body.partial.html?.includes('<h1>Partial content</h1>') && !('markdown' in stallHtml.body.partial), `${stallHtml.status} partial=${JSON.stringify(stallHtml.body.partial)?.slice(0, 200)}`);
     const hang = await crawl({ url: `${F}/hang`, formats: ['html', 'eval'], js: '1', timeout: 1500 });
     check('partial: page that never answers -> 504 with partial.html present, no markdown key', hang.status === 504 && 'html' in (hang.body.partial ?? {}) && !('markdown' in hang.body.partial) && hang.ms < 1500 + GRACE + 1000, `${hang.status} ${hang.ms}ms partial=${JSON.stringify(hang.body.partial)?.slice(0, 120)}`);
     const meta = await crawl({ url: `${F}/hang`, formats: ['meta'], timeout: 1000 });

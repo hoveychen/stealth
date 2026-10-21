@@ -3205,6 +3205,32 @@ pub const Transfer = struct {
         self.detachOrDeinit();
     }
 
+    pub const Arrived = struct {
+        content_type: ?[]const u8,
+        body: []const u8,
+    };
+
+    // What a buffered response still on the wire has received so far: its
+    // Content-Type and the body up to now, which is otherwise only delivered
+    // once complete. null where finishEarly would have nothing to deliver.
+    // Read straight off the connection rather than through
+    // materializeResponse, which would file the response's cookies and settle
+    // its client hints ahead of time; nothing about the transfer changes.
+    pub fn arrivedSoFar(self: *const Transfer) ?Arrived {
+        if (self.state != .inflight or self.req.streaming) {
+            return null;
+        }
+        const conn = self._conn orelse return null;
+        const status = conn.getResponseCode() catch 0;
+        if (status == 0 or (status >= 300 and status < 400)) {
+            return null;
+        }
+        return .{
+            .content_type = if (conn.getResponseHeader("content-type", 0)) |h| h.value else null,
+            .body = self.res.buffer.items,
+        };
+    }
+
     // take whatever we have, and deliver it.
     pub fn finishEarly(self: *Transfer) bool {
         if (self.state != .inflight or self.req.streaming or self._cache_intent == .revalidate) {

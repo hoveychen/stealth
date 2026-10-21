@@ -20,7 +20,7 @@ const NOT_FOUND = `<!doctype html><html><head><title>Missing</title></head><body
 // host is the address to listen on; urlHost is the one put in the page URLs,
 // for when the crawler reaches this machine by another name (a container).
 export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
-    const stats = { inflight: 0, maxInflight: 0 };
+    const stats = { inflight: 0, maxInflight: 0, stallAssetHits: 0 };
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://x');
         const html = (status, body, headers = {}) => {
@@ -48,11 +48,16 @@ export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
             case '/hang':
                 return; // never answers
             case '/stall': {
-                // Sends the start of a page, then never finishes it.
+                // Sends the start of a page, then never finishes it. The image
+                // is never parsed by the page, so nothing should ask for it.
                 res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-                res.write(`<!doctype html><html><head><title>Stalled</title></head><body><h1>Partial content</h1><p>more is coming</p>\n`.padEnd(4096, ' '));
+                res.write(`<!doctype html><html><head><title>Stalled</title></head><body><h1>Partial content</h1><p>more is coming</p><img src="/stall-asset.gif" alt="">\n`.padEnd(4096, ' '));
                 return;
             }
+            case '/stall-asset.gif':
+                stats.stallAssetHits++;
+                res.writeHead(204);
+                return res.end();
             case '/slow-load':
                 // Parsed and rendered, but an async script that never arrives
                 // holds the load event back.
