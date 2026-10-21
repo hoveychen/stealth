@@ -106,6 +106,10 @@ watchdog_entry: Watchdog.Entry,
 // Freed in deinit *after* env.deinit() tears down the Isolate — the point past
 // which no finalizer can fire.
 fc_identity_pool: std.heap.MemoryPool(js.FinalizerCallback.Identity),
+// Records taken from fc_identity_pool and not yet given back. A page's records
+// all come back by the end of its teardown, so between crawls on a reused
+// connection this is back where it started.
+fc_identity_live: usize = 0,
 
 // Monotonic frame-ID generator scoped to this Browser (one per CDP
 // connection). Lives here, not on Session, because CDP target IDs
@@ -125,6 +129,17 @@ const InitOpts = struct {
 // continuous navigation; in practice we wrap the connection long
 // before that). Callers must format with `FID-{d:0>10}` to match the
 // existing CDP target-ID encoding (`src/cdp/id.zig`).
+pub fn createFcIdentity(self: *Browser) !*js.FinalizerCallback.Identity {
+    const record = try self.fc_identity_pool.create(self.allocator);
+    self.fc_identity_live += 1;
+    return record;
+}
+
+pub fn destroyFcIdentity(self: *Browser, record: *js.FinalizerCallback.Identity) void {
+    self.fc_identity_live -= 1;
+    self.fc_identity_pool.destroy(record);
+}
+
 pub fn nextFrameId(self: *Browser) u32 {
     const id = self.frame_id_gen +% 1;
     self.frame_id_gen = id;

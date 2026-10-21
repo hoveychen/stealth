@@ -588,18 +588,36 @@ pub const FinalizerCallback = struct {
         finalizer_ptr_id: usize,
         resolved_ptr_id: usize,
         next: ?*FinalizerCallback.Identity = null,
+        // Membership in `identity.finalizers`, for as long as the weak Global
+        // is armed (until the weak callback fires or `identity` is deinit).
+        identity_node: std.DoublyLinkedList.Node = .{},
+        // The FC is gone (Page teardown); page and finalizer_ptr_id are stale.
         done: bool = false,
+        // `identity` was deinit: the Global was Reset, which destroys the V8
+        // node, so the weak callback will never fire for this record.
+        reset: bool = false,
     };
 
     // Called during Page teardown to force cleanup regardless of identities.
     pub fn deinit(self: *FinalizerCallback, page: *Page) void {
-        // Mark all identities as done so stale V8 weak callbacks
-        // won't find the wrong FC if resolved_ptr_id is reused.
         var id = self.identities;
         while (id) |identity| {
-            identity.done = true;
             id = identity.next;
+            if (identity.reset) {
+                // Nothing can reach it any more: the weak callback is gone with
+                // the Global, and its world's identity let go of it on deinit.
+                // Page.deinit resets the main world's identity just before
+                // this, so on an ordinary teardown that is every record.
+                identity.browser.destroyFcIdentity(identity);
+            } else {
+                // Its world (an isolated world that outlives this page) still
+                // holds the weak Global. Mark it done so the weak callback, or
+                // that world's identity.deinit, frees it without touching this
+                // FC — resolved_ptr_id may be reused by then.
+                identity.done = true;
+            }
         }
+        self.identities = null;
         self.release_ref(self.finalizer_ptr_id, page);
     }
 };
