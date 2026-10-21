@@ -11,18 +11,23 @@
 //   LP_SERVICE_URL=http://127.0.0.1:8080 \
 //   FIXTURE_HOST=0.0.0.0 FIXTURE_URL_HOST=172.17.0.1 \
 //   LP_ENGINE_KILL="docker exec lp-crawl sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
+//   LP_ENGINE_CMDLINE="docker exec lp-crawl sh -c 'cat /proc/\$(cat /tmp/lightpanda.pid)/cmdline'" \
+//   LP_SESSION_FILES="docker exec lp-crawl ls /data/sessions" \
 //   node service/test/run.mjs
 //
 // LP_ENGINE_KILL kills the engine; the container's entrypoint restarts it
 // after LP_RESTART_DELAY seconds, which must be at least 4 so the "engine
 // down" check sees it down. LP_SERVICE_RESTART restarts the service (the
-// session check needs cookies to survive it).
+// session check needs cookies to survive it). LP_ENGINE_CMDLINE prints the
+// engine's command line, LP_SESSION_FILES the names in SESSION_DIR. The
+// session checks expect SESSION_TTL_MS=6000 and SESSION_SWEEP_MS=1000.
 //
 // The proxy checks start their proxies on TEST_PROXY_HOST, ports
 // TEST_PROXY_BASE .. TEST_PROXY_BASE+5, and expect the service's pool to be
-// exactly the first three, with PROXY_MAX_FAILS=2 and PROXY_RETRY_AFTER_MS=5000:
+// exactly the first three, with PROXY_MAX_FAILS=2, PROXY_RETRY_AFTER_MS=5000,
+// PROXY_POOL_RETRIES=2 and the probe address at B+3:
 //
-//   PROXY_POOL=http://H:B,http://pool:secret@H:B+1,http://H:B+2
+//   PROXY_POOL=http://H:B,http://pool:secret@H:B+1,http://H:B+2 PROXY_PROBE=H:B+3
 //
 // B+2 is left closed, so it is the pool's dead proxy. service/test/docker-test.sh
 // sets all of this up against a container.
@@ -41,7 +46,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const EXTERNAL = process.env.LP_SERVICE_URL;
 const LP_BIN = process.env.LP_BIN || path.resolve(here, '../../zig-out/bin/lightpanda');
 if (EXTERNAL) {
-    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE']) {
+    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES']) {
         if (!process.env[v]) {
             console.error(`LP_SERVICE_URL needs ${v} (see the header of this file)`);
             process.exit(2);
@@ -115,7 +120,7 @@ const px = {
 const proxyLogs = () => Object.values(px).flatMap((p) => p.log ?? []);
 const POOL = [`http://${PH}:${px.poolA.port}`, `http://pool:secret@${PH}:${px.poolB.port}`, `http://${PH}:${px.deadPort}`];
 
-let SVC, POOL_SIZE, restartService;
+let SVC, POOL_SIZE, restartService, sessionFiles;
 if (EXTERNAL) {
     SVC = EXTERNAL.replace(/\/$/, '');
     await waitHttp(`${SVC}/health`);
@@ -125,6 +130,7 @@ if (EXTERNAL) {
         await promisify(exec)(process.env.LP_SERVICE_RESTART);
         await waitHttp(`${SVC}/health`, 300);
     };
+    sessionFiles = async () => (await promisify(exec)(process.env.LP_SESSION_FILES)).stdout.split('\n').filter(Boolean);
 } else {
     POOL_SIZE = 3;
     startEngine();
@@ -143,7 +149,11 @@ if (EXTERNAL) {
                 PROXY_POOL: POOL.join(','),
                 PROXY_MAX_FAILS: '2',
                 PROXY_RETRY_AFTER_MS: '5000',
+                PROXY_POOL_RETRIES: '2',
+                PROXY_PROBE: `${PH}:${px.plain.port}`,
                 SESSION_DIR: sessionDir,
+                SESSION_TTL_MS: '6000',
+                SESSION_SWEEP_MS: '1000',
             },
             stdio: ['ignore', 'ignore', 'inherit'],
         });
@@ -158,6 +168,7 @@ if (EXTERNAL) {
         startService();
         await waitHttp(`${SVC}/health`);
     };
+    sessionFiles = async () => fs.readdirSync(sessionDir);
 }
 const health = async () => (await fetch(`${SVC}/health`)).json();
 
@@ -167,6 +178,13 @@ async function crawl(body) {
     return { status: r.status, body: await r.json(), ms: Date.now() - t0 };
 }
 const F = fixture.base;
+
+// 0. The engine runs with a raised shared HTTP connection pool (the image's
+// entrypoint passes it; the local run starts the engine itself).
+if (EXTERNAL) {
+    const cmdline = (await promisify(exec)(process.env.LP_ENGINE_CMDLINE)).stdout.replace(/\0/g, ' ').trim();
+    check('engine: started with --http-max-concurrent 255', /(^| )--http-max-concurrent 255( |$)/.test(cmdline), cmdline);
+}
 
 // 1. All four outputs on a page whose content is partly written by script.
 {
@@ -262,31 +280,54 @@ const F = fixture.base;
     check('proxy: unsupported scheme -> 400', bogus.status === 400, `${bogus.status} ${bogus.body.error?.message}`);
 }
 
-// 12. Proxy pool: round robin over all three, the dead one ejected after two
-// failures, then offered again after PROXY_RETRY_AFTER_MS.
+// 12. Proxy pool: round robin over all three; a request that lands on the
+// dead one moves on to the next proxy and still succeeds, and the dead one is
+// ejected after two failures, then offered again after PROXY_RETRY_AFTER_MS.
 {
     const h0 = await health();
     const names = h0.proxies?.proxies.map((p) => p.proxy) ?? [];
     check('pool: /health lists the 3 configured proxies, password redacted', names.length === 3 && h0.proxies.active === 3 && names.some((n) => n.includes('pool:***@')) && !JSON.stringify(h0).includes('secret'), JSON.stringify(names));
+    const deadEntry = (h) => h.proxies.proxies.find((p) => p.proxy.endsWith(`:${px.deadPort}`));
     const a0 = px.poolA.log.length, b0 = px.poolB.log.length;
     const first = [];
     for (let i = 0; i < 6; i++) first.push(await crawl({ url: `${F}/index.html?pool=${i}`, formats: ['meta'], proxy: 'pool' }));
-    const failed = first.filter((r) => r.status === 502 && r.body.error?.code === 'proxy_failed');
-    check('pool: 6 requests reach every proxy (A and B serve, the dead one fails twice)', px.poolA.log.length - a0 >= 2 && px.poolB.log.length - b0 >= 2 && failed.length === 2 && first.filter((r) => r.status === 200).length === 4, `codes ${first.map((r) => r.body.error?.code ?? r.status).join(',')} A+${px.poolA.log.length - a0} B+${px.poolB.log.length - b0}`);
-    check('pool: proxy B was sent its credentials', px.poolB.log.slice(b0).every((l) => l.auth === 'ok'), JSON.stringify(px.poolB.log.slice(b0).map((l) => l.auth)));
     const h1 = await health();
-    const dead = h1.proxies.proxies.find((p) => p.proxy.endsWith(`:${px.deadPort}`));
+    const dead = deadEntry(h1);
+    check('pool: 6 requests reach every proxy, all 200 (A and B serve, the dead one is tried twice)', px.poolA.log.length - a0 >= 2 && px.poolB.log.length - b0 >= 2 && first.every((r) => r.status === 200) && dead?.uses === 2 && dead.failed === 2, `codes ${first.map((r) => r.body.error?.code ?? r.status).join(',')} A+${px.poolA.log.length - a0} B+${px.poolB.log.length - b0} dead=${JSON.stringify(dead)}`);
+    // Round robin from the start: A, B, dead -> retried on A, B, dead -> retried on A.
+    const movedOn = [2, 4].every((i) => first[i].status === 200 && px.poolA.log.slice(a0).some((l) => l.target === `${F}/index.html?pool=${i}`));
+    check('pool retry: requests that picked the dead proxy were retried on the next one and returned 200', movedOn, `A saw ${JSON.stringify(px.poolA.log.slice(a0).map((l) => l.target))}`);
+    check('pool: proxy B was sent its credentials', px.poolB.log.slice(b0).every((l) => l.auth === 'ok'), JSON.stringify(px.poolB.log.slice(b0).map((l) => l.auth)));
     check('pool: dead proxy shows as ejected in /health', h1.proxies.active === 2 && dead?.state === 'ejected' && dead.consecutiveFails === 2 && /proxy_failed|CouldntConnect/.test(dead.lastError ?? ''), JSON.stringify(dead));
     const next = [];
     for (let i = 0; i < 4; i++) next.push(await crawl({ url: `${F}/index.html?pool=after${i}`, formats: ['meta'], proxy: 'pool' }));
-    check('pool: while ejected, every request succeeds on the other two', next.every((r) => r.status === 200), next.map((r) => r.status).join(','));
+    check('pool: while ejected, every request succeeds on the other two', next.every((r) => r.status === 200) && deadEntry(await health()).uses === 2, next.map((r) => r.status).join(','));
     await sleep(5200);
     const h2 = await health();
-    check('pool: dead proxy offered again after the retry period', h2.proxies.proxies.find((p) => p.proxy.endsWith(`:${px.deadPort}`))?.state === 'active', JSON.stringify(h2.proxies.proxies.map((p) => p.state)));
+    check('pool: dead proxy offered again after the retry period', deadEntry(h2)?.state === 'active', JSON.stringify(h2.proxies.proxies.map((p) => p.state)));
     const again = [];
     for (let i = 0; i < 3; i++) again.push(await crawl({ url: `${F}/index.html?pool=again${i}`, formats: ['meta'], proxy: 'pool' }));
     const h3 = await health();
-    check('pool: one more failure ejects it again straight away', again.filter((r) => r.body.error?.code === 'proxy_failed').length === 1 && h3.proxies.proxies.find((p) => p.proxy.endsWith(`:${px.deadPort}`))?.state === 'ejected', again.map((r) => r.body.error?.code ?? r.status).join(','));
+    check('pool: one more failure ejects it again straight away (and that request is retried)', again.every((r) => r.status === 200) && deadEntry(h3)?.failed === 3 && deadEntry(h3)?.state === 'ejected', `${again.map((r) => r.body.error?.code ?? r.status).join(',')} ${JSON.stringify(deadEntry(h3))}`);
+}
+
+// 12b. An https site that is down, behind a good proxy: the engine sees the
+// proxy refuse the CONNECT, the service asks the proxy for the probe address,
+// and the site is blamed, not the proxy. (The dead pool proxy is still ejected.)
+{
+    const downPort = await freePort();
+    const h0 = await health();
+    const goodOf = (h) => h.proxies.proxies.filter((p) => !p.proxy.endsWith(`:${px.deadPort}`));
+    const a0 = px.poolA.log.length, b0 = px.poolB.log.length;
+    const res = [];
+    for (let i = 0; i < 3; i++) res.push(await crawl({ url: `https://${PH}:${downPort}/?down=${i}`, formats: ['meta'], proxy: 'pool', timeout: 10000 }));
+    const h1 = await health();
+    const viaProxy = [...px.poolA.log.slice(a0), ...px.poolB.log.slice(b0)].filter((l) => l.method === 'CONNECT' && l.target === `${PH}:${downPort}`).length;
+    check('pool: a site that is down -> 502 navigation_failed, blamed on the site', res.every((r) => r.status === 502 && r.body.error?.code === 'navigation_failed' && /reaches the probe/.test(r.body.error.message)) && viaProxy >= 3, `CONNECTs ${viaProxy} ${res.map((r) => `${r.status} ${r.body.error?.code}: ${r.body.error?.message}`).join(' | ')}`);
+    const before = goodOf(h0), after = goodOf(h1);
+    check('pool: ... and neither good proxy is charged or ejected', after.every((p, i) => p.state === 'active' && p.failed === before[i].failed && p.consecutiveFails === 0), JSON.stringify(after));
+    const direct = await crawl({ url: `https://${PH}:${downPort}/`, formats: ['meta'], proxy: `http://${PH}:${px.plain.port}`, timeout: 10000 });
+    check('proxy: the same with a per-request proxy -> navigation_failed, not proxy_failed', direct.status === 502 && direct.body.error?.code === 'navigation_failed', `${direct.status} ${JSON.stringify(direct.body.error)}`);
 }
 
 // 13. Sessions: cookies carry over between requests with the same session_id,
@@ -315,6 +356,43 @@ const F = fixture.base;
     check('session: cookies survive a service restart', afterRestart === 'a=9; c=3', `"${afterRestart}" (restart took ${Date.now() - t0}ms)`);
     const bad = await crawl({ url: `${F}/index.html`, session_id: '../etc/passwd' });
     check('session: unsafe session_id -> 400', bad.status === 400, `${bad.status}`);
+}
+
+// 13b. Deleting a session, and sessions expiring after SESSION_TTL_MS idle.
+{
+    const titleOf = async (sid) => (await crawl({ url: `${F}/echo-cookies`, formats: ['meta'], session_id: sid })).body.meta?.title ?? '(failed)';
+    const del = (sid) => fetch(`${SVC}/sessions/${sid}`, { method: 'DELETE' }).then(async (r) => ({ status: r.status, body: await r.json() }));
+    const sid = `d${Date.now()}`;
+    await crawl({ url: `${F}/set-cookie?x=1`, formats: ['meta'], session_id: sid });
+    const had = (await sessionFiles()).includes(`${sid}.json`);
+    const r1 = await del(sid);
+    const gone = !(await sessionFiles()).includes(`${sid}.json`);
+    const r2 = await del(sid);
+    const sent = await titleOf(sid);
+    check('session delete: DELETE /sessions/:id -> 200, file removed, cookies gone, second DELETE 404', had && r1.status === 200 && r1.body.deleted === sid && gone && r2.status === 404 && sent === '', `file before ${had}, ${r1.status} ${JSON.stringify(r1.body)}, file after ${!gone}, again ${r2.status}, next crawl sends "${sent}"`);
+    const badDel = await del('..%2Fetc');
+    check('session delete: unsafe id -> 400', badDel.status === 400, `${badDel.status}`);
+    // A crawl still running when its session is deleted doesn't bring it back.
+    const sid2 = `dl${Date.now()}`;
+    await crawl({ url: `${F}/set-cookie?y=1`, formats: ['meta'], session_id: sid2 });
+    const running = crawl({ url: `${F}/set-cookie?z=1`, formats: ['meta'], js: 'new Promise((r) => setTimeout(r, 800))', session_id: sid2 });
+    await sleep(300);
+    const r3 = await del(sid2);
+    await running;
+    const after = await titleOf(sid2);
+    check('session delete: a crawl in flight during DELETE does not resurrect the session', r3.status === 200 && after === '', `${r3.status}, next crawl sends "${after}"`);
+
+    const h0 = await health();
+    const ttl = h0.sessions.ttlMs;
+    const sid3 = `e${Date.now()}`;
+    await crawl({ url: `${F}/set-cookie?t=1`, formats: ['meta'], session_id: sid3 });
+    const kept = await titleOf(sid3);
+    const before = (await sessionFiles()).includes(`${sid3}.json`);
+    await sleep(ttl + 2500);
+    const h1 = await health();
+    const removed = !(await sessionFiles()).includes(`${sid3}.json`);
+    const sentAfter = await titleOf(sid3);
+    check(`session ttl: idle past SESSION_TTL_MS (${ttl}ms) -> file swept, cookies gone`, ttl > 0 && ttl <= 20000 && kept === 't=1' && before && removed && sentAfter === '' && h1.sessions.expired > h0.sessions.expired, `kept "${kept}", file before ${before}, removed ${removed}, sends "${sentAfter}", expired ${h0.sessions.expired}->${h1.sessions.expired}, stored ${h0.sessions.stored}->${h1.sessions.stored}`);
 }
 
 // 14. Timeouts hand back what the page had. A page whose load event never

@@ -1,0 +1,166 @@
+body  { font-family:Verdana, Geneva, sans-serif; font-size:10pt; color:#7a7a7a; }
+td    { font-family:Verdana, Geneva, sans-serif; font-size:10pt; color:#7a7a7a; }
+
+.admin td   { font-family:Verdana, Geneva, sans-serif; font-size:8.5pt; color:#000000; }
+.subtext td { font-family:Verdana, Geneva, sans-serif; font-size:  7pt; color:#7a7a7a; }
+
+input    { font-family:monospace; font-size:10pt; }
+input[type='submit'] { font-family:Verdana, Geneva, sans-serif; }
+input[readonly] { color:#7a7a7a; background-color:#f4f4ee; }
+textarea { font-family:monospace; font-size:10pt; resize:both; }
+
+a:link    { color:#000000; text-decoration:none; }
+a:visited { color:#7a7a7a; text-decoration:none; }
+
+.default { font-family:Verdana, Geneva, sans-serif; font-size: 10pt; color:#7a7a7a; }
+.admin   { font-family:Verdana, Geneva, sans-serif; font-size:8.5pt; color:#000000; }
+.title   { font-family:Verdana, Geneva, sans-serif; font-size: 10pt; color:#7a7a7a; overflow:hidden; }
+.subtext { font-family:Verdana, Geneva, sans-serif; font-size:  7pt; color:#7a7a7a; }
+.yclinks { font-family:Verdana, Geneva, sans-serif; font-size:  8pt; color:#7a7a7a; }
+.pagetop { font-family:Verdana, Geneva, sans-serif; font-size: 10pt; color:#222222; line-height:12px; }
+.comhead { font-family:Verdana, Geneva, sans-serif; font-size:  8pt; color:#7a7a7a; }
+.hnname  { margin-right: 5px; }
+.sitename { margin-right: 5px; }
+.logo { display:block; width:16px; height:16px; border:1px solid white; color:white; font-weight:bold; text-align:center; line-height:16px; }
+
+.titleline { display:inline; }
+.titleline > a { font-size:10pt; }
+.sitestr { color:#7a7a7a; }
+.rank { color:#7a7a7a; }
+.score { color:#7a7a7a; }
+.age a { color:#7a7a7a; }
+.hnuser { color:#7a7a7a; }
+.morelink { color:#000000; }
+.votearrow { width:10px; height:10px; border:0px; margin:3px 2px 6px; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M5 1 L9 9 L1 9 Z' fill='%23999'/%3E%3C/svg%3E"); background-size:10px; background-repeat:no-repeat; }
+.votelinks.nosee div.votearrow.rotate180 { display:none; }
+.nosee { visibility:hidden; pointer-events:none; cursor:default; }
+.noshow { display:none; }
+.coll .togg { color:#000; }
+.spacer { height:5px; }
+.morespace { height:10px; }
+
+#main { min-width:796px; }
+
+@media only screen and (max-width: 1200px) {
+  .title { font-size:10.0pt; padding:3px 4px; }
+  .subtext { font-size:10.0pt; padding:3px 3px; }
+  .comhead { font-size:10.0pt; padding:1px 3px; }
+  .pagetop { font-size:10.0pt; padding:2px 0px; }
+  .yclinks { font-size:10.0pt; padding:2px 2px; }
+  .rank { font-size:10.0pt; padding:1px 4px; }
+  .score { font-size:10.0pt; padding:3px 4px; }
+  .age { font-size:10.0pt; padding:0px 2px; }
+  .sitestr { font-size:10.0pt; padding:3px 6px; }
+  .hnuser { font-size:10.0pt; padding:0px 0px; }
+  .titleline { font-size:10.0pt; padding:0px 3px; }
+  .votelinks { font-size:10.0pt; padding:1px 1px; }
+  .morelink { font-size:10.0pt; padding:3px 1px; }
+  .sitename { font-size:10.0pt; padding:2px 3px; }
+  #main { width:100%; min-width:0; }
+}
+
+@media only screen and (max-width: 960px) {
+  .title { font-size:9.4pt; padding:4px 4px; }
+  .subtext { font-size:9.4pt; padding:4px 5px; }
+  .comhead { font-size:9.4pt; padding:3px 2px; }
+  .pagetop { font-size:9.4pt; padding:0px 0px; }
+  .yclinks { font-size:9.4pt; padding:3px 2px; }
+  .rank { font-size:9.4pt; padding:2px 0px; }
+  .score { font-size:9.4pt; padding:3px 5px; }
+  .age { font-size:9.4pt; padding:4px 2px; }
+  .sitestr { font-size:9.4pt; padding:3px 6px; }
+  .hnuser { font-size:9.4pt; padding:1px 2px; }
+  .titleline { font-size:9.4pt; padding:3px 6px; }
+  .votelinks { font-size:9.4pt; padding:2px 6px; }
+  .morelink { font-size:9.4pt; padding:4px 5px; }
+  .sitename { font-size:9.4pt; padding:3px 3px; }
+  #main { width:100%; min-width:0; }
+}
+
+@media only screen and (max-width: 750px) {
+  .title { font-size:8.9pt; padding:0px 0px; }
+  .subtext { font-size:8.9pt; padding:3px 6px; }
+  .comhead { font-size:8.9pt; padding:0px 3px; }
+  .pagetop { font-size:8.9pt; padding:0px 6px; }
+  .yclinks { font-size:8.9pt; padding:2px 6px; }
+  .rank { font-size:8.9pt; padding:4px 5px; }
+  .score { font-size:8.9pt; padding:2px 4px; }
+  .age { font-size:8.9pt; padding:2px 6px; }
+  .sitestr { font-size:8.9pt; padding:4px 1px; }
+  .hnuser { font-size:8.9pt; padding:1px 4px; }
+  .titleline { font-size:8.9pt; padding:2px 4px; }
+  .votelinks { font-size:8.9pt; padding:2px 5px; }
+  .morelink { font-size:8.9pt; padding:0px 4px; }
+  .sitename { font-size:8.9pt; padding:4px 1px; }
+  #main { width:100%; min-width:0; }
+}
+
+@media only screen and (max-width: 600px) {
+  .title { font-size:8.5pt; padding:2px 6px; }
+  .subtext { font-size:8.5pt; padding:4px 2px; }
+  .comhead { font-size:8.5pt; padding:0px 4px; }
+  .pagetop { font-size:8.5pt; padding:1px 4px; }
+  .yclinks { font-size:8.5pt; padding:1px 3px; }
+  .rank { font-size:8.5pt; padding:4px 6px; }
+  .score { font-size:8.5pt; padding:0px 6px; }
+  .age { font-size:8.5pt; padding:4px 4px; }
+  .sitestr { font-size:8.5pt; padding:4px 5px; }
+  .hnuser { font-size:8.5pt; padding:4px 4px; }
+  .titleline { font-size:8.5pt; padding:4px 0px; }
+  .votelinks { font-size:8.5pt; padding:3px 5px; }
+  .morelink { font-size:8.5pt; padding:0px 3px; }
+  .sitename { font-size:8.5pt; padding:1px 1px; }
+  #main { width:100%; min-width:0; }
+}
+
+@media only screen and (max-width: 480px) {
+  .title { font-size:8.2pt; padding:3px 4px; }
+  .subtext { font-size:8.2pt; padding:3px 6px; }
+  .comhead { font-size:8.2pt; padding:4px 1px; }
+  .pagetop { font-size:8.2pt; padding:4px 0px; }
+  .yclinks { font-size:8.2pt; padding:0px 3px; }
+  .rank { font-size:8.2pt; padding:4px 5px; }
+  .score { font-size:8.2pt; padding:2px 1px; }
+  .age { font-size:8.2pt; padding:2px 1px; }
+  .sitestr { font-size:8.2pt; padding:2px 2px; }
+  .hnuser { font-size:8.2pt; padding:3px 2px; }
+  .titleline { font-size:8.2pt; padding:2px 6px; }
+  .votelinks { font-size:8.2pt; padding:4px 2px; }
+  .morelink { font-size:8.2pt; padding:4px 4px; }
+  .sitename { font-size:8.2pt; padding:4px 6px; }
+  #main { width:100%; min-width:0; }
+}
+
+@media only screen and (max-width: 360px) {
+  .title { font-size:7.9pt; padding:2px 3px; }
+  .subtext { font-size:7.9pt; padding:2px 6px; }
+  .comhead { font-size:7.9pt; padding:2px 2px; }
+  .pagetop { font-size:7.9pt; padding:1px 0px; }
+  .yclinks { font-size:7.9pt; padding:1px 4px; }
+  .rank { font-size:7.9pt; padding:3px 2px; }
+  .score { font-size:7.9pt; padding:4px 4px; }
+  .age { font-size:7.9pt; padding:3px 2px; }
+  .sitestr { font-size:7.9pt; padding:0px 3px; }
+  .hnuser { font-size:7.9pt; padding:4px 2px; }
+  .titleline { font-size:7.9pt; padding:0px 6px; }
+  .votelinks { font-size:7.9pt; padding:2px 2px; }
+  .morelink { font-size:7.9pt; padding:2px 2px; }
+  .sitename { font-size:7.9pt; padding:2px 0px; }
+  #main { width:100%; min-width:0; }
+}
+.title:hover { color:#767e60; }
+.subtext:hover { color:#ada83e; }
+.comhead:hover { color:#c85d71; }
+.pagetop:hover { color:#a2c225; }
+.yclinks:hover { color:#ce3da6; }
+.rank:hover { color:#aac14f; }
+.score:hover { color:#d7a41e; }
+.age:hover { color:#a99a2c; }
+.sitestr:hover { color:#b69533; }
+.hnuser:hover { color:#ee8ce9; }
+.titleline:hover { color:#a896b4; }
+.votelinks:hover { color:#de8c49; }
+.morelink:hover { color:#e5a258; }
+.sitename:hover { color:#2f50dc; }
+
+@media print { .votelinks, .yclinks, form { display:none; } }
