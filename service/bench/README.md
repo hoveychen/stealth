@@ -15,6 +15,7 @@ Docker host: the scripts read the container's cgroup and the engine's
 | `sweep.sh`    | one fresh container per (tier, mode, page) run, so memory readings don't carry over |
 | `multi.sh`    | the same concurrency split over K containers |
 | `report.mjs`  | JSON lines → markdown tables |
+| `profile/`    | where one engine process waits: pinned A/B runs, off-CPU breakdown by lock and call site, a perf-enabled debug image (see `profile/README.md`) |
 
 ```bash
 # on the Docker host, from service/bench
