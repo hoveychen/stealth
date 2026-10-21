@@ -1,0 +1,17 @@
+# Debug image for profiling: an engine image plus perf, procps and binutils, so
+# perf runs inside the engine's own mount namespace. From the host, perf's DWARF
+# unwinder stops at the container's libc, and `perf script` without binutils
+# truncates its output when addr2line is missing.
+#
+#   docker build -t lp-crawl:prof --build-arg IMAGE=lp-crawl:sym -f Dockerfile.perf .
+#
+# IMAGE must be a build with symbols: service/Dockerfile without -Dstrip.
+ARG IMAGE=lp-crawl:latest
+FROM ${IMAGE}
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s#deb.debian.org#${APT_MIRROR}#g" /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    apt-get update -yq && \
+    apt-get install -yq --no-install-recommends linux-perf procps binutils && \
+    rm -rf /var/lib/apt/lists/*

@@ -19,6 +19,7 @@ Docker host: the scripts read the container's cgroup and the engine's
 | `soak.sh`     | one container + `soak.mjs` in the background (`NAME`, `POOL`, `CPUS`, `MIX`, `PHASES`, `IMAGE`, `SERVICE_ENV`) |
 | `soak-report.mjs` | soak samples → markdown tables and per-phase slopes (MB per 1,000 requests over the second half of each load phase) |
 | `soak-chart.mjs` | soak samples → inline SVG charts (RSS against time and against requests) |
+| `profile/`    | where one engine process waits: pinned A/B runs, off-CPU breakdown by lock and call site, a perf-enabled debug image (see `profile/README.md`) |
 
 ```bash
 # on the Docker host, from service/bench

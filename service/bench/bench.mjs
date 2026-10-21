@@ -216,8 +216,10 @@ if (isChild) {
     process.on('message', async (m) => {
         if (m === 'measure') r.measure();
         if (m === 'done') {
-            process.send({ result: await r.finish() });
-            process.exit(0);
+            // Exit only once the result is flushed: a long run's latency array is
+            // larger than the IPC pipe buffer and exiting right away drops it,
+            // leaving the parent waiting forever.
+            process.send({ result: await r.finish() }, () => process.exit(0));
         }
     });
     setInterval(() => process.send({ count: r.count() }), 200);
