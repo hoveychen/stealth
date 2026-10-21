@@ -27,7 +27,7 @@ curl -s localhost:8080/crawl -d '{"url":"https://example.com/","formats":["markd
 ```
 
 or `docker compose -f service/compose.yaml up -d --build` (`CRAWL_PORT` picks
-the host port). The compose file puts the container on Docker's default
+the host port; see [Scaling](#scaling) for the multi-replica variant). The compose file puts the container on Docker's default
 `bridge` network (`network_mode: bridge`) rather than a network of its own, so
 it also starts on a daemon whose address pools are used up, and mounts the
 `crawl-data` volume on `/data` for session cookies.
@@ -50,8 +50,9 @@ Image environment, on top of the service variables above:
 
 | variable                       | default            | meaning |
 |--------------------------------|--------------------|---------|
-| `POOL_SIZE`                    | `4`                | as above; ~50 MB of engine memory per slot |
+| `POOL_SIZE`                    | `4`                | as above; see [Scaling](#scaling) for memory and CPU per slot |
 | `LP_CDP_MAX_CONNECTIONS`       | `2*POOL_SIZE+4`    | engine connection cap. Keep it well above `POOL_SIZE`: after a timeout the service reconnects at once while the engine may still be tearing down the old connection |
+| `LP_HTTP_MAX_CONCURRENT`       | `255`              | the engine's `--http-max-concurrent`: page loads in flight across *all* connections, 1–255 (the engine's own default is 40). Set it here, not as an extra argument |
 | `LP_LOG_LEVEL`                 | `info`             | engine log level |
 | `LP_RESTART_DELAY`             | `1`                | seconds before restarting a dead engine |
 | `SESSION_DIR`                  | `/data/sessions`   | where session cookie jars are kept; mount a volume on `/data` |
@@ -67,7 +68,7 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | variable             | default                 | meaning |
 |----------------------|-------------------------|---------|
 | `LP_CDP_URL`         | `ws://127.0.0.1:9222/`  | the engine's CDP websocket (`http://` is accepted and rewritten) |
-| `POOL_SIZE`          | `4`                     | concurrent crawls; must not exceed the engine's `--cdp-max-connections` (default 16). Budget ~50 MB of engine memory per slot |
+| `POOL_SIZE`          | `4`                     | concurrent crawls; must not exceed the engine's `--cdp-max-connections` (default 16). Memory and CPU per slot: see [Scaling](#scaling) |
 | `QUEUE_MAX`          | `100`                   | requests allowed to wait for a slot; beyond that → 503 `queue_full` |
 | `DEFAULT_TIMEOUT_MS` | `30000`                 | used when a request has no `timeout` |
 | `MAX_TIMEOUT_MS`     | `120000`                | largest `timeout` a request may ask for |
@@ -79,7 +80,11 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `PROXY_POOL_DEFAULT` | `false`                 | `true`: requests without a `proxy` field use the pool |
 | `PROXY_MAX_FAILS`    | `3`                     | consecutive failures that eject a proxy from the pool |
 | `PROXY_RETRY_AFTER_MS` | `60000`               | how long an ejected proxy sits out |
+| `PROXY_POOL_RETRIES` | `2`                     | with `proxy: "pool"`, how many more pool proxies a request tries after its proxy fails (see [Pool](#pool)); `0` turns retries off |
+| `PROXY_PROBE`        |                         | `host:port` (or a URL) every pool proxy should always be able to reach; used to tell a dead site from a dead proxy (see [Pool](#pool)) |
 | `SESSION_DIR`        | (none: memory only)     | directory for session cookie jars, one `<session_id>.json` each |
+| `SESSION_TTL_MS`     | `604800000` (7 days)    | a session not used for this long is dropped, file included; `0` keeps sessions forever |
+| `SESSION_SWEEP_MS`   | `600000`                | how often expired sessions are cleaned up (also once at startup) |
 
 There is no authentication.
 
@@ -152,7 +157,8 @@ Only the requested formats are present.
 | HTTP | `code`                | when |
 |------|-----------------------|------|
 | 400  | `bad_request`         | invalid body |
-| 502  | `navigation_failed`   | the main document could not be fetched (DNS, refused, TLS, ...) |
+| 404  | `not_found`           | `DELETE /sessions/:id` for a session that does not exist |
+| 502  | `navigation_failed`   | the main document could not be fetched (DNS, refused, TLS, ...), also when the proxy is fine but cannot reach the site |
 | 502  | `engine_disconnected` | the engine connection dropped mid-crawl |
 | 502  | `cdp_error`           | the engine rejected a command |
 | 502  | `proxy_failed`        | the proxy could not be used: unreachable, unresolvable, SOCKS handshake failed, or it refused the CONNECT |
@@ -215,9 +221,26 @@ must be percent-encoded.
 
 A wrong password shows up two ways: a `http://` page through an HTTP proxy
 loads the proxy's 407 page, and anything through `CONNECT` or SOCKS fails with
-a generic connect error. In the second case the service asks the proxy
-directly whether it rejects the credentials, so both end as
-`proxy_auth_failed`.
+a generic connect error — the same error (`CouldntConnect`) the engine reports
+for a proxy that is down, and for an `https://` site that is down behind a
+proxy that is up. So after such an error the service asks the proxy itself,
+with the same credentials, to open a tunnel to the same site:
+
+| the proxy... | result | counted against a pool proxy |
+|---|---|---|
+| can't be connected to | `proxy_failed` | yes |
+| rejects the credentials, or wants some | `proxy_auth_failed` | yes |
+| refuses the tunnel, and opens one to `PROXY_PROBE` | `navigation_failed`: the site is down | no |
+| refuses the tunnel, and also refuses `PROXY_PROBE` | `proxy_failed`: the proxy's own upstream is broken | yes |
+| refuses the tunnel, and no `PROXY_PROBE` is set | `proxy_failed`, message says the site may be down | no |
+| opens the tunnel fine this time | `proxy_failed`, transient | no |
+
+When the service cannot tell, it does not charge the proxy: ejecting a good
+proxy because one site is down would take it away from every other request,
+while a bad proxy that is not ejected only costs a retry. Setting
+`PROXY_PROBE` (any host:port the proxies can reach, e.g. a site you control)
+removes most of the "can't tell" cases. The check takes at most 2 s, within
+the request's `timeout`.
 
 ### Pool
 
@@ -228,14 +251,21 @@ opting in per request means a request's network path never changes just
 because a pool was configured, and the pool's failures never show up in
 callers that didn't ask for it.
 
-A crawl is a failure of its proxy when it ends in `proxy_failed` or
-`proxy_auth_failed`, and a success when the page was fetched (any HTTP
-status). Timeouts and other errors count as neither. After `PROXY_MAX_FAILS`
-consecutive failures a proxy is ejected for `PROXY_RETRY_AFTER_MS`; then it is
-offered again, and a single further failure ejects it again (a success resets
-the count). Note that an `https://` site that is down, behind an HTTP proxy,
-looks to the engine like a refused `CONNECT` and is charged to the proxy. There
-is no retry on another proxy; the caller gets the error.
+A crawl is a failure of its proxy when the proxy is down or rejects the
+credentials (the "yes" rows above), and a success when the page was fetched
+(any HTTP status). Timeouts and other errors count as neither. After
+`PROXY_MAX_FAILS` consecutive failures a proxy is ejected for
+`PROXY_RETRY_AFTER_MS`; then it is offered again, and a single further failure
+ejects it again (a success resets the count).
+
+A `"pool"` request whose proxy fails (any `proxy_failed` / `proxy_auth_failed`
+row, charged or not) is run again on the next pool proxy it has not tried yet,
+up to `PROXY_POOL_RETRIES` more times, on the same browser slot and within the
+same `timeout` — the retries do not get time of their own. A site that is down
+(`navigation_failed`) is not retried. When the retries run out, or no untried
+proxy is left, the caller gets the last error, with the number of proxies
+tried in the message. A request that names its proxy is never moved to
+another one.
 
 ## Sessions
 
@@ -245,8 +275,21 @@ written back from it before the context is disposed (`Network.getAllCookies`),
 after a timeout too when the page still answers. With `SESSION_DIR` set (the
 image sets `/data/sessions`) every jar is also written to
 `SESSION_DIR/<session_id>.json` before the response goes out, so it survives
-a restart. Only cookies are kept, not localStorage or the cache. Jars are never
-expired as a whole; delete the file (with the service stopped) to drop one.
+a restart. Only cookies are kept, not localStorage or the cache.
+
+A session not used by any crawl for `SESSION_TTL_MS` (7 days by default)
+expires: its jar is dropped from memory and its file deleted, at startup and
+every `SESSION_SWEEP_MS` after that, and a crawl that names it after the TTL
+starts from an empty jar even before the sweep has run. "Used" means a crawl
+with that `session_id` started or finished; on disk it is the file's mtime.
+The default keeps the login of a job that comes back daily or weekly and still
+stops one-off session ids from piling up. Individual cookies also expire on
+their own `Expires`/`Max-Age`, as in a browser.
+
+`DELETE /sessions/<session_id>` drops a session at once: `200
+{"deleted": "<id>"}`, or `404` if there is none. A crawl on that session still
+running at the time does not write its cookies back, so the session stays
+gone; the next crawl that names it starts a new, empty one.
 
 Two crawls on one session at the same time each start from the jar as it was,
 and when each finishes its changes are merged in per cookie (name, domain,
@@ -255,6 +298,10 @@ longer has (the site deleted them, or they expired) are removed, and cookies
 it left alone are not touched — so a change made by the other crawl in the
 meantime survives. If both changed the same cookie, the one that finished
 last wins.
+
+## `DELETE /sessions/:id`
+
+Drops a session's cookie jar; see [Sessions](#sessions).
 
 ## `GET /health`
 
@@ -269,11 +316,52 @@ last wins.
       { "proxy": "socks5://10.0.0.2:1080", "state": "ejected", "retryInMs": 42000, "uses": 3, "ok": 0, "failed": 3, "consecutiveFails": 3, "lastError": "proxy socks5://10.0.0.2:1080 failed: CouldntConnect (https://...)" }
     ]
   },
-  "sessions": { "persisted": true, "dir": "/data/sessions", "loaded": 12, "saves": 340, "writeErrors": 0 }
+  "sessions": { "persisted": true, "dir": "/data/sessions", "ttlMs": 604800000, "stored": 30, "loaded": 12, "saves": 340, "writeErrors": 0, "expired": 4, "deleted": 1, "lastSweep": "2026-10-21T11:48:28.299Z" }
 }
 ```
 
-`proxies` is `null` when no pool is configured.
+`proxies` is `null` when no pool is configured. In `sessions`, `stored` is the
+number of sessions there are (on disk, or in memory without `SESSION_DIR`),
+`loaded` the ones held in memory, `expired` / `deleted` count since startup.
+
+## Scaling
+
+One container is one engine process and one Node process, and both have a
+per-process ceiling (`service/bench/`, measured on a 512-core host):
+
+- the service tops out around 800–850 small pages a second (one Node core),
+- the engine around 1,900 small pages a second, whatever `POOL_SIZE` is,
+- heavy pages queue on the engine's shared HTTP connection pool unless it is
+  raised, which the image does (`LP_HTTP_MAX_CONCURRENT=255`; with the
+  engine's default of 40, 64 concurrent Wikipedia-sized loads ran at 16
+  pages/s instead of 52).
+
+So **add containers for more concurrency, not slots**: `POOL_SIZE=16` per
+container, at most 32. Four containers of 16 served 2,500–2,600 small pages a
+second where one container of 64 served 800.
+
+Budget per slot, by the pages crawled:
+
+| page | engine memory per slot | CPU per busy slot |
+|---|---|---|
+| small (~35 KB, a script and a stylesheet) | ~6 MB | ~1.3 cores (the page's thread plus V8's background threads) |
+| large (a ~400 KB Wikipedia article, CPU-bound) | ~85 MB | ~1 core |
+
+and give each container `--cpus` of at least 1.3 × `POOL_SIZE`: below that,
+CFS throttling costs more than the cores taken away (16 slots on 16 cores lost
+27% on small pages; on 8 cores large pages ran at 6 pages/s instead of ~9).
+
+`compose.yaml` has a `crawl-multi` service (profile `multi`) that runs
+`CRAWL_REPLICAS` copies of the container on a range of host ports; put any
+HTTP load balancer in front of them:
+
+```bash
+CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 docker compose -f service/compose.yaml --profile multi up -d crawl-multi
+```
+
+Sessions are per process: a replica keeps the jars it has loaded in memory, so
+send all requests of one `session_id` to the same replica (hash on it in the
+load balancer), or the replicas will each have their own copy of it.
 
 ## How a crawl runs
 
@@ -300,9 +388,12 @@ Starts local fixture pages, test proxies (HTTP with and without a password,
 SOCKS5), a `lightpanda serve` and this service on free ports, then checks all
 four outputs, a redirect, a 404, a throwing script, bad input, a timeout, an
 unreachable host, more concurrent requests than slots, per-request proxies
-and their credentials, the pool's rotation and ejection, session cookies
-(across requests, concurrent requests, and a service restart), partial results
-after a timeout, killing and restarting the engine, and pages stuck in script.
+and their credentials, the pool's rotation, retry on the next proxy and
+ejection, a dead site behind a good proxy (not charged to the proxy), session
+cookies (across requests, concurrent requests, a service restart, `DELETE`,
+and expiry after `SESSION_TTL_MS`), partial results after a timeout, killing
+and restarting the engine, and pages stuck in script. Against the container it
+also checks the engine's command line for `--http-max-concurrent`.
 Use a ReleaseFast engine build; the Debug build in `zig-out` is about 3.5×
 slower.
 
@@ -318,5 +409,6 @@ fixture pages and proxies on the bridge gateway, runs `run.mjs` against it
 removes the container and volume. The header of `run.mjs` lists what it needs
 when you set it up by hand.
 
-`node service/test/unit.mjs` checks the pool and the cookie merge without an
-engine.
+`node service/test/unit.mjs` checks the pool, the dead-proxy / dead-site
+diagnosis (against local test proxies) and the session store (cookie merge,
+TTL, delete) without an engine.

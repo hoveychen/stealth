@@ -23,7 +23,9 @@ start() {
     -v "$NAME-data:/data" \
     -e POOL_SIZE=3 -e LP_RESTART_DELAY=4 \
     -e PROXY_POOL="http://$GW:$BASE,http://pool:secret@$GW:$((BASE + 1)),http://$GW:$((BASE + 2))" \
-    -e PROXY_MAX_FAILS=2 -e PROXY_RETRY_AFTER_MS=5000 \
+    -e PROXY_MAX_FAILS=2 -e PROXY_RETRY_AFTER_MS=5000 -e PROXY_POOL_RETRIES=2 \
+    -e PROXY_PROBE="$GW:$((BASE + 3))" \
+    -e SESSION_TTL_MS=6000 -e SESSION_SWEEP_MS=1000 \
     "$IMAGE" >/dev/null
 }
 
@@ -42,6 +44,8 @@ LP_SERVICE_URL="http://127.0.0.1:$PORT" \
 FIXTURE_HOST="$GW" FIXTURE_URL_HOST="$GW" \
 TEST_PROXY_HOST="$GW" TEST_PROXY_BASE="$BASE" \
 LP_ENGINE_KILL="docker exec $NAME sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
+LP_ENGINE_CMDLINE="docker exec $NAME sh -c 'cat /proc/\$(cat /tmp/lightpanda.pid)/cmdline'" \
+LP_SESSION_FILES="docker exec $NAME ls /data/sessions" \
 LP_SERVICE_RESTART="NAME=$NAME PORT=$PORT TEST_PROXY_BASE=$BASE '$HERE/docker-test.sh' '$IMAGE' recreate" \
 node "$HERE/run.mjs" || status=$?
 [ "$status" = 0 ] || docker logs --tail 40 "$NAME" >&2

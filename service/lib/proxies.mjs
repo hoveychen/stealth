@@ -1,6 +1,6 @@
 // Proxies: validating a proxy URL, a rotating pool with temporary ejection of
 // proxies that keep failing, and telling a proxy's failure apart from the
-// target's.
+// target's (and a wrong password from a dead proxy).
 //
 // The engine hands the proxy URL to libcurl as is (Target.createBrowserContext
 // proxyServer), and libcurl sends credentials from the URL preemptively:
@@ -35,12 +35,12 @@ export function redact(url) {
 }
 
 // Engine error texts (Page.navigate errorText / Network.loadingFailed) that
-// mean the proxy itself could not be used: unreachable, unresolvable, a SOCKS
+// mean the proxy could not be used: unreachable, unresolvable, a SOCKS
 // handshake failure, or a CONNECT the proxy refused. TLS errors are left out:
-// they are the target's certificate as often as an https proxy's. Through an HTTP proxy an
-// unreachable *target* comes back as the proxy's own 502 page for http URLs,
-// but as a refused CONNECT (CouldntConnect) for https URLs, so a dead target
-// behind a CONNECT is charged to the proxy too.
+// they are the target's certificate as often as an https proxy's. Through an
+// HTTP proxy an unreachable *target* comes back as the proxy's own 502 page
+// for http URLs, but as a refused CONNECT (CouldntConnect) for https URLs, the
+// same text as a dead proxy; diagnoseProxyFailure tells the two apart.
 const PROXY_ERRORS = new Set(['CouldntConnect', 'CouldntResolveProxy', 'Proxy']);
 export const isProxyError = (errorText) => PROXY_ERRORS.has(errorText);
 
@@ -60,12 +60,13 @@ export class ProxyPool {
         return this.entries.length;
     }
 
-    // Round robin over the proxies that are not ejected; null when all are.
-    pick() {
+    // Round robin over the proxies that are not ejected and not in `exclude`
+    // (a Set of entries, the ones a request already tried); null when none is left.
+    pick(exclude = null) {
         const now = this.now();
         for (let i = 0; i < this.entries.length; i++) {
             const e = this.entries[(this.next + i) % this.entries.length];
-            if (e.ejectedUntil > now) continue;
+            if (e.ejectedUntil > now || exclude?.has(e)) continue;
             this.next = (this.next + i + 1) % this.entries.length;
             e.uses++;
             return e;
@@ -118,22 +119,40 @@ export function parseProxyList(text) {
         .filter(Boolean);
 }
 
-// After a CONNECT-style failure the engine only says CouldntConnect (or Proxy
-// for SOCKS), which reads the same for a wrong password and a dead proxy. Ask
-// the proxy directly whether it rejects these credentials. Resolves to true
-// when it does, false otherwise (including when it can't be reached).
-export function proxyRejectsCredentials(proxyUrl, timeoutMs = 2000) {
+
+// "host:port", or a URL whose host and port (default 443/80) are taken.
+export function parseHostPort(raw) {
+    const s = String(raw).trim();
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+        const u = new URL(s);
+        return { host: u.hostname.replace(/^\[|\]$/g, ''), port: Number(u.port) || (u.protocol === 'https:' ? 443 : 80) };
+    }
+    const m = /^\[?([^\]]+?)\]?:(\d+)$/.exec(s);
+    if (!m || !(Number(m[2]) > 0 && Number(m[2]) < 65536)) throw new Error(`expected host:port or a URL, got ${s}`);
+    return { host: m[1], port: Number(m[2]) };
+}
+
+// Asks the proxy, directly, to open a tunnel to host:port (HTTP CONNECT, or a
+// SOCKS5 CONNECT), with the credentials in its URL, and closes it again.
+// Resolves to:
+//   'unreachable'  no connection to the proxy (refused, unresolvable, TLS to
+//                  it failed, or nothing within the time)
+//   'auth'         the proxy rejected the credentials, or wanted some
+//   'ok'           the tunnel was opened
+//   'refused'      the proxy answered and would not open it (HTTP non-2xx,
+//                  SOCKS reply other than success)
+//   'silent'       connected, but no answer within the time or closed without one
+export function askProxy(proxyUrl, { host, port }, timeoutMs = 2000) {
     let u;
     try {
         u = new URL(proxyUrl);
     } catch {
-        return Promise.resolve(false);
+        return Promise.resolve('unreachable');
     }
-    if (!u.username) return Promise.resolve(false);
     const user = decodeURIComponent(u.username);
     const pass = decodeURIComponent(u.password);
     return new Promise((resolve) => {
-        let done = false;
+        let done = false, connected = false;
         const finish = (v) => {
             if (done) return;
             done = true;
@@ -141,37 +160,98 @@ export function proxyRejectsCredentials(proxyUrl, timeoutMs = 2000) {
             sock.destroy();
             resolve(v);
         };
-        const opts = { host: u.hostname, port: Number(u.port) };
-        const sock = u.protocol === 'https:' ? tls.connect({ ...opts, servername: u.hostname, rejectUnauthorized: false }) : net.connect(opts);
-        const timer = setTimeout(() => finish(false), timeoutMs);
-        sock.on('error', () => finish(false));
+        const opts = { host: u.hostname.replace(/^\[|\]$/g, ''), port: Number(u.port) };
+        const sock = u.protocol === 'https:' ? tls.connect({ ...opts, servername: opts.host, rejectUnauthorized: false }) : net.connect(opts);
+        const timer = setTimeout(() => finish(connected ? 'silent' : 'unreachable'), Math.max(1, timeoutMs));
+        sock.on('error', () => finish(connected ? 'silent' : 'unreachable'));
+        sock.on('close', () => finish(connected ? 'silent' : 'unreachable'));
         let buf = Buffer.alloc(0);
+        const authority = net.isIPv6(host) ? `[${host}]:${port}` : `${host}:${port}`;
         if (u.protocol === 'http:' || u.protocol === 'https:') {
             sock.on(u.protocol === 'https:' ? 'secureConnect' : 'connect', () => {
-                const cred = Buffer.from(`${user}:${pass}`).toString('base64');
-                sock.write(`CONNECT example.invalid:443 HTTP/1.1\r\nHost: example.invalid:443\r\nProxy-Authorization: Basic ${cred}\r\n\r\n`);
+                connected = true;
+                const cred = u.username ? `Proxy-Authorization: Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}\r\n` : '';
+                sock.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n${cred}\r\n`);
             });
             sock.on('data', (c) => {
                 buf = Buffer.concat([buf, c]);
-                const line = buf.toString('latin1').split('\r\n')[0];
-                if (buf.includes('\r\n')) finish(/^HTTP\/\d(\.\d)? 407\b/.test(line));
+                if (!buf.includes('\r\n')) return;
+                const m = /^HTTP\/\d(?:\.\d)? (\d{3})\b/.exec(buf.toString('latin1').split('\r\n')[0]);
+                if (!m) return finish('refused');
+                const status = Number(m[1]);
+                finish(status === 407 ? 'auth' : status >= 200 && status < 300 ? 'ok' : 'refused');
             });
         } else {
-            // SOCKS5 greeting offering only username/password, then RFC 1929.
+            // SOCKS5: greeting (username/password if the URL has them, else
+            // none), RFC 1929 sub-negotiation, then CONNECT by name or address.
             let stage = 0;
-            sock.on('connect', () => sock.write(Buffer.from([5, 1, 2])));
+            sock.on('connect', () => {
+                connected = true;
+                sock.write(Buffer.from([5, 1, u.username ? 2 : 0]));
+            });
+            const request = () => {
+                const kind = net.isIP(host);
+                const addr = kind === 4 ? Buffer.from([1, ...host.split('.').map(Number)])
+                    : kind === 6 ? Buffer.concat([Buffer.from([4]), ipv6Bytes(host)])
+                    : Buffer.concat([Buffer.from([3, Buffer.byteLength(host)]), Buffer.from(host)]);
+                const p = Buffer.alloc(2);
+                p.writeUInt16BE(port);
+                sock.write(Buffer.concat([Buffer.from([5, 1, 0]), addr, p]));
+                stage = 2;
+            };
             sock.on('data', (c) => {
                 buf = Buffer.concat([buf, c]);
                 if (stage === 0 && buf.length >= 2) {
-                    if (buf[1] !== 2) return finish(buf[1] === 0xff);
+                    const method = buf[1];
                     buf = buf.subarray(2);
-                    stage = 1;
-                    const ub = Buffer.from(user);
-                    const pb = Buffer.from(pass);
-                    sock.write(Buffer.concat([Buffer.from([1, ub.length]), ub, Buffer.from([pb.length]), pb]));
+                    if (method === 0xff) return finish('auth');
+                    if (method === 2) {
+                        const ub = Buffer.from(user);
+                        const pb = Buffer.from(pass);
+                        sock.write(Buffer.concat([Buffer.from([1, ub.length]), ub, Buffer.from([pb.length]), pb]));
+                        stage = 1;
+                    } else if (method === 0) request();
+                    else return finish('refused');
                 }
-                if (stage === 1 && buf.length >= 2) finish(buf[1] !== 0);
+                if (stage === 1 && buf.length >= 2) {
+                    if (buf[1] !== 0) return finish('auth');
+                    buf = buf.subarray(2);
+                    request();
+                }
+                if (stage === 2 && buf.length >= 2) finish(buf[1] === 0 ? 'ok' : 'refused');
             });
         }
     });
+}
+
+function ipv6Bytes(addr) {
+    const [head, tail = ''] = addr.split('::');
+    const parts = (s) => (s ? s.split(':') : []);
+    const h = parts(head), t = parts(tail);
+    const words = [...h, ...Array(8 - h.length - t.length).fill('0'), ...t];
+    return Buffer.from(words.flatMap((w) => [parseInt(w, 16) >> 8, parseInt(w, 16) & 0xff]));
+}
+
+// After a navigation through a proxy fails with a proxy-type error (see
+// isProxyError), works out whose fault it was by asking the proxy directly
+// for the same target, and — when the proxy is up but won't open that tunnel —
+// for `probe`, a host:port it should always be able to reach. Resolves to:
+//   'auth'         the proxy rejects the credentials (or wants some)
+//   'proxy_down'   the proxy can't be reached, or can't reach the probe either
+//   'target_down'  the proxy reaches the probe but not the target
+//   'unknown'      the proxy is up and either no probe is configured, or it
+//                  opens the target's tunnel now (a transient failure)
+export async function diagnoseProxyFailure(proxyUrl, targetUrl, { probe = null, timeoutMs = 2000 } = {}) {
+    const t0 = Date.now();
+    const target = parseHostPort(targetUrl);
+    const first = await askProxy(proxyUrl, target, timeoutMs);
+    if (first === 'unreachable') return 'proxy_down';
+    if (first === 'auth') return 'auth';
+    if (first === 'ok' || !probe) return 'unknown';
+    const left = timeoutMs - (Date.now() - t0);
+    if (left <= 0) return 'unknown';
+    const second = await askProxy(proxyUrl, probe, left);
+    if (second === 'ok') return 'target_down';
+    if (second === 'auth') return 'auth';
+    return 'proxy_down';
 }

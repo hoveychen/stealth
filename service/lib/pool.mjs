@@ -83,6 +83,13 @@ export class Pool {
         throw new CdpError('engine_unavailable', lastErr?.message ?? `could not reach the engine at ${this.cdpUrl}`);
     }
 
+    // Drops the leased slot's connection and opens a new one, for a request
+    // that goes on after leaving the browser in an unknown state.
+    async reset(slot, deadline) {
+        slot.conn?.close();
+        await this.ensureConnected(slot, deadline);
+    }
+
     // `discard` drops the connection, so the engine tears down that worker's
     // browser and the next lease starts from a fresh one. Used whenever the
     // request did not end cleanly and the browser's state is unknown.

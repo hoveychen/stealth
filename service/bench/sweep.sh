@@ -6,7 +6,7 @@
 #   OUT=results.jsonl TIERS="1 4 8 16 32 64" REPEATS=2 sh service/bench/sweep.sh
 #
 # Environment: IMAGE (lp-crawl:bench), NAME (container name prefix,
-# lp-crawl-bench), PAGES ("hn wiki"), MODES ("service cdp"), PROCS (load
+# lp-crawl-bench), PAGES ("list wiki"), MODES ("service cdp"), PROCS (load
 # generator processes, default 8, capped at the tier), CPUS (passed to
 # docker run --cpus when set), ENGINE_ARGS (extra `lightpanda serve` flags,
 # e.g. "--http-max-concurrent 255"), BENCH_ARGS (extra bench.mjs flags).
@@ -15,7 +15,7 @@ cd "$(dirname "$0")"
 IMAGE=${IMAGE:-lp-crawl:bench}
 NAME=${NAME:-lp-crawl-bench}
 TIERS=${TIERS:-1 4 8 16 32 64}
-PAGES=${PAGES:-hn wiki}
+PAGES=${PAGES:-list wiki}
 MODES=${MODES:-service cdp}
 REPEATS=${REPEATS:-1}
 PAGE_HOST=${PAGE_HOST:-172.17.0.1}
