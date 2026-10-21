@@ -5,7 +5,8 @@
 // The listen backlog is large on purpose: Python's http.server (backlog 5)
 // drops SYNs under a few dozen concurrent loads and the retransmit shows up as
 // multi-second page loads that are the page server's, not the engine's.
-// `workers` > 1 forks that many processes sharing the port.
+// `workers` > 1 forks that many processes sharing the port. `/hang` never
+// answers (soak.mjs uses it for timeouts).
 
 import cluster from 'node:cluster';
 import fs from 'node:fs';
@@ -23,6 +24,8 @@ if (cluster.isPrimary && +workers > 1) {
     for (const name of fs.readdirSync(root)) files.set(`/${name}`, fs.readFileSync(path.join(root, name)));
     http.createServer((req, res) => {
         const p = req.url.split('?')[0];
+        // Never answers: for timeouts (a script or a document that never arrives).
+        if (p === '/hang') return;
         const body = files.get(p);
         if (!body) {
             res.writeHead(404, { 'content-length': 0 });
