@@ -1809,7 +1809,10 @@ test "server: CDP reads are answered while the parser waits on a script" {
     // the document is in; give the parser time to reach the script
     lp.io.sleep(.fromMilliseconds(500), .awake) catch {};
 
-    {
+    // Asked again while the parser has not reached #before yet (a loaded
+    // machine): that answer comes from before the wait, so it proves nothing.
+    var tries: usize = 0;
+    while (true) : (tries += 1) {
         const start = lp.datetime.milliTimestamp(.boot);
         const reply = try page.call(&c, "Runtime.evaluate",
             \\{"expression":"[!!document.getElementById('before'), !!document.getElementById('after'), window.blockedScriptRan === true].join()","returnByValue":true}
@@ -1817,10 +1820,15 @@ test "server: CDP reads are answered while the parser waits on a script" {
         defer reply.deinit();
         const elapsed = lp.datetime.milliTimestamp(.boot) - start;
         const value = (try cdpResult(reply)).get("result").?.object.get("value").?.string;
+        if (std.mem.startsWith(u8, value, "false,") and elapsed < 1000 and tries < 20) {
+            lp.io.sleep(.fromMilliseconds(100), .awake) catch {};
+            continue;
+        }
         if (elapsed > 1000 or std.mem.eql(u8, value, "true,false,false") == false) {
             std.debug.print("Runtime.evaluate answered after {d}ms with \"{s}\"\n", .{ elapsed, value });
             return error.EvaluateWaitedForTheParser;
         }
+        break;
     }
 
     {
