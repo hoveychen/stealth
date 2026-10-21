@@ -9,8 +9,8 @@ engine flags, environment knobs or images.
 
 | file | what it does |
 |---|---|
-| `run1.sh` | one fresh engine container, one `bench.mjs --mode cdp` run, one JSON line; optional pinning (`CPUSET`), env (`EENV`), V8 flags (`V8F`) and a profiling hook (`PROF`) that runs inside the measured window |
-| `ab.sh` | runs a list of configs (`N\|IMAGE\|EENV\|V8F\|LABEL`) for several repeats, shuffled per repeat, then prints `summary.mjs` |
+| `run1.sh` | one fresh engine container, one `bench.mjs` run (`--mode cdp`, or through the service with `MODE=service`), one JSON line; optional pinning (`CPUSET`), env (`EENV`), V8 flags (`V8F`) and a profiling hook (`PROF`) that runs inside the measured window |
+| `ab.sh` | runs a list of configs (`N\|IMAGE\|EENV\|V8F\|LABEL[\|CPUSET[\|MODE]]`; `CPUSET` `none` = unpinned, `MODE` `cdp` or `service`) for several repeats, shuffled per repeat, then prints `summary.mjs` |
 | `multi-pinned.sh` | K containers × N connections, each pinned to its own slice of `CPUSET`, all loaded at once |
 | `Dockerfile.perf` | an engine image plus perf/procps/binutils, so perf runs inside the engine's mount namespace |
 | `sched-switch.sh` + `offsched.py` | **off-CPU breakdown**: every context switch on the engine's CPUs for 1 s, paired switch-out → switch-in per thread, attributed to a reason (futex, `mmap_lock` rwsem, poll, epoll, run queue) and to the user call site |
