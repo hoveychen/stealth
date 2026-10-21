@@ -1,0 +1,22 @@
+# Allowlist, not denylist: the checkout carries gigabytes of untracked
+# build outputs, browser profiles and sweep results (zig-out*, .pinned/,
+# .chrome-*, results/, tools/fingerprint/ ...) and new ones appear all the
+# time. Only what service/Dockerfile actually builds from is sent.
+*
+!build.zig
+!build.zig.zon
+!deps/
+!orderfile/
+!src/
+!service/
+# The V8 version/tag the build pins (shared with `make download-v8` and CI).
+!.github/actions/install/action.yml
+
+# Host build products that must be regenerated for the image's platform:
+# snapshot.bin is architecture specific and the Rust target dir is the
+# host's (macOS) objects.
+src/snapshot.bin
+src/rust/target/
+**/.zig-cache/
+**/zig-out/
+**/node_modules/
