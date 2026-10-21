@@ -102,7 +102,7 @@ docker run -d --name lightpanda -p 127.0.0.1:9222:9222 lightpanda/browser:nightl
 ### Dump a URL
 
 ```console
-./lightpanda fetch --obey-robots --dump html --log-format pretty  --log-level info https://demo-browser.lightpanda.io/campfire-commerce/
+./lightpanda fetch --dump html --log-format pretty  --log-level info https://demo-browser.lightpanda.io/campfire-commerce/
 ```
 
 You can use `--dump markdown` to convert directly into markdown, or
@@ -114,7 +114,7 @@ available to adjust waiting time before dump.
 ### Start a CDP server
 
 ```console
-./lightpanda serve --obey-robots --log-format pretty  --log-level info --host 127.0.0.1 --port 9222
+./lightpanda serve --log-format pretty  --log-level info --host 127.0.0.1 --port 9222
 ```
 Once the CDP server started, you can run a Puppeteer script by configuring the
 `browserWSEndpoint`.
@@ -157,7 +157,7 @@ Use `--protocol webdriver` to enable Bidi support.
 You can start both, CDP and Bidi, with `--protocol webdriver --protocol cdp`
 
 ```console
-./lightpanda serve --obey-robots --log-format pretty  --log-level info --host 127.0.0.1 --port 9222 --protocol webdriver
+./lightpanda serve --log-format pretty  --log-level info --host 127.0.0.1 --port 9222 --protocol webdriver
 ```
 
 ### Agent mode
@@ -272,7 +272,7 @@ For full details, see our [Web Platform Tests results](https://perf.lightpanda.i
 - [x] Custom HTTP headers
 - [x] Proxy support
 - [x] Network interception
-- [x] Respect `robots.txt` with option `--obey-robots`
+- [x] Respect `robots.txt` with option `--obey-robots` (off by default: real Chrome never requests `robots.txt`, so enabling it marks the client as a bot)
 - [x] CDP and Webdriver Bidi
 - [x] Adblocker
 
