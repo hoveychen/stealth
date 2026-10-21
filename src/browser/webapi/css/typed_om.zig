@@ -23,7 +23,7 @@ const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 const units = @import("../../css/units.zig");
-const Css = @import("../Css.zig");
+const CSS = @import("../CSS.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -545,7 +545,7 @@ pub const CSSKeywordValue = struct {
     /// Measured: the keyword serialises as a CSS identifier, so
     /// `new CSSKeywordValue(5)` prints `\35 `.
     fn write(self: *const CSSKeywordValue, writer: *std.Io.Writer, frame: *Frame) SerializeError!void {
-        const escaped = Css.escape(self._value, frame) catch return error.OutOfMemory;
+        const escaped = CSS.escape(self._value, frame) catch return error.OutOfMemory;
         try writer.writeAll(escaped);
     }
 

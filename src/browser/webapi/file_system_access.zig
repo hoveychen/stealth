@@ -54,7 +54,7 @@ const Factory = @import("../Factory.zig");
 const DOMException = @import("DOMException.zig");
 const WritableStream = @import("streams/WritableStream.zig");
 const fs = @import("filesystem.zig");
-const mime = @import("../mime.zig");
+const Mime = @import("../Mime.zig");
 const frames = @import("webcodecs/frames.zig");
 
 const Execution = js.Execution;
@@ -223,7 +223,7 @@ pub const FileSystemFileHandle = struct {
         errdefer arena.release();
 
         const handle = try Factory.chainedWithAllocator(arena.allocator(), .{
-            try Blob.buildValueFromBytes(arena, node.contents, mime.fromExtension(node.name)),
+            try Blob.buildValueFromBytes(arena, node.contents, Mime.fromExtension(node.name)),
             File{
                 ._proto = undefined,
                 ._name = try arena.dupe(u8, node.name),
