@@ -199,6 +199,10 @@ COPY service/package.json service/server.mjs /app/
 COPY service/lib /app/lib
 COPY --chmod=0755 service/entrypoint.sh /usr/local/bin/entrypoint.sh
 
+# Session cookie jars (session_id) are written here; mount a volume on /data
+# to keep them across container re-creation.
+RUN mkdir -p /data/sessions
+
 # Defaults for entrypoint.sh and the service; override with `docker run -e`.
 # Each pool slot is one CDP connection, i.e. one worker thread and browser in
 # the engine (~50 MB); LP_CDP_MAX_CONNECTIONS defaults to 2*POOL_SIZE+4.
@@ -211,7 +215,8 @@ ENV LIGHTPANDA_DISABLE_TELEMETRY=true \
     LP_HOST=127.0.0.1 \
     LP_PORT=9222 \
     LP_LOG_LEVEL=info \
-    LP_RESTART_DELAY=1
+    LP_RESTART_DELAY=1 \
+    SESSION_DIR=/data/sessions
 
 EXPOSE 8080/tcp
 

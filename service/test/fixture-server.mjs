@@ -47,6 +47,31 @@ export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
             }
             case '/hang':
                 return; // never answers
+            case '/stall': {
+                // Sends the start of a page, then never finishes it.
+                res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+                res.write(`<!doctype html><html><head><title>Stalled</title></head><body><h1>Partial content</h1><p>more is coming</p>\n`.padEnd(4096, ' '));
+                return;
+            }
+            case '/slow-load':
+                // Parsed and rendered, but an async script that never arrives
+                // holds the load event back.
+                return html(200, `<!doctype html><html><head><title>Slow load</title></head><body><h1>Loaded body</h1><p>waiting on a script</p><script async src="/hang"></script></body></html>`);
+            case '/spin':
+                // A script that never yields, once the page has loaded.
+                return html(200, `<!doctype html><html><head><title>Spin</title></head><body><h1>Spinning</h1><script>setTimeout(() => { for (;;) {} }, 0);</script></body></html>`);
+            case '/spin-sync':
+                // A script that never yields while the page is still parsing.
+                return html(200, `<!doctype html><html><head><title>Spin sync</title></head><body><h1>Before the loop</h1><script>for (;;) {}</script><p>never parsed</p></body></html>`);
+            case '/set-cookie': {
+                // ?name=value pairs become cookies; ?del=name expires one.
+                const cookies = [...url.searchParams].filter(([k]) => k !== 'del').map(([k, v]) => `${k}=${v}; Path=/; Max-Age=3600`);
+                for (const name of url.searchParams.getAll('del')) cookies.push(`${name}=; Path=/; Max-Age=0`);
+                return html(200, `<!doctype html><html><head><title>set</title></head><body>set</body></html>`, { 'set-cookie': cookies });
+            }
+            case '/echo-cookies':
+                // The Cookie header this request arrived with, as the title.
+                return html(200, `<!doctype html><html><head><title>${req.headers.cookie ?? ''}</title></head><body>cookies</body></html>`);
             case '/favicon.ico':
                 res.writeHead(204);
                 return res.end();
