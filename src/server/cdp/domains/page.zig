@@ -713,16 +713,25 @@ pub fn frameNavigated(arena: Allocator, bc: *CDP.BrowserContext, event: *const N
     // frames (iframes), clearing all contexts would destroy the main frame's
     // context, causing Puppeteer's frame.evaluate()/frame.content() to hang
     // forever.
-    if (is_root_frame) {
-        try cdp.sendEvent("Runtime.executionContextsCleared", null, .{ .session_id = session_id });
-    }
-
     // Look up the actual navigated frame. For main frame navigations this is
     // the root frame; for iframes it is the child frame. Using the correct
     // frame's JS context for inspector.contextCreated prevents re-registering
     // the root context under a new id (which silently invalidates the
     // previous id on the V8 side).
     const frame = bc.session.findFrameByFrameId(event.frame_id) orelse return error.FrameNotFound;
+
+    if (is_root_frame) {
+        // An in-place first navigation keeps the about:blank context, which
+        // contextCreated below registers again under a new id. Destroy the
+        // about:blank one now so the client hears of it in Chrome's order:
+        // executionContextDestroyed, executionContextsCleared, then created.
+        var ls: js.Local.Scope = undefined;
+        frame.js.localScope(&ls);
+        defer ls.deinit();
+        bc.inspector_session.inspector.forgetContext(&ls.local);
+
+        try cdp.sendEvent("Runtime.executionContextsCleared", null, .{ .session_id = session_id });
+    }
 
     // frameNavigated event
     try cdp.sendEvent("Page.frameNavigated", .{
@@ -1523,6 +1532,79 @@ test "cdp.frame: isolated world survives the in-place first navigation" {
     try ctx.expectSentResult(.{ .result = .{ .type = "string", .value = "Jobs page one" } }, .{ .id = 45 });
 }
 
+// The in-place first navigation registers the about:blank context again under a
+// new id. V8 forgets a context by the id it currently has, so the about:blank id
+// used to stay in the inspector's id table for the life of the connection --
+// one entry per crawl on a reused connection. It is destroyed instead, and the
+// client is told, as Chrome tells it.
+test "cdp.frame: the in-place first navigation destroys the about:blank context id" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    try ctx.processMessage(.{ .id = 40, .method = "Target.setAutoAttach", .params = .{ .autoAttach = true, .waitForDebuggerOnStart = false } });
+    try ctx.processMessage(.{ .id = 41, .method = "Target.createTarget", .params = .{ .url = "about:blank" } });
+    const bc = &ctx.cdp().browser_context.?;
+    const session_id = bc.session_id.?;
+    const root = bc.mainFrame() orelse unreachable;
+
+    try ctx.processMessage(.{ .id = 42, .method = "Runtime.enable", .sessionId = session_id });
+    const blank_ctx = mainWorldContextId(bc, root);
+    try testing.expect(blank_ctx != 0);
+
+    try ctx.processMessage(.{ .id = 43, .method = "Page.navigate", .sessionId = session_id, .params = .{
+        .url = "http://127.0.0.1:9582/src/browser/tests/cdp/dom1.html",
+    } });
+    try testing.waitForPage(bc);
+    try testing.expectEqual(root, bc.mainFrame().?);
+
+    const page_ctx = mainWorldContextId(bc, root);
+    try testing.expect(page_ctx != blank_ctx);
+    try ctx.expectSentEvent("Runtime.executionContextDestroyed", .{
+        .executionContextId = blank_ctx,
+    }, .{ .session_id = session_id });
+}
+
+// Every wrapper of a finalizable object takes a record from the Browser-wide
+// fc_identity_pool, which only its weak callback used to give back. Teardown
+// resets the weak Globals first, and a reset Global never calls back, so a
+// page's records stayed in the pool until the connection closed -- ~56 bytes
+// per wrapper per crawl. Both worlds' records come back with the page.
+test "cdp.frame: closing the target returns every finalizer identity record" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    try ctx.processMessage(.{ .id = 40, .method = "Target.setAutoAttach", .params = .{ .autoAttach = true, .waitForDebuggerOnStart = false } });
+    try ctx.processMessage(.{ .id = 41, .method = "Target.createTarget", .params = .{ .url = "about:blank" } });
+    const bc = &ctx.cdp().browser_context.?;
+    const browser = bc.session.browser;
+    const session_id = bc.session_id.?;
+    const target_id = bc.target_id.?;
+    const root = bc.mainFrame() orelse unreachable;
+    const root_id = id.toFrameId(root._frame_id);
+
+    try ctx.processMessage(.{ .id = 42, .method = "Page.navigate", .sessionId = session_id, .params = .{
+        .url = "http://127.0.0.1:9582/src/browser/tests/cdp/isolated_world_one.html",
+    } });
+    try testing.waitForPage(bc);
+    try ctx.processMessage(.{ .id = 43, .method = "Page.createIsolatedWorld", .sessionId = session_id, .params = .{
+        .frameId = &root_id,
+        .worldName = "utility",
+        .grantUniveralAccess = true,
+    } });
+    const world_ctx = try isolatedWorldContextId(bc, root);
+
+    const keep = "window.__keep = Array.from({length: 100}, () => new Event('x')); 0";
+    try ctx.processMessage(.{ .id = 44, .method = "Runtime.evaluate", .sessionId = session_id, .params = .{ .expression = keep } });
+    try ctx.processMessage(.{ .id = 45, .method = "Runtime.evaluate", .sessionId = session_id, .params = .{ .expression = keep, .contextId = world_ctx } });
+    try testing.expect(browser.fc_identity_live >= 200);
+
+    try ctx.processMessage(.{ .id = 46, .method = "Target.closeTarget", .params = .{ .targetId = &target_id } });
+    try testing.expectEqual(false, bc.session.hasPage());
+    // The page is queued for destruction, not destroyed yet.
+    bc.session.processDestroyQueues();
+    try testing.expectEqual(0, browser.fc_identity_live);
+}
+
 // A committed root navigation tears the old Page down later, with the same
 // frame id as the live page. That teardown must not take the live page's
 // world context with it.
@@ -1591,6 +1673,13 @@ test "cdp.frame: isolated world contexts share their frame's origin token" {
         .contextId = try isolatedWorldContextId(bc, root),
     } });
     try ctx.expectSentResult(.{ .result = .{ .type = "string", .value = "Jobs page one" } }, .{ .id = 63 });
+}
+
+fn mainWorldContextId(bc: *CDP.BrowserContext, frame: *Frame) i32 {
+    var ls: js.Local.Scope = undefined;
+    frame.js.localScope(&ls);
+    defer ls.deinit();
+    return bc.inspector_session.inspector.getContextId(&ls.local);
 }
 
 fn isolatedWorldContextId(bc: *CDP.BrowserContext, frame: *const Frame) !i32 {

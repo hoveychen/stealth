@@ -40,9 +40,27 @@ if [ "$LP_HTTP_MAX_CONCURRENT" -lt 1 ] || [ "$LP_HTTP_MAX_CONCURRENT" -gt 255 ];
   echo "entrypoint: LP_HTTP_MAX_CONCURRENT=$LP_HTTP_MAX_CONCURRENT must be 1..255" >&2; exit 2
 fi
 
+# The engine's malloc. Only the engine is switched; Node keeps glibc. jemalloc
+# is the default: on a mixed load glibc held ~1.6 GB and kept 1.3 GB when idle,
+# jemalloc ~0.75 GB and 0.24 GB idle, at the same throughput (service/README.md,
+# Memory). glibc stays selectable.
+case "${LP_MALLOC:-jemalloc}" in
+  glibc) ENGINE_PRELOAD=${LD_PRELOAD:-} ;;
+  jemalloc)
+    ENGINE_PRELOAD=$(ls /usr/lib/*-linux-gnu/libjemalloc.so.2 2>/dev/null | head -n 1)
+    if [ -z "$ENGINE_PRELOAD" ]; then
+      echo "entrypoint: LP_MALLOC=jemalloc but libjemalloc.so.2 is not installed" >&2; exit 2
+    fi
+    # Without background_thread jemalloc only purges freed pages on later
+    # allocations, so an idle engine would keep its peak.
+    export MALLOC_CONF="${MALLOC_CONF:-background_thread:true}"
+    ;;
+  *) echo "entrypoint: LP_MALLOC=$LP_MALLOC must be glibc or jemalloc" >&2; exit 2 ;;
+esac
+
 engine() {
   while :; do
-    /bin/lightpanda serve \
+    LD_PRELOAD="$ENGINE_PRELOAD" /bin/lightpanda serve \
       --host "${LP_HOST:-127.0.0.1}" \
       --port "$LP_PORT" \
       --cdp-max-connections "$LP_CDP_MAX_CONNECTIONS" \

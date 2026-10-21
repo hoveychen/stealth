@@ -471,7 +471,7 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 }
                 const fc = finalizer_gop.value_ptr;
                 const browser = session.browser;
-                const identity_finalizer = try browser.fc_identity_pool.create(browser.allocator);
+                const identity_finalizer = try browser.createFcIdentity();
                 identity_finalizer.* = .{
                     .browser = browser,
                     .page = page,
@@ -482,6 +482,7 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
                 };
                 fc.identities = identity_finalizer;
                 fc.identity_count += 1;
+                ctx.identity.finalizers.append(&identity_finalizer.identity_node);
 
                 v8.v8__Global__SetWeakFinalizer(gop.value_ptr, identity_finalizer, finalizer.release_ref, v8.kParameter);
             }
@@ -1604,27 +1605,30 @@ fn resolveT(comptime T: type, value: *T) Resolved {
 
                     // The Identity lives in browser.fc_identity_pool, which outlives
                     // the page and the session, so freeing ourselves is always safe.
-                    // `browser` is the only field we may touch unconditionally.
-                    defer identity_finalizer.browser.fc_identity_pool.destroy(identity_finalizer);
+                    defer identity_finalizer.browser.destroyFcIdentity(identity_finalizer);
 
-                    // If done, the owning scope (page / isolated world) was already
-                    // torn down: its identity.deinit() reset our Global and the FC
-                    // was already released. The page, identity_map and finalizer_ptr_id
-                    // are all stale (the Page may even be reused by a later Session),
-                    // so we must not dereference them — just free ourselves (defer).
+                    // The callback firing means our Global was never Reset (a
+                    // Reset destroys the V8 node and the callback with it), so
+                    // the world's identity.deinit has not run on us and the
+                    // identity is alive. The Global must be Reset here: V8
+                    // CHECKs that a first-pass callback did.
+                    const resolved_ptr_id = identity_finalizer.resolved_ptr_id;
+                    const identity = identity_finalizer.identity;
+                    identity.finalizers.remove(&identity_finalizer.identity_node);
+                    if (identity.identity_map.fetchRemove(resolved_ptr_id)) |kv| {
+                        var global = kv.value;
+                        v8.v8__Global__Reset(&global);
+                    }
+
+                    // If done, the page went first (an isolated world outlived
+                    // it) and released the FC. The page and finalizer_ptr_id are
+                    // stale (the Page may even be reused by a later Session), so
+                    // we must not dereference them — just free ourselves (defer).
                     if (identity_finalizer.done) {
                         return;
                     }
 
                     const page = identity_finalizer.page;
-                    const resolved_ptr_id = identity_finalizer.resolved_ptr_id;
-
-                    // Clean up the identity map entry: the object is being collected,
-                    // so our Global to it is dead.
-                    if (identity_finalizer.identity.identity_map.fetchRemove(resolved_ptr_id)) |kv| {
-                        var global = kv.value;
-                        v8.v8__Global__Reset(&global);
-                    }
 
                     const finalizer_ptr_id = identity_finalizer.finalizer_ptr_id;
                     const fc = page.finalizer_callbacks.getPtr(finalizer_ptr_id) orelse return;

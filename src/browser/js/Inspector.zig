@@ -111,6 +111,8 @@ pub fn contextCreated(
     aux_data: []const u8,
     is_default_context: bool,
 ) void {
+    self.forgetContext(local);
+
     v8.v8_inspector__Inspector__ContextCreated(
         self.handle,
         name.ptr,
@@ -125,6 +127,19 @@ pub fn contextCreated(
 
     if (is_default_context) {
         self.default_context = local.ctx.handle;
+    }
+}
+
+// Registering a context hands it a fresh id and overwrites the one it had, while
+// V8's contextDestroyed only knows the current one: a context registered twice
+// (the initial about:blank navigated in place) would leave its first id in V8's
+// id->group table for the rest of the connection. So the earlier registration is
+// destroyed first, which is also what Chrome reports for that context: an
+// executionContextDestroyed for the about:blank id. A context never registered
+// has id 0; one already destroyed is a no-op for V8.
+pub fn forgetContext(self: *Inspector, local: *const js.Local) void {
+    if (v8.v8__inspector__executionContextId(local.handle) != 0) {
+        self.contextDestroyed(local.handle);
     }
 }
 

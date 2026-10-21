@@ -36,9 +36,31 @@ const Identity = @This();
 // Maps Zig instance pointers to their v8::Global(Object) wrappers.
 identity_map: std.AutoHashMapUnmanaged(usize, v8.Global) = .empty,
 
+// The FinalizerCallback.Identity records whose weak Globals live in
+// identity_map (linked through their `identity_node`). Resetting a weak Global
+// destroys its V8 node, so the weak callback that would have freed the record
+// never comes: deinit is the one place that knows which records that was.
+finalizers: std.DoublyLinkedList = .{},
+
 pub fn deinit(self: *Identity) void {
     var it = self.identity_map.valueIterator();
     while (it.next()) |global| {
         v8.v8__Global__Reset(global);
     }
+
+    var node = self.finalizers.first;
+    while (node) |n| {
+        node = n.next;
+        const record: *js.FinalizerCallback.Identity = @fieldParentPtr("identity_node", n);
+        if (record.done) {
+            // Its FinalizerCallback is already gone (the page went first) and
+            // the Global was this record's last reference.
+            record.browser.destroyFcIdentity(record);
+        } else {
+            // Still on its FinalizerCallback's list; FinalizerCallback.deinit
+            // frees it on Page teardown.
+            record.reset = true;
+        }
+    }
+    self.finalizers = .{};
 }

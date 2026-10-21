@@ -55,6 +55,7 @@ Image environment, on top of the service variables above:
 | `LP_HTTP_MAX_CONCURRENT`       | `255`              | the engine's `--http-max-concurrent`: page loads in flight across *all* connections, 1–255 (the engine's own default is 40). Set it here, not as an extra argument |
 | `LP_LOG_LEVEL`                 | `info`             | engine log level |
 | `LP_RESTART_DELAY`             | `1`                | seconds before restarting a dead engine |
+| `LP_MALLOC`                    | `jemalloc`         | the engine's malloc, `jemalloc` or `glibc` (see [Memory](#memory)); the Node service always uses glibc. With jemalloc, `MALLOC_CONF` defaults to `background_thread:true` |
 | `SESSION_DIR`                  | `/data/sessions`   | where session cookie jars are kept; mount a volume on `/data` |
 | `LP_HOST` / `LP_PORT`          | `127.0.0.1` / `9222` | where the engine listens inside the container |
 | `LIGHTPANDA_DISABLE_TELEMETRY` | `true`             | telemetry is off whenever this variable exists, whatever its value; the engine logs `telemetry status disabled=true` at startup |
@@ -375,6 +376,32 @@ CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 docker compose -f service/compose.yaml --
 Sessions are per process: a replica keeps the jars it has loaded in memory, so
 send all requests of one `session_id` to the same replica (hash on it in the
 load balancer), or the replicas will each have their own copy of it.
+
+### Memory
+
+The engine runs on jemalloc (`LP_MALLOC=jemalloc`). glibc's malloc holds on to
+what a busy engine freed: on a mixed load it sat at ~1.6 GB and kept 1.3 GB
+after the load stopped, where jemalloc held about half and gave all but
+~0.24 GB back. Measured on the 512-core host, one container per column in the
+same time window (`service/bench/soak.sh`, `POOL_SIZE=16`, `--cpus 24`, 20
+closed-loop workers, hn 50 / js 20 / wiki 15 / refused 5 / hang 4 / hangdoc 3 /
+throw 3, 60 minutes, then 15 idle), engine RSS from `smaps_rollup`:
+
+| | glibc | glibc, `MALLOC_ARENA_MAX=2` | jemalloc |
+|---|---|---|---|
+| under load, 30–60 min (mean, range) | 1,617 MB (1,392–1,819) | 1,142 MB (1,113–1,262) | 749 MB (574–1,071) |
+| after 15 idle minutes | 1,315 MB | 1,078 MB | 238 MB |
+| requests in 60 min | 154,798 | 157,172 | 154,011 |
+| small pages a second, CPU-bound (8 slots, 12 cores) | 434.8 | 381.0 | 445.2 |
+| Wikipedia-sized pages a second (same) | 8.5 | 8.6 | 8.2 |
+
+`MALLOC_ARENA_MAX=2` saves less and costs 12% on small pages (16 threads
+contending for two arenas). The memory does not grow with time on any of them:
+the per-crawl leaks the soaks found are fixed (a ~56-byte record per wrapped
+object with a finalizer, an inspector id per in-place first navigation, and 4–8
+bytes V8 kept per forced GC), and on one reused connection 1.07 million small
+pages over 40 minutes moved the engine from 96 to 94 MB (0.9 bytes a page,
+against 184 before).
 
 ## How a crawl runs
 

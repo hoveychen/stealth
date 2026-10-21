@@ -190,7 +190,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
       sed -i "s#deb.debian.org#${APT_MIRROR}#g" /etc/apt/sources.list.d/debian.sources; \
     fi && \
     apt-get update -yq && \
-    apt-get install -yq --no-install-recommends tini ca-certificates && \
+    apt-get install -yq --no-install-recommends tini ca-certificates libjemalloc2 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
@@ -216,6 +216,7 @@ ENV LIGHTPANDA_DISABLE_TELEMETRY=true \
     LP_PORT=9222 \
     LP_LOG_LEVEL=info \
     LP_RESTART_DELAY=1 \
+    LP_MALLOC=jemalloc \
     SESSION_DIR=/data/sessions
 
 EXPOSE 8080/tcp

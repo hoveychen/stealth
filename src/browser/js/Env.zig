@@ -125,6 +125,15 @@ tearing_down: bool = false,
 
 heap_limit_protected: bool = false,
 
+// A bare V8 context -- the snapshot's default one: builtins, no Window, no
+// templates -- entered while V8 runs a GC we asked for, and used for nothing
+// else: no page reaches it and the inspector never hears of it. A forced GC
+// (memoryPressureNotification(.critical)) counts a kForcedGC use, and with no
+// current context V8 defers the count into Heap::deferred_counters_, which only
+// a debug V8 ever drains. That was 4-8 bytes per closed session for the life of
+// the isolate, i.e. per crawl on a reused CDP connection. Created on first use.
+gc_context: ?v8.Global = null,
+
 // Message for the next TypeError the bridge builds. Set by local.typeError.
 // Think of it as our own little global errno. How cute.
 error_message: ?[]const u8 = null,
@@ -257,6 +266,10 @@ pub fn deinit(self: *Env) void {
 
     if (self.inspector) |i| {
         i.deinit(allocator);
+    }
+
+    if (self.gc_context) |*gc_context| {
+        v8.v8__Global__Reset(gc_context);
     }
 
     allocator.free(self.templates);
@@ -750,7 +763,24 @@ pub fn memoryPressureNotification(self: *Env, level: Isolate.MemoryPressureLevel
     var handle_scope: js.HandleScope = undefined;
     handle_scope.init(self.isolate);
     defer handle_scope.deinit();
+
+    const gc_context = self.gcContext();
+    v8.v8__Context__Enter(gc_context);
+    defer v8.v8__Context__Exit(gc_context);
     self.isolate.memoryPressureNotification(level);
+}
+
+// See `gc_context`. Needs a HandleScope.
+fn gcContext(self: *Env) *const v8.Context {
+    const isolate = self.isolate.handle;
+    if (self.gc_context) |*gc_context| {
+        return @ptrCast(v8.v8__Global__Get(gc_context, isolate).?);
+    }
+    const context = v8.v8__Context__New(isolate, null, null).?;
+    var global: v8.Global = undefined;
+    v8.v8__Global__New(isolate, context, &global);
+    self.gc_context = global;
+    return context;
 }
 
 pub fn dumpMemoryStats(self: *Env) void {
@@ -1061,6 +1091,44 @@ test "Env: a heap limit reached during teardown does not arm a termination" {
     const granted = env.onNearHeapLimit(limit, limit);
     try testing.expectEqual(false, env.terminatePending());
     try testing.expect(granted > limit);
+}
+
+// V8 counts a kForcedGC use at the end of every forced GC and, when the isolate
+// has no current context, defers it into a list only a debug V8 drains -- 4
+// bytes for the life of the isolate per closed session. First-pass weak
+// callbacks run inside that same GC, so one of them sees what the count sees.
+test "Env: a forced GC runs with a current context" {
+    const frame = try testing.createFrame();
+    defer testing.test_session.closeAllPages();
+
+    const env = frame.js.env;
+    const Probe = struct {
+        global: v8.Global = undefined,
+        isolate: *v8.Isolate,
+        fired: bool = false,
+        had_context: bool = false,
+
+        fn collected(handle: ?*const v8.WeakCallbackInfo) callconv(.c) void {
+            const self: *@This() = @ptrCast(@alignCast(v8.v8__WeakCallbackInfo__GetParameter(handle.?).?));
+            self.fired = true;
+            self.had_context = v8.v8__Isolate__GetCurrentContext(self.isolate) != null;
+            v8.v8__Global__Reset(&self.global);
+        }
+    };
+    var probe: Probe = .{ .isolate = env.isolate.handle };
+    {
+        var ls: js.Local.Scope = undefined;
+        frame.js.localScope(&ls);
+        defer ls.deinit();
+        const object = v8.v8__Object__New(env.isolate.handle).?;
+        v8.v8__Global__New(env.isolate.handle, object, &probe.global);
+        v8.v8__Global__SetWeakFinalizer(&probe.global, &probe, Probe.collected, v8.kParameter);
+    }
+
+    try testing.expect(v8.v8__Isolate__GetCurrentContext(env.isolate.handle) == null);
+    env.memoryPressureNotification(.critical);
+    try testing.expect(probe.fired);
+    try testing.expect(probe.had_context);
 }
 
 // The cap is reachable by one greedy document, and the shape that matters is
