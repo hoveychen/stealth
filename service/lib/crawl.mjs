@@ -134,7 +134,7 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
             const partial = {};
             if (req.formats.includes('html')) partial.html = page?.partial?.html ?? null;
             if (req.formats.includes('markdown')) partial.markdown = page?.partial?.markdown ?? null;
-            if (Object.keys(partial).length) err.partial = partial;
+            if (Object.keys(partial).length) err.partial = { ...partial, source: page?.partial?.source ?? null };
         }
         throw err;
     } finally {
@@ -216,17 +216,35 @@ async function runInContext(conn, req, page, deadline, graceMs, setReusable) {
 // commands go out together, without retries, and whatever has not answered
 // when the grace runs out is left null. A page stuck in script answers
 // nothing; the connection is dropped afterwards either way.
+//
+// The engine hands the main document to the page only once its whole body is
+// in, so while a body never finishes the page is still the previous
+// about:blank. LP.getPartialBody, asked alongside, has the bytes that did
+// arrive (and markdown made from them in a detached document; the page sees
+// neither): when the DOM has nothing, those are what `partial` carries, marked
+// `source: "raw-body"`.
 async function snapshotAfterTimeout(conn, req, page, graceMs) {
     if (!page.sessionId || conn.closed || graceMs <= 0) return;
     const ask = (method, params, pick) =>
         conn.sendOnce(method, params, page.sessionId, graceMs).then(pick, () => null);
-    const [html, markdown, cookies] = await Promise.all([
-        req.formats.includes('html') ? ask('Runtime.evaluate', { expression: HTML_EXPR, returnByValue: true }, (r) => (r.exceptionDetails ? null : (r.result?.value ?? null))) : null,
-        req.formats.includes('markdown') ? ask('LP.getMarkdown', {}, (r) => r.markdown ?? null) : null,
+    const wantHtml = req.formats.includes('html');
+    const wantMarkdown = req.formats.includes('markdown');
+    const [html, markdown, raw, cookies] = await Promise.all([
+        wantHtml ? ask('Runtime.evaluate', { expression: HTML_EXPR, returnByValue: true }, (r) => (r.exceptionDetails ? null : (r.result?.value ?? null))) : null,
+        wantMarkdown ? ask('LP.getMarkdown', {}, (r) => r.markdown ?? null) : null,
+        wantHtml || wantMarkdown ? ask('LP.getPartialBody', { markdown: wantMarkdown }, (r) => (r.available ? r : null)) : null,
         req.sessionId ? ask('Network.getAllCookies', {}, (r) => r.cookies ?? null) : null,
     ]);
-    page.partial = { html, markdown };
+    page.partial = raw && domIsEmpty(html, markdown)
+        ? { html: wantHtml ? raw.body : null, markdown: raw.markdown ?? null, source: 'raw-body' }
+        : { html, markdown, source: 'dom' };
     if (cookies) page.cookies = cookies;
+}
+
+// No text in either reading, as with about:blank (`""` or an empty
+// <html><head></head><body></body></html>).
+function domIsEmpty(html, markdown) {
+    return !(html ?? '').replace(/<[^>]*>/g, '').trim() && !(markdown ?? '').trim();
 }
 
 async function navigateAndCollect(conn, req, page, send, left) {

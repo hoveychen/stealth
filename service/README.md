@@ -176,12 +176,23 @@ A request that runs out of `timeout` gets a 504. If it asked for `html` or
 `markdown`, the service then spends up to `PARTIAL_GRACE_MS` more asking the
 page for them as they are, and puts them in `partial`; what doesn't answer in
 time is `null`. Only the requested ones are present, and there is no `partial`
-when neither was requested. The response therefore comes at most
+when neither was requested. `partial.source` says what they are:
+
+- `"dom"`: read from the page, as a finished crawl's `html` and `markdown`
+  would be (scripts have run, the html is the serialized DOM).
+- `"raw-body"`: the main document's body never finished arriving, so the page
+  was never parsed; `html` is the body as far as it got, as source text
+  (decoded with the charset the page would have been parsed with, possibly cut
+  mid-tag), and `markdown` is made from that text without running any of its
+  scripts or loading anything it refers to.
+- `null`: nothing answered in time.
+
+The response therefore comes at most
 `timeout + PARTIAL_GRACE_MS` after the request (plus a few ms), and the
 connection is dropped afterwards whatever happened.
 
 ```json
-{ "error": { "code": "timeout", "message": "..." }, "partial": { "html": "<html>...</html>", "markdown": "# ..." } }
+{ "error": { "code": "timeout", "message": "..." }, "partial": { "html": "<html>...</html>", "markdown": "# ...", "source": "dom" } }
 ```
 
 What there is to get depends on where the page is stuck:
@@ -189,9 +200,11 @@ What there is to get depends on where the page is stuck:
 - loaded but the load event never comes (a script or other resource that
   never arrives, `waitUntil` that is never reached), or `js` that never
   settles: `partial` has the page as it is.
-- the main document is still downloading or never answered: the engine keeps
-  the previous `about:blank` until the whole body is in, so `html` and
-  `markdown` are `""`.
+- the main document is still downloading: the engine parses it only once the
+  whole body is in, so `partial` has what has arrived, with
+  `source: "raw-body"`.
+- the main document never answered: there is nothing yet, so `html` and
+  `markdown` are `""` (the previous `about:blank`).
 - a script that never yields (`for (;;) {}`), or a synchronous `<script src>`
   that never arrives: the engine answers no CDP command, so both are `null`.
   The engine's watchdog terminates the script after `--watchdog-ms` (30 s by

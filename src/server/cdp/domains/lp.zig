@@ -23,6 +23,8 @@ const CDP = @import("../CDP.zig");
 
 const Robots = @import("../../../network/Robots.zig");
 const DOMNode = @import("../../../browser/webapi/Node.zig");
+const DOMParser = @import("../../../browser/webapi/DOMParser.zig");
+const h5e = @import("../../../browser/parser/html5ever.zig");
 const NodeRegistry = @import("../../../NodeRegistry.zig");
 
 const markdown = lp.markdown;
@@ -33,6 +35,7 @@ const structured_data = lp.structured_data;
 pub fn processMessage(cmd: *CDP.Command) !void {
     const action = std.meta.stringToEnum(enum {
         getMarkdown,
+        getPartialBody,
         getSemanticTree,
         getInteractiveElements,
         getNodeDetails,
@@ -51,6 +54,7 @@ pub fn processMessage(cmd: *CDP.Command) !void {
 
     switch (action) {
         .getMarkdown => return getMarkdown(cmd),
+        .getPartialBody => return getPartialBody(cmd),
         .getSemanticTree => return getSemanticTree(cmd),
         .getInteractiveElements => return getInteractiveElements(cmd),
         .getNodeDetails => return getNodeDetails(cmd),
@@ -179,6 +183,88 @@ fn getMarkdown(cmd: anytype) !void {
     return cmd.sendResult(.{
         .markdown = aw.written(),
     }, .{});
+}
+
+// The main document's body as far as it has arrived, for a client that gives
+// up on a page whose body never finishes. Until the last byte is in, the engine
+// has parsed none of it -- the response is handed to the page only once
+// complete, and the charset scan, the preload scan and the parse all run on the
+// whole of it -- so the document is still the previous one (or empty) and
+// LP.getMarkdown has nothing to read. This hands over the bytes themselves,
+// decoded the way the parse would decode them. `available` is false whenever
+// there is no such body (the document has been parsed, is not HTML, or nothing
+// of it has arrived yet).
+//
+// The page sees none of it: the body is read, not consumed, and `markdown`
+// parses a copy into a detached document the way DOMParser does -- no script
+// runs, no subresource is requested, no custom element is upgraded. That
+// document is not reachable from the page and goes away with it.
+fn getPartialBody(cmd: anytype) !void {
+    const Params = struct {
+        markdown: ?bool = null,
+    };
+    const params = (try cmd.params(Params)) orelse Params{};
+
+    const bc = cmd.browser_context orelse return error.NoBrowserContext;
+    const live = bc.mainPage() orelse return error.FrameNotLoaded;
+
+    // A navigation that replaces the page has not committed while its body is
+    // still arriving; the bytes are on the pending page.
+    const pending = bc.session.replacementOf(live);
+    const frame, const arrived = blk: {
+        if (pending) |p| {
+            if (p.frame.arrivedBody()) |a| break :blk .{ &p.frame, a };
+        }
+        if (live.frame.arrivedBody()) |a| break :blk .{ &live.frame, a };
+        return cmd.sendResult(.{ .available = false }, .{});
+    };
+    const body = try decodeArrived(cmd.arena, arrived.bytes, arrived.charset);
+
+    var md: ?[]const u8 = null;
+    if (params.markdown orelse false) {
+        // Two elements write to the frame when they are created, detached
+        // document or not: the first <base href> sets the frame's base URL and
+        // <meta name=referrer> its referrer policy. Settled now, from a copy,
+        // they would be in force before the real parse reaches them -- a
+        // script above the <base> would resolve against it, a request made
+        // before the <meta> would carry its Referer -- so they are put back.
+        const base_url = frame.base_url;
+        const referrer_policy = frame.referrer_policy;
+        defer {
+            frame.base_url = base_url;
+            frame.referrer_policy = referrer_policy;
+        }
+
+        const parser: DOMParser = .{ ._frame = frame };
+        const doc = try parser.parseFromString(body, "text/html");
+
+        var aw: std.Io.Writer.Allocating = .init(cmd.arena);
+        defer aw.deinit();
+        try markdown.dump(doc.asNode(), .{}, &aw.writer, frame);
+        md = try cmd.arena.dupe(u8, aw.written());
+    }
+
+    return cmd.sendResult(.{
+        .available = true,
+        .receivedBytes = arrived.bytes.len,
+        .charset = arrived.charset,
+        .body = body,
+        .markdown = md,
+    }, .{});
+}
+
+// Streaming, and never told it has the last chunk: a multi-byte sequence the
+// body was cut through is held back rather than turned into U+FFFD. The
+// decoder sniffs a BOM the same way the parse does.
+fn decodeArrived(arena: std.mem.Allocator, bytes: []const u8, charset: []const u8) ![]const u8 {
+    if (bytes.len == 0) return "";
+    const handle = h5e.encoding_for_label(charset.ptr, charset.len).handle orelse return error.InvalidCharset;
+    const decoder = h5e.encoding_decoder_new(handle) orelse return error.OutOfMemory;
+    defer h5e.encoding_decoder_free(decoder);
+
+    const out = try arena.alloc(u8, h5e.encoding_max_utf8_buffer_length(handle, bytes.len));
+    const result = h5e.encoding_decoder_decode(decoder, bytes.ptr, bytes.len, out.ptr, out.len, 0);
+    return out[0..result.bytes_written];
 }
 
 fn getInteractiveElements(cmd: anytype) !void {
@@ -874,4 +960,125 @@ test "cdp.lp: configureLoading toggles externalStylesheets independently" {
     try testing.expectEqual(true, bc.session.load_resources.stylesheet);
     try testing.expectEqual(true, bc.session.load_resources.iframe);
     try testing.expectEqual(true, bc.session.load_resources.worker);
+}
+
+test "cdp.lp: getPartialBody hands over a body that is still arriving" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-PB1", .session_id = "SID-PB1", .target_id = "TID-PB1-000000".* });
+    _ = try bc.session.createPage();
+    try ctx.processMessage(.{ .id = 1, .method = "Page.navigate", .params = .{ .url = "http://127.0.0.1:9582/partial_body/streaming.html" } });
+
+    // Tick until the first chunk is in; the server holds the rest back.
+    var runner = bc.session.runner(.{});
+    const frame_id = bc.page_handle.?.frame_id;
+    var attempts: usize = 0;
+    while (true) : (attempts += 1) {
+        _ = try runner.tickForFrame(frame_id, 20, .{});
+        const frame = bc.mainFrame() orelse unreachable;
+        if (frame.arrivedBody()) |arrived| {
+            if (std.mem.indexOf(u8, arrived.bytes, "first paragraph") != null) break;
+        }
+        if (attempts == 200) return error.FirstChunkNeverArrived;
+    }
+
+    const frame = bc.mainFrame() orelse unreachable;
+    const http = &bc.session.browser.http_client;
+    const activity_before = http.activity();
+    const referrer_policy = frame.referrer_policy;
+    try testing.expect(frame.base_url == null);
+
+    try ctx.processMessage(.{ .id = 2, .method = "LP.getPartialBody", .params = .{ .markdown = true } });
+    // Page.navigate has events of its own in the queue; find the answer by id.
+    const result = blk: {
+        var i: usize = 0;
+        while (try ctx.getSentMessage(i)) |msg| : (i += 1) {
+            const id = msg.object.get("id") orelse continue;
+            if (id == .integer and id.integer == 2) break :blk msg.object.get("result").?.object;
+        }
+        return error.NoAnswer;
+    };
+    try testing.expectEqual(true, result.get("available").?.bool);
+    // The header names no charset; the document's <meta> does, and it has arrived.
+    try testing.expectEqualSlices(u8, "UTF-8", result.get("charset").?.string);
+
+    const body = result.get("body").?.string;
+    try testing.expect(std.mem.startsWith(u8, body, "<html><head><meta charset=\"utf-8\">"));
+    try testing.expect(std.mem.indexOf(u8, body, "<h1>H\u{e9}llo</h1>") != null);
+    // Cut one byte into the "é": held back, not turned into U+FFFD.
+    try testing.expect(std.mem.endsWith(u8, body, "</a> caf"));
+    try testing.expectEqual(body.len + 1, @as(usize, @intCast(result.get("receivedBytes").?.integer)));
+
+    const md = result.get("markdown").?.string;
+    try testing.expect(std.mem.indexOf(u8, md, "# H\u{e9}llo") != null);
+    try testing.expect(std.mem.indexOf(u8, md, "first paragraph") != null);
+
+    // Nothing the page can see moved: no request went out for the <img>, the
+    // script did not run, and neither the <base> nor the <meta name=referrer>
+    // of the copy took effect on the frame.
+    const activity_after = http.activity();
+    try testing.expectEqual(activity_before.http, activity_after.http);
+    try testing.expectEqual(activity_before.pending, activity_after.pending);
+    try testing.expect(frame.base_url == null);
+    try testing.expectEqual(referrer_policy, frame.referrer_policy);
+    {
+        var ls: lp.js.Local.Scope = undefined;
+        frame.js.localScope(&ls);
+        defer ls.deinit();
+        const v = try ls.local.exec("window.__partial_ran === undefined", null);
+        try testing.expect(v.toBool());
+    }
+
+    // The rest arrives and the page is parsed as if nobody had looked.
+    try testing.waitForPage(bc);
+    const done = bc.mainFrame() orelse unreachable;
+    {
+        var ls: lp.js.Local.Scope = undefined;
+        done.js.localScope(&ls);
+        defer ls.deinit();
+        const v = try ls.local.exec("window.__partial_ran === true && document.getElementById('second') !== null && document.baseURI.endsWith('/elsewhere/') && document.querySelector('p').textContent.endsWith('caf\u{e9}')", null);
+        try testing.expect(v.toBool());
+    }
+
+    // Parsed: there is no held-back body any more.
+    try ctx.processMessage(.{ .id = 3, .method = "LP.getPartialBody" });
+    try ctx.expectSentResult(.{ .available = false }, .{ .id = 3 });
+}
+
+test "cdp.lp: getPartialBody reads the pending page of a navigation that has not committed" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-PB2", .session_id = "SID-PB2", .target_id = "TID-PB2-000000".*, .url = "hi.html" });
+    const live = bc.mainPage() orelse unreachable;
+    try ctx.processMessage(.{ .id = 1, .method = "Page.navigate", .params = .{ .url = "http://127.0.0.1:9582/partial_body/streaming.html" } });
+    const pending = bc.session.replacementOf(live) orelse return error.NoPendingPage;
+
+    var runner = bc.session.runner(.{});
+    var attempts: usize = 0;
+    while (true) : (attempts += 1) {
+        _ = try runner.tickForFrame(live.frame._frame_id, 20, .{});
+        if (pending.frame.arrivedBody()) |arrived| {
+            if (std.mem.indexOf(u8, arrived.bytes, "first paragraph") != null) break;
+        }
+        if (attempts == 200) return error.FirstChunkNeverArrived;
+    }
+    // Still the old page: the response is delivered only once complete.
+    try testing.expect(bc.mainPage() == live);
+
+    try ctx.processMessage(.{ .id = 2, .method = "LP.getPartialBody" });
+    const result = blk: {
+        var i: usize = 0;
+        while (try ctx.getSentMessage(i)) |msg| : (i += 1) {
+            const id = msg.object.get("id") orelse continue;
+            if (id == .integer and id.integer == 2) break :blk msg.object.get("result").?.object;
+        }
+        return error.NoAnswer;
+    };
+    try testing.expectEqual(true, result.get("available").?.bool);
+    try testing.expect(std.mem.endsWith(u8, result.get("body").?.string, "</a> caf"));
+    try testing.expect(result.get("markdown") == null);
+
+    try testing.waitForPage(bc);
 }
