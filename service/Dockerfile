@@ -1,10 +1,14 @@
 # syntax=docker/dockerfile:1
 #
-# Lightpanda engine image built from THIS checkout (the root Dockerfile is
-# upstream's: it clones lightpanda-io/browser instead).
+# Crawl service image: the Lightpanda engine built from THIS checkout (the
+# root Dockerfile is upstream's: it clones lightpanda-io/browser instead) plus
+# the Node HTTP service in service/. See service/README.md.
 #
-#   docker build -f service/Dockerfile -t lightpanda-stealth .
-#   docker run --rm -p 9222:9222 lightpanda-stealth
+#   docker build -f service/Dockerfile -t lp-crawl .
+#   docker run --rm -p 8080:8080 lp-crawl
+#
+# The engine's CDP port stays on the container's loopback; only the HTTP
+# service is exposed.
 #
 # Multi-arch: linux/amd64 and linux/arm64 via TARGETPLATFORM (build each arch
 # natively; there is no cross-compilation here).
@@ -21,10 +25,15 @@
 # downloaded; both are optional and fall back to downloading when absent:
 #   --build-context v8=.lp-cache/prebuilt-v8/<zig-v8 tag>   (dir holding libc_v8_<v8>_linux_<arch>.a)
 #   --build-context zigpkg=zig-pkg                          (zig's package dir, hash-named)
+# The Node runtime is copied out of an official node image:
+#   --build-arg NODE_IMAGE=<registry mirror>/library/node:22-slim
+
+ARG NODE_IMAGE=node:22-slim
 
 # Empty defaults for the optional host-provided inputs above.
 FROM scratch AS v8
 FROM scratch AS zigpkg
+FROM ${NODE_IMAGE} AS node
 
 FROM debian:stable-slim AS build
 
@@ -184,20 +193,30 @@ RUN if [ -n "$APT_MIRROR" ]; then \
     apt-get install -yq --no-install-recommends tini ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build /browser/zig-out/bin/lightpanda /bin/lightpanda
-COPY --chmod=0755 service/engine-entrypoint.sh /usr/local/bin/engine-entrypoint.sh
+COPY service/package.json service/server.mjs /app/
+COPY service/lib /app/lib
+COPY --chmod=0755 service/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Defaults for engine-entrypoint.sh; override with `docker run -e`.
-# Each CDP connection holds a worker thread and a browser, so size
-# LP_CDP_MAX_CONNECTIONS to the container's memory.
-ENV LP_HOST=0.0.0.0 \
+# Defaults for entrypoint.sh and the service; override with `docker run -e`.
+# Each pool slot is one CDP connection, i.e. one worker thread and browser in
+# the engine (~50 MB); LP_CDP_MAX_CONNECTIONS defaults to 2*POOL_SIZE+4.
+# Telemetry is off: the engine checks only that the variable exists, so any
+# value (even empty) keeps it off.
+ENV LIGHTPANDA_DISABLE_TELEMETRY=true \
+    HOST=0.0.0.0 \
+    PORT=8080 \
+    POOL_SIZE=4 \
+    LP_HOST=127.0.0.1 \
     LP_PORT=9222 \
-    LP_CDP_MAX_CONNECTIONS=128 \
-    LP_LOG_LEVEL=info
+    LP_LOG_LEVEL=info \
+    LP_RESTART_DELAY=1
 
-EXPOSE 9222/tcp
+EXPOSE 8080/tcp
 
 # Lightpanda installs only some signal handlers and PID 1 has no default
-# SIGTERM handler; tini as PID 1 keeps `docker stop` from hanging.
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/engine-entrypoint.sh"]
+# SIGTERM handler; tini as PID 1 keeps `docker stop` from hanging. -g sends
+# the signal to the whole group: the service, the engine and its restart loop.
+ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/entrypoint.sh"]
 CMD []

@@ -15,6 +15,51 @@ LP_CDP_URL=ws://127.0.0.1:9222/ POOL_SIZE=4 node service/server.mjs
 Don't start the engine with `--obey-robots`, `--web-bot-auth-*` or `--webmcp`;
 each of them identifies the client as a bot (see `AGENTS.md`).
 
+## Docker
+
+One image, one container: `lightpanda serve` built from this checkout plus
+this service. Build from the repository root:
+
+```bash
+docker build -f service/Dockerfile -t lp-crawl .
+docker run -d --name lp-crawl --restart unless-stopped -p 8080:8080 -e POOL_SIZE=8 lp-crawl
+curl -s localhost:8080/crawl -d '{"url":"https://example.com/","formats":["markdown","meta"]}'
+```
+
+or `docker compose -f service/compose.yaml up -d --build` (`CRAWL_PORT` picks
+the host port). On a daemon whose address pools are used up ("all predefined
+address pools have been fully subnetted"), add an override file that sets
+`network_mode: bridge` on the `crawl` service.
+
+The build compiles the engine (ReleaseFast) and needs ~12 GB of RAM; a cold
+build downloads Rust, Zig, a prebuilt V8 (~130 MB from GitHub) and the
+crates and Zig packages. The Dockerfile header lists the mirror build-args and
+how to hand in V8 and the Zig packages from the host instead
+(`--build-context v8=… / zigpkg=…`). It needs BuildKit (`docker buildx`).
+
+Inside the container, `tini` is PID 1 and `entrypoint.sh` starts:
+
+- `lightpanda serve` on `127.0.0.1:9222` — the CDP port is not exposed. When
+  the engine exits it is restarted after `LP_RESTART_DELAY` seconds;
+  requests in flight fail with `engine_disconnected`, queued ones wait for it.
+- the service on `0.0.0.0:8080`, pointed at that engine. If the service
+  exits, the container exits and the restart policy brings it back.
+
+Image environment, on top of the service variables above:
+
+| variable                       | default            | meaning |
+|--------------------------------|--------------------|---------|
+| `POOL_SIZE`                    | `4`                | as above; ~50 MB of engine memory per slot |
+| `LP_CDP_MAX_CONNECTIONS`       | `2*POOL_SIZE+4`    | engine connection cap. Keep it well above `POOL_SIZE`: after a timeout the service reconnects at once while the engine may still be tearing down the old connection |
+| `LP_LOG_LEVEL`                 | `info`             | engine log level |
+| `LP_RESTART_DELAY`             | `1`                | seconds before restarting a dead engine |
+| `LP_HOST` / `LP_PORT`          | `127.0.0.1` / `9222` | where the engine listens inside the container |
+| `LIGHTPANDA_DISABLE_TELEMETRY` | `true`             | telemetry is off whenever this variable exists, whatever its value; the engine logs `telemetry status disabled=true` at startup |
+
+Arguments starting with `-` are appended to the `serve` command line
+(`docker run lp-crawl --log-level debug`); anything else runs instead of the
+service (`docker run --rm lp-crawl lightpanda version`).
+
 ## Configuration
 
 | variable             | default                 | meaning |
@@ -132,3 +177,16 @@ ports, then checks all four outputs, a redirect, a 404, a throwing script,
 bad input, a timeout, an unreachable host, more concurrent requests than slots,
 and killing and restarting the engine. Use a ReleaseFast engine build; the
 Debug build in `zig-out` is about 3.5× slower.
+
+Against the container instead: start it with `LP_RESTART_DELAY=4` (the
+"engine down" check needs the engine to stay down for a few seconds), serve
+the fixture pages on an address the container can reach (the Docker bridge
+gateway), and tell the test how to kill the engine:
+
+```bash
+docker run -d --name lp-crawl-test -p 127.0.0.1:18080:8080 -e POOL_SIZE=3 -e LP_RESTART_DELAY=4 lp-crawl
+LP_SERVICE_URL=http://127.0.0.1:18080 \
+FIXTURE_HOST=172.17.0.1 FIXTURE_URL_HOST=172.17.0.1 \
+LP_ENGINE_KILL="docker exec lp-crawl-test sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
+node service/test/run.mjs
+```
