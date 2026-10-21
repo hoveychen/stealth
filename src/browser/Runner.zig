@@ -117,8 +117,8 @@ fn _wait(self: *Runner, comptime is_cdp: bool, timeout_ms: u32, conditions: []Wa
 
     const timer: std.Io.Timestamp = .now(io, .boot);
 
-    // Periodic V8 GC hint during long waits. V8 is otherwise only nudged on
-    // session/page teardown (Session.zig, Page.zig), so a page that stays
+    // Periodic V8 GC hint during long waits, the only one the engine sends
+    // (session and page teardown don't, see Session.deinit): a page that stays
     // alive for seconds while running heavy JS accumulates wrappers and
     // external-ref'd Zig allocations V8 has no reason to drop.
     const gc_hint_period_ns: u64 = std.time.ns_per_s * 5;

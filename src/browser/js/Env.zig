@@ -131,7 +131,10 @@ heap_limit_protected: bool = false,
 // (memoryPressureNotification(.critical)) counts a kForcedGC use, and with no
 // current context V8 defers the count into Heap::deferred_counters_, which only
 // a debug V8 ever drains. That was 4-8 bytes per closed session for the life of
-// the isolate, i.e. per crawl on a reused CDP connection. Created on first use.
+// the isolate, i.e. per crawl on a reused CDP connection, back when closing a
+// session sent one. Today only Runner's periodic moderate hint reaches
+// memoryPressureNotification; it still enters this context, so whatever that GC
+// runs synchronously (weak callbacks included) sees one. Created on first use.
 gc_context: ?v8.Global = null,
 
 // Message for the next TypeError the bridge builds. Set by local.typeError.
