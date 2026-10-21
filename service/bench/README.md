@@ -14,6 +14,10 @@ Docker host: the scripts read the container's cgroup and the engine's
 | `sweep.sh`    | one fresh container per (tier, mode, page) run, so memory readings don't carry over |
 | `multi.sh`    | the same concurrency split over K containers |
 | `report.mjs`  | JSON lines → markdown tables |
+| `soak.mjs`    | long-running memory soak: a closed-loop mix of request classes (small/large pages, scripts, scripts that throw, timeouts, refused connections, `Event`-heavy pages) through `POST /crawl`, sampling the container cgroup, the engine's `smaps_rollup`, threads, fds, `/metrics`, the Node service's RSS and `/health` reconnects every `--sample` seconds; `idle` phases stop the load and keep sampling |
+| `soak.sh`     | one container + `soak.mjs` in the background (`NAME`, `POOL`, `CPUS`, `MIX`, `PHASES`, `IMAGE`, `SERVICE_ENV`) |
+| `soak-report.mjs` | soak samples → markdown tables and per-phase slopes (MB per 1,000 requests over the second half of each load phase) |
+| `soak-chart.mjs` | soak samples → inline SVG charts (RSS against time and against requests) |
 
 ```bash
 # on the Docker host, from service/bench
@@ -23,7 +27,21 @@ OUT=default.jsonl REPEATS=2 sh sweep.sh
 OUT=hc255.jsonl REPEATS=2 ENGINE_ARGS="--http-max-concurrent 255" sh sweep.sh
 OUT=multi.jsonl sh multi.sh 4 16 hn --http-max-concurrent 255
 node report.mjs default.jsonl hc255.jsonl multi.jsonl
+
+# memory soak: a mixed load for 2.5 h, then idle, then load again
+NAME=lp-crawl-c-mixed POOL=16 CPUS=24 C=20 PHASES=load:150m,idle:20m,load:30m OUT=mixed.jsonl sh soak.sh
+# one request class per container (see the class list at the top of soak.mjs)
+NAME=lp-crawl-c-hn POOL=8 CPUS=12 C=8 MIX=hn=1 PHASES=load:150m,idle:20m OUT=hn.jsonl sh soak.sh
+node soak-report.mjs mixed.jsonl hn.jsonl
 ```
+
+Soak readings:
+
+- **Read RSS from `smaps_rollup`, not `/proc/<pid>/status`.** Since Linux 6.2
+  `VmRSS` is a per-CPU counter read without summing; on a 512-core host it
+  is off by tens of MB (tini reads 0, the engine 16 MB while it holds 64 MB).
+- **`pagesrv.mjs` never answers `/hang`**, which is how `soak.mjs` makes
+  timeouts (`hang.html` loads a script from it, `hangdoc` is the document itself).
 
 Things that made earlier readings wrong:
 
