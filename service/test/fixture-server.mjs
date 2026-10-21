@@ -17,7 +17,9 @@ window.answer = 6 * 7;
 
 const NOT_FOUND = `<!doctype html><html><head><title>Missing</title></head><body><h1>Not Found</h1><p>No such page.</p></body></html>`;
 
-export function startFixtureServer() {
+// host is the address to listen on; urlHost is the one put in the page URLs,
+// for when the crawler reaches this machine by another name (a container).
+export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
     const stats = { inflight: 0, maxInflight: 0 };
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://x');
@@ -53,6 +55,6 @@ export function startFixtureServer() {
         }
     });
     return new Promise((resolve) => {
-        server.listen(0, '127.0.0.1', 1024, () => resolve({ server, stats, base: `http://127.0.0.1:${server.address().port}` }));
+        server.listen(0, host, 1024, () => resolve({ server, stats, base: `http://${urlHost}:${server.address().port}` }));
     });
 }

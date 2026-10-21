@@ -1,0 +1,20 @@
+# docker compose -f service/compose.yaml up -d --build
+#
+# Builds from the repository root (service/Dockerfile); pass mirror build-args
+# under build.args if downloads are slow (see the Dockerfile header).
+services:
+  crawl:
+    image: lp-crawl
+    build:
+      context: ..
+      dockerfile: service/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${CRAWL_PORT:-8080}:8080"   # host port; the engine's CDP port is not published
+    environment:
+      POOL_SIZE: 4                  # concurrent crawls
+      QUEUE_MAX: 100                # waiting requests before 503 queue_full
+      DEFAULT_TIMEOUT_MS: 30000
+      MAX_TIMEOUT_MS: 120000
+      # LP_CDP_MAX_CONNECTIONS: 12  # default 2*POOL_SIZE+4
+      LP_LOG_LEVEL: info

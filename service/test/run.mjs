@@ -4,8 +4,21 @@
 //   LP_BIN=/path/to/lightpanda node service/test/run.mjs
 //
 // Use a ReleaseFast build; the Debug one in zig-out is ~3.5x slower.
+//
+// Against a service that is already running (e.g. the container), the test
+// starts only the fixture pages, on an address the service can reach:
+//
+//   LP_SERVICE_URL=http://127.0.0.1:8080 \
+//   FIXTURE_HOST=0.0.0.0 FIXTURE_URL_HOST=172.17.0.1 \
+//   LP_ENGINE_KILL="docker exec lp-crawl sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
+//   node service/test/run.mjs
+//
+// LP_ENGINE_KILL kills the engine; the container's entrypoint restarts it
+// after LP_RESTART_DELAY seconds, which must be at least 4 so the "engine
+// down" check sees it down.
 
-import { spawn } from 'node:child_process';
+import { exec, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -13,12 +26,17 @@ import { fileURLToPath } from 'node:url';
 import { startFixtureServer } from './fixture-server.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const EXTERNAL = process.env.LP_SERVICE_URL;
 const LP_BIN = process.env.LP_BIN || path.resolve(here, '../../zig-out/bin/lightpanda');
-if (!fs.existsSync(LP_BIN)) {
+if (EXTERNAL) {
+    if (!process.env.LP_ENGINE_KILL) {
+        console.error('LP_SERVICE_URL needs LP_ENGINE_KILL, a shell command that kills the engine');
+        process.exit(2);
+    }
+} else if (!fs.existsSync(LP_BIN)) {
     console.error(`engine binary not found: ${LP_BIN} (set LP_BIN)`);
     process.exit(2);
 }
-const POOL_SIZE = 3;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () =>
@@ -44,6 +62,7 @@ process.on('exit', cleanup);
 const lpPort = await freePort();
 let engine;
 function startEngine() {
+    if (EXTERNAL) return; // the container restarts its own engine
     engine = spawn(LP_BIN, ['serve', '--host', '127.0.0.1', '--port', String(lpPort), '--log-level', 'fatal'], { stdio: 'ignore' });
     children.push(engine);
 }
@@ -59,18 +78,31 @@ async function waitHttp(url) {
     throw new Error(`${url} never came up`);
 }
 
-const fixture = await startFixtureServer();
-startEngine();
-await waitHttp(`http://127.0.0.1:${lpPort}/json/version`);
+async function killEngine() {
+    if (EXTERNAL) await promisify(exec)(process.env.LP_ENGINE_KILL);
+    else engine.kill('SIGKILL');
+}
 
-const svcPort = await freePort();
-const svc = spawn(process.execPath, [path.resolve(here, '../server.mjs')], {
-    env: { ...process.env, PORT: String(svcPort), HOST: '127.0.0.1', LP_CDP_URL: `ws://127.0.0.1:${lpPort}/`, POOL_SIZE: String(POOL_SIZE) },
-    stdio: ['ignore', 'ignore', 'inherit'],
-});
-children.push(svc);
-const SVC = `http://127.0.0.1:${svcPort}`;
-await waitHttp(`${SVC}/health`);
+const fixture = await startFixtureServer(process.env.FIXTURE_HOST, process.env.FIXTURE_URL_HOST);
+let SVC, POOL_SIZE;
+if (EXTERNAL) {
+    SVC = EXTERNAL.replace(/\/$/, '');
+    await waitHttp(`${SVC}/health`);
+    POOL_SIZE = (await (await fetch(`${SVC}/health`)).json()).pool.size;
+    console.log(`      external service ${SVC}, pool size ${POOL_SIZE}, fixtures at ${fixture.base}`);
+} else {
+    POOL_SIZE = 3;
+    startEngine();
+    await waitHttp(`http://127.0.0.1:${lpPort}/json/version`);
+    const svcPort = await freePort();
+    const svc = spawn(process.execPath, [path.resolve(here, '../server.mjs')], {
+        env: { ...process.env, PORT: String(svcPort), HOST: '127.0.0.1', LP_CDP_URL: `ws://127.0.0.1:${lpPort}/`, POOL_SIZE: String(POOL_SIZE) },
+        stdio: ['ignore', 'ignore', 'inherit'],
+    });
+    children.push(svc);
+    SVC = `http://127.0.0.1:${svcPort}`;
+    await waitHttp(`${SVC}/health`);
+}
 
 async function crawl(body) {
     const t0 = Date.now();
@@ -148,7 +180,7 @@ const F = fixture.base;
 {
     const inflight = crawl({ url: `${F}/delay?ms=3000&i=k`, timeout: 20000 });
     await sleep(500);
-    engine.kill('SIGKILL');
+    await killEngine();
     const killed = await inflight;
     check('engine killed: in-flight request fails fast', killed.status === 502 && killed.body.error?.code === 'engine_disconnected' && killed.ms < 2000, `${killed.status} ${killed.ms}ms ${killed.body.error?.code}`);
 
