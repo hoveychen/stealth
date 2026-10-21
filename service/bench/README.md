@@ -8,6 +8,7 @@ Docker host: the scripts read the container's cgroup and the engine's
 | file          | what it does |
 |---------------|--------------|
 | `site/`       | test pages: `hn.html` (34 KB + one script and one stylesheet, ~15 ms a load) and `wiki.html` (a 395 KB Wikipedia article, ~0.9 s a load, CPU-bound) |
+| `site/` origin | snapshots: the Hacker News front page and Wikipedia's "Web browser" article (CC BY-SA 4.0), taken 2026-10-21 |
 | `pagesrv.mjs` | serves `site/` from memory with a large listen backlog |
 | `bench.mjs`   | closed-loop load generator: `-c` workers each crawl one page after another, either through the service (`--mode service`, `POST /crawl`) or straight over CDP with the service's own pool/crawl code (`--mode cdp`) |
 | `sweep.sh`    | one fresh container per (tier, mode, page) run, so memory readings don't carry over |
