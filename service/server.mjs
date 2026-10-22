@@ -104,6 +104,9 @@ if (history.enabled && config.historyRetentionDays) setInterval(sweepHistory, 36
 
 const pool = new Pool({ cdpUrl: config.cdpUrl, size: config.poolSize, queueMax: config.queueMax });
 
+// The admin page: one static file, no external resources.
+const ADMIN_PAGE = fs.readFileSync(new URL('./admin.html', import.meta.url));
+
 const STATUS = {
     queue_full: 503,
     engine_unavailable: 503,
@@ -282,6 +285,19 @@ const server = http.createServer((req, res) => {
         return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats() });
     }
     if (req.method === 'GET' && path === '/history') return handleHistory(req, res);
+    if (req.method === 'GET' && path === '/sessions') {
+        const limit = Number(new URL(req.url, 'http://x').searchParams.get('limit') ?? 200);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 10000) return reply(res, 400, { error: { code: 'bad_request', message: 'limit must be an integer from 1 to 10000' } });
+        sessions.list(limit).then(
+            (r) => reply(res, 200, r),
+            (e) => reply(res, 500, { error: { code: 'internal', message: e.message } }),
+        );
+        return;
+    }
+    if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': ADMIN_PAGE.length, 'cache-control': 'no-cache' });
+        return res.end(ADMIN_PAGE);
+    }
     reply(res, 404, { error: { code: 'not_found', message: `${req.method} ${path}` } });
 });
 

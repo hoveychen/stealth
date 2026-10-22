@@ -508,6 +508,20 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
     const after = (await q('limit=1000&days=1')).body.entries;
     check('history: files past HISTORY_RETENTION_DAYS are removed at startup, the rest kept', planted && !files.includes('crawl-2000-01-01.planted.jsonl') && files.length >= 1 && after.length >= es.length, `planted ${planted}, files now ${JSON.stringify(files)}, entries ${es.length} -> ${after.length}`);
 }
+// 17. The admin page and the session list it shows.
+{
+    const r = await fetch(`${SVC}/`);
+    const page = await r.text();
+    const external = page.match(/(?:src|href)\s*=\s*["']?(?:https?:)?\/\/|@import|url\(\s*["']?(?:https?:)?\/\//gi) ?? [];
+    check('admin page: GET / serves the page, no external resources', r.status === 200 && /^text\/html/.test(r.headers.get('content-type')) && page.includes('爬虫服务管理') && page.includes('/history') && external.length === 0, `${r.status} ${r.headers.get('content-type')} ${page.length} bytes, external ${JSON.stringify(external)}`);
+    const sid = `ls${Date.now()}`;
+    await crawl({ url: `${F}/set-cookie?listme=hidden-value`, formats: ['meta'], session_id: sid });
+    const list = await (await fetch(`${SVC}/sessions`)).json();
+    const mine = list.sessions?.find((x) => x.id === sid);
+    check('sessions list: GET /sessions has the session, cookie count and domain, no cookie values', list.total >= 1 && mine?.cookies >= 1 && mine.domains.includes(new URL(F).hostname) && mine.expiresAt && !JSON.stringify(list).includes('hidden-value'), JSON.stringify(mine));
+    const bad = await fetch(`${SVC}/sessions?limit=0`);
+    check('sessions list: bad limit -> 400', bad.status === 400, `${bad.status}`);
+}
 {
     const h = await health();
     console.log(`      health at the end: ${JSON.stringify(h.pool)} sessions=${JSON.stringify(h.sessions)} history=${JSON.stringify(h.history)}`);

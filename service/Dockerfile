@@ -195,7 +195,7 @@ RUN if [ -n "$APT_MIRROR" ]; then \
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/node
 COPY --from=build /browser/zig-out/bin/lightpanda /bin/lightpanda
-COPY service/package.json service/server.mjs /app/
+COPY service/package.json service/server.mjs service/admin.html /app/
 COPY service/lib /app/lib
 COPY --chmod=0755 service/entrypoint.sh /usr/local/bin/entrypoint.sh
 
