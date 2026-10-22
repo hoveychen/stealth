@@ -2107,6 +2107,8 @@ fn writeInternal(self: *Document, text: []const []const u8, append_newline: bool
 
         if (html.len > 0) {
             if (self._script_created_parser) |*parser| {
+                const detached = self.detachedParse(parser);
+                defer detached.end();
                 parser.read(html) catch |err| {
                     log.warn(.dom, "document.write parser error", .{ .err = err });
                     // html5ever's handle was destroyed inside read(), but the
@@ -2201,6 +2203,40 @@ fn writeInternal(self: *Document, text: []const []const u8, append_newline: bool
     self._write_insertion_point = children_to_insert.getLast();
 }
 
+// A document with no browsing context (createHTMLDocument, DOMParser) has no
+// frame of its own to open: the calling frame only lends it a node factory. Its
+// markup is parsed the way DOMParser parses -- scripts don't run, nothing is
+// fetched, no custom element is upgraded -- and the lending frame's own parse
+// state is put back after every feed. Chrome writes into such a document while
+// the host page is still parsing as readily as after it loaded, and the host
+// keeps its listeners, readyState, load count and URL throughout
+// (probes/expr-docopen-detached.js).
+const DetachedParse = struct {
+    frame: ?*Frame,
+    parse_mode: @FieldType(Frame, "_parse_mode"),
+    custom_element_creation: @FieldType(Frame, "_custom_element_creation"),
+
+    fn end(self: DetachedParse) void {
+        const frame = self.frame orelse return;
+        frame._parse_mode = self.parse_mode;
+        frame._custom_element_creation = self.custom_element_creation;
+    }
+};
+
+fn detachedParse(self: *const Document, parser: *Parser.Streaming) DetachedParse {
+    const frame = parser.parser.frame;
+    const saved: DetachedParse = .{
+        .frame = if (self._frame == null) frame else null,
+        .parse_mode = frame._parse_mode,
+        .custom_element_creation = frame._custom_element_creation,
+    };
+    if (saved.frame != null) {
+        frame._parse_mode = .fragment;
+        frame._custom_element_creation = .undefined;
+    }
+    return saved;
+}
+
 pub fn open(self: *Document, call_frame: *Frame) !*Document {
     const frame = self._frame orelse call_frame;
 
@@ -2212,7 +2248,9 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
         return error.InvalidStateError;
     }
 
-    if (frame._load_state == .parsing) {
+    // The frame's own parse is what this would interrupt; a document with no
+    // frame has none, whatever state the calling frame is in.
+    if (self._frame != null and frame._load_state == .parsing) {
         return self;
     }
 
@@ -2239,7 +2277,11 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
         // whatever had not been collected yet, which is the state we are
         // already in; clearing what we did collect is strictly better.
         blk: {
-            targets.put(arena, @intFromPtr(frame.window.asEventTarget()), {}) catch break :blk;
+            // Only a document's own Window: the calling frame's is not this
+            // document's, and its page keeps every listener in Chrome.
+            if (self._frame != null) {
+                targets.put(arena, @intFromPtr(frame.window.asEventTarget()), {}) catch break :blk;
+            }
             targets.put(arena, @intFromPtr(self.asEventTarget()), {}) catch break :blk;
             var tw: TreeWalker.FullExcludeSelf = .init(doc_node, .{});
             while (tw.next()) |node| {
@@ -2268,6 +2310,13 @@ pub fn open(self: *Document, call_frame: *Frame) !*Document {
 
     self._script_created_parser = Parser.Streaming.init(frame.arena, doc_node, frame, .{ .allow_declarative_shadow = true });
     try self._script_created_parser.?.start();
+
+    // Nothing below belongs to a document with no frame: the parse mode, the
+    // URL and the load state are the calling frame's, and so is its page.
+    if (self._frame == null) {
+        return self;
+    }
+
     frame._parse_mode = .document;
 
     // The document being opened takes the ENTRY document's URL -- the URL of
@@ -2333,7 +2382,18 @@ fn finishScriptCreatedParser(self: *Document, frame: *Frame) !void {
     // must not retain the Streaming — defer so the error path also drops it.
     // (Streaming.done nulls its own handle, so dropping the struct is safe.)
     defer self._script_created_parser = null;
-    try self._script_created_parser.?.done();
+    {
+        const detached = self.detachedParse(&self._script_created_parser.?);
+        defer detached.end();
+        try self._script_created_parser.?.done();
+    }
+
+    // With no frame there are no deferred scripts to run and no load event to
+    // fire: the document is simply complete again.
+    if (self._frame == null) {
+        self._ready_state = .complete;
+        return;
+    }
 
     // The write'd markup is fully parsed; run any deferred scripts it produced
     // (e.g. inline modules) before firing the load event. This frame's initial
