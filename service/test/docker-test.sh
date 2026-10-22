@@ -33,6 +33,16 @@ start() {
 case "${2:-}" in
   # Used by run.mjs as LP_SERVICE_RESTART: a new container on the same volume.
   recreate) docker rm -f "$NAME" >/dev/null; start; exit 0 ;;
+  # Used by run.mjs as LP_SERVICE_STOP: docker stop (SIGTERM, SIGKILL after
+  # 10 s), timed, then a new container on the same volume.
+  stop)
+    t0=$(date +%s%N)
+    docker stop "$NAME" >/dev/null
+    echo "stop_ms=$(( ($(date +%s%N) - t0) / 1000000 ))"
+    docker logs "$NAME" 2>/dev/null | tail -n 200
+    docker rm "$NAME" >/dev/null
+    start
+    exit 0 ;;
 esac
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
@@ -50,6 +60,7 @@ LP_SESSION_FILES="docker exec $NAME ls /data/sessions" \
 LP_HISTORY_SH="docker exec -w /data/history $NAME sh -c" \
 LP_MCP_SH="docker exec $NAME sh -c" \
 LP_SERVICE_RESTART="NAME=$NAME PORT=$PORT TEST_PROXY_BASE=$BASE '$HERE/docker-test.sh' '$IMAGE' recreate" \
+LP_SERVICE_STOP="NAME=$NAME PORT=$PORT TEST_PROXY_BASE=$BASE '$HERE/docker-test.sh' '$IMAGE' stop" \
 node "$HERE/run.mjs" || status=$?
 [ "$status" = 0 ] || docker logs --tail 40 "$NAME" >&2
 exit $status

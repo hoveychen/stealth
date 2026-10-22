@@ -18,18 +18,23 @@
 // is the file's mtime, which loads touch too. delete() drops a jar at once.
 // Either way, a crawl that loaded the jar before it was dropped does not
 // bring it back when it finishes.
+//
+// Each jar in memory carries a version, a store-wide counter bumped by every
+// save that changes it, so a holder that keeps a browser open (an MCP
+// session) can tell with one comparison, and no engine call, whether anyone
+// changed the jar since its last load or checkpoint (changedSince).
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
 
-const key = (c) => `${c.name}\t${c.domain}\t${c.path}`;
-const same = (a, b) => a.value === b.value && a.expires === b.expires && a.httpOnly === b.httpOnly && a.secure === b.secure && a.sameSite === b.sameSite;
+export const key = (c) => `${c.name}\t${c.domain}\t${c.path}`;
+export const same = (a, b) => a.value === b.value && a.expires === b.expires && a.httpOnly === b.httpOnly && a.secure === b.secure && a.sameSite === b.sameSite;
 
 // The fields Network.setCookies takes back; getAllCookies adds size and
 // session, and expires -1 for a session cookie.
-function storable(c) {
+export function storable(c) {
     const out = { name: c.name, value: c.value, domain: c.domain, path: c.path, httpOnly: !!c.httpOnly, secure: !!c.secure };
     if (typeof c.expires === 'number' && c.expires > 0) out.expires = c.expires;
     if (c.sameSite) out.sameSite = c.sameSite;
@@ -49,6 +54,8 @@ export class SessionStore {
         this.onDisk = new Set(); // ids with a file in dir
         this.epochs = new Map(); // id -> times it was dropped
         this.bases = new WeakMap(); // array load() returned -> epoch at the time
+        this.versions = new WeakMap(); // array load()/checkpoint() returned -> the jar's version it is current at
+        this.seq = 0;
         this.writes = new Map(); // id -> promise of the last write
         this.saves = 0;
         this.writeErrors = 0;
@@ -97,7 +104,7 @@ export class SessionStore {
         // Another load of the same id may have finished while this one read.
         jar = this.jars.get(id);
         if (jar) return jar;
-        jar = { cookies: new Map(cookies.map((c) => [key(c), c])), lastUsed };
+        jar = { cookies: new Map(cookies.map((c) => [key(c), c])), lastUsed, version: ++this.seq };
         this.jars.set(id, jar);
         return jar;
     }
@@ -117,28 +124,57 @@ export class SessionStore {
         this.touch(id, jar);
         const base = [...jar.cookies.values()].filter((c) => !expired(c, nowS));
         this.bases.set(base, this.epochs.get(id) ?? 0);
+        this.versions.set(base, jar.version);
         return base;
+    }
+
+    // Whether the jar changed since `base` (what load() or checkpoint()
+    // returned) was current: false when it did not, and when the jar was
+    // dropped since (nothing to take from it then).
+    changedSince(id, base) {
+        const jar = this.jars.get(id);
+        if (!jar || (this.bases.get(base) ?? 0) !== (this.epochs.get(id) ?? 0)) return false;
+        return this.versions.get(base) !== jar.version;
     }
 
     // base: what load() returned for this crawl; final: getAllCookies at its end.
     // A crawl whose jar was deleted or expired since it loaded saves nothing.
+    // Resolves to the jar's version after the merge if nobody else had changed
+    // the jar since `base`, else (or when nothing was saved) to null.
     async save(id, base, final) {
-        if (this.bases.has(base) && this.bases.get(base) !== (this.epochs.get(id) ?? 0)) return;
+        if (this.bases.has(base) && this.bases.get(base) !== (this.epochs.get(id) ?? 0)) return null;
         const jar = await this.jar(id);
+        const before = jar.version;
+        let changed = false;
         const start = new Map(base.map((c) => [key(c), c]));
         const end = new Map(final.map((c) => [key(c), storable(c)]));
         for (const [k, c] of end) {
             const was = start.get(k);
-            if (!was || !same(was, c)) jar.cookies.set(k, c);
+            if (!was || !same(was, c)) {
+                const cur = jar.cookies.get(k);
+                if (!cur || !same(cur, c)) changed = true;
+                jar.cookies.set(k, c);
+            }
         }
         for (const [k, c] of start) {
-            if (!end.has(k) && jar.cookies.has(k) && same(jar.cookies.get(k), c)) jar.cookies.delete(k);
+            if (!end.has(k) && jar.cookies.has(k) && same(jar.cookies.get(k), c)) {
+                jar.cookies.delete(k);
+                changed = true;
+            }
         }
         const nowS = this.now() / 1000;
-        for (const [k, c] of jar.cookies) if (expired(c, nowS)) jar.cookies.delete(k);
+        for (const [k, c] of jar.cookies) {
+            if (expired(c, nowS)) {
+                jar.cookies.delete(k);
+                changed = true;
+            }
+        }
+        if (changed) jar.version = ++this.seq;
         jar.lastUsed = this.now();
         this.saves++;
+        const current = this.versions.get(base) === before ? jar.version : null;
         if (this.dir) await this.persist(id);
+        return current;
     }
 
     // save() for a holder that writes back more than once (an MCP session
@@ -153,8 +189,11 @@ export class SessionStore {
             if (epoch === (this.epochs.get(id) ?? 0) && this.jars.has(id)) this.touch(id, this.jars.get(id));
             return base;
         }
-        await this.save(id, base, final);
+        const version = await this.save(id, base, final);
         this.bases.set(next, epoch);
+        // Not current if someone else changed the jar in between: then the
+        // holder's next changedSince() says so.
+        if (version != null) this.versions.set(next, version);
         return next;
     }
 

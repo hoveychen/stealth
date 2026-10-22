@@ -38,7 +38,9 @@
 // The MCP checks expect MCP_PROCS=2 and MCP_PROXY=http://user:secret@H:B+4 (the
 // test proxy with credentials); LP_MCP_SH runs a shell snippet where the
 // engine processes are (`docker exec NAME sh -c`), to read their command lines
-// and kill one.
+// and kill one. LP_SERVICE_STOP stops the service the way `docker stop` does
+// (SIGTERM, then SIGKILL after 10 s) and starts it again on the same data,
+// printing `stop_ms=<how long the stop took>` and the service's log lines.
 
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -56,7 +58,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const EXTERNAL = process.env.LP_SERVICE_URL;
 const LP_BIN = process.env.LP_BIN || path.resolve(here, '../../zig-out/bin/lightpanda');
 if (EXTERNAL) {
-    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES', 'LP_HISTORY_SH', 'LP_MCP_SH']) {
+    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES', 'LP_HISTORY_SH', 'LP_MCP_SH', 'LP_SERVICE_STOP']) {
         if (!process.env[v]) {
             console.error(`LP_SERVICE_URL needs ${v} (see the header of this file)`);
             process.exit(2);
@@ -130,7 +132,7 @@ const px = {
 const proxyLogs = () => Object.values(px).flatMap((p) => p.log ?? []);
 const POOL = [`http://${PH}:${px.poolA.port}`, `http://pool:secret@${PH}:${px.poolB.port}`, `http://${PH}:${px.deadPort}`];
 
-let SVC, POOL_SIZE, restartService, sessionFiles, historySh, mcpSh;
+let SVC, POOL_SIZE, restartService, stopService, sessionFiles, historySh, mcpSh;
 const shQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 if (EXTERNAL) {
     SVC = EXTERNAL.replace(/\/$/, '');
@@ -140,6 +142,12 @@ if (EXTERNAL) {
     restartService = async () => {
         await promisify(exec)(process.env.LP_SERVICE_RESTART);
         await waitHttp(`${SVC}/health`, 300);
+    };
+    // -> { ms, log }: how long the stop took, and what the service logged.
+    stopService = async () => {
+        const out = (await promisify(exec)(process.env.LP_SERVICE_STOP, { maxBuffer: 64 << 20 })).stdout;
+        await waitHttp(`${SVC}/health`, 300);
+        return { ms: Number(/stop_ms=(\d+)/.exec(out)?.[1] ?? NaN), log: out };
     };
     sessionFiles = async () => (await promisify(exec)(process.env.LP_SESSION_FILES)).stdout.split('\n').filter(Boolean);
     historySh = async (snippet) => (await promisify(exec)(`${process.env.LP_HISTORY_SH} ${shQuote(snippet)}`)).stdout;
@@ -177,8 +185,10 @@ if (EXTERNAL) {
                 MCP_PROXY: `http://user:${PROXY_PASS}@${PH}:${px.auth.port}`,
                 LP_BIN,
             },
-            stdio: ['ignore', 'ignore', 'inherit'],
+            stdio: ['ignore', 'pipe', 'inherit'],
         });
+        svc.log = '';
+        svc.stdout.on('data', (c) => (svc.log += c));
         children.push(svc);
     };
     startService();
@@ -189,6 +199,18 @@ if (EXTERNAL) {
         await new Promise((r) => svc.once('exit', r));
         startService();
         await waitHttp(`${SVC}/health`);
+    };
+    stopService = async () => {
+        const t0 = Date.now();
+        svc.kill('SIGTERM');
+        const killer = setTimeout(() => svc.kill('SIGKILL'), 10000);
+        await new Promise((r) => svc.once('exit', r));
+        clearTimeout(killer);
+        const ms = Date.now() - t0;
+        const log = svc.log;
+        startService();
+        await waitHttp(`${SVC}/health`);
+        return { ms, log };
     };
     sessionFiles = async () => fs.readdirSync(sessionDir);
 }
@@ -691,6 +713,59 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
     check('mcp session_id: an invalid session_id is refused (400)', badBind.status === 400, `${badBind.status}`);
     await c1.close();
     await c3.close();
+
+    // The other way: what /crawl writes into the jar while an MCP session is
+    // open reaches that browser at its next call -- a login, and the site
+    // deleting the cookie again.
+    const jl = `mcpsync-l-${tag}`;
+    const s1 = new McpClient(`${MCP}?session_id=${jl}`);
+    await s1.initialize();
+    await s1.tool('goto', { url: `${F}/account` });
+    const before = await title(s1);
+    await crawl({ url: `${F}/login?user=crawler2`, session_id: jl, formats: ['meta'] });
+    await s1.tool('goto', { url: `${F}/account` });
+    const loggedIn = await title(s1);
+    const hidden = await s1.tool('evaluate', { script: 'document.cookie' });
+    check('mcp session_id: a /crawl login made while the MCP session is open is signed in at its next call', before === 'account: guest' && loggedIn === 'account: crawler2' && !hidden.includes('auth='), `${before} -> ${loggedIn} / document.cookie ${JSON.stringify(hidden)}`);
+    await crawl({ url: `${F}/logout`, session_id: jl, formats: ['meta'] });
+    await s1.tool('goto', { url: `${F}/account` });
+    const loggedOut = await title(s1);
+    const jarAfter = await crawl({ url: `${F}/echo-cookies`, session_id: jl, formats: ['meta'] });
+    check('mcp session_id: a cookie /crawl has the site delete is gone from the open MCP browser too', loggedOut === 'account: guest' && !(jarAfter.body?.meta?.title ?? '').includes('auth='), `${loggedOut} / jar: ${jarAfter.body?.meta?.title}`);
+    await s1.close();
+
+    // Two MCP sessions on one jar: one logs in, the other's next page is
+    // signed in; one logs out, the other's next page is not.
+    const jt = `mcpsync-t-${tag}`;
+    const m1 = new McpClient(`${MCP}?session_id=${jt}`), m2 = new McpClient(`${MCP}?session_id=${jt}`);
+    await m1.initialize();
+    await m2.initialize();
+    await m2.tool('goto', { url: `${F}/account` });
+    const m2Before = await title(m2);
+    await m1.tool('goto', { url: `${F}/login?user=one` });
+    await m2.tool('goto', { url: `${F}/account` });
+    const m2In = await title(m2);
+    await m1.tool('goto', { url: `${F}/logout` });
+    await m2.tool('goto', { url: `${F}/account` });
+    const m2Out = await title(m2);
+    check('mcp session_id: two MCP sessions on one session_id see each other\'s login and logout at their next call', m2Before === 'account: guest' && m2In === 'account: one' && m2Out === 'account: guest', `${m2Before} -> ${m2In} -> ${m2Out}`);
+    const sync = (await health()).mcp;
+    check('mcp session_id: /health counts the pulls, with no errors', sync.cookiePulls >= 4 && sync.cookiePullErrors === 0 && sync.cookieSaveErrors === 0, `pulls ${sync.cookiePulls}, pull errors ${sync.cookiePullErrors}, save errors ${sync.cookieSaveErrors}`);
+    await m1.close();
+    await m2.close();
+
+    // Stopping the service (docker stop: SIGTERM) writes back what a page
+    // script set after the session's last call, within docker stop's 10 s.
+    const js = `mcpsync-s-${tag}`;
+    const st = new McpClient(`${MCP}?session_id=${js}`);
+    await st.initialize();
+    await st.tool('goto', { url: `${F}/account` });
+    await st.tool('evaluate', { script: `setTimeout(() => { document.cookie = 'bye=${tag}; path=/; max-age=3600'; }, 300); 'ok'` });
+    await sleep(800);
+    const stopped = await stopService();
+    const kept = await crawl({ url: `${F}/echo-cookies`, session_id: js, formats: ['meta'] });
+    const savedLine = /"msg":"mcp cookies saved on shutdown"[^\n]*/.exec(stopped.log)?.[0] ?? '(no shutdown line)';
+    check('mcp session_id: stopping the service writes back the cookies set since the last call, inside docker stop\'s 10 s', (kept.body?.meta?.title ?? '').includes(`bye=${tag}`) && stopped.ms < 10000 && /"saved":[1-9]/.test(savedLine) && /"timedOut":false/.test(savedLine), `stop took ${stopped.ms} ms / ${savedLine} / jar: ${kept.body?.meta?.title}`);
     paging.server.closeAllConnections();
     paging.server.close();
 }
