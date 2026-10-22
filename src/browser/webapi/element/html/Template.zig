@@ -26,6 +26,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const DocumentFragment = @import("../../DocumentFragment.zig");
+const ShadowRoot = @import("../../ShadowRoot.zig");
 
 const HtmlElement = @import("../Html.zig");
 
@@ -37,6 +38,8 @@ pub const Proto = HtmlElement;
 
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _content: *DocumentFragment,
+// Whether _content has been handed to its inert document yet (see getContent).
+_content_owned: bool = false,
 
 pub fn asElement(self: *Template) *Element {
     return Factory.protoOf(self).asElement();
@@ -49,12 +52,37 @@ pub fn asNode(self: *Template) *Node {
     return self.asElement().asNode();
 }
 
-pub fn getContent(self: *Template) *DocumentFragment {
+// The content belongs to the inert document of the template's own document,
+// not to that document (see Document.templateContentsOwner). The owner is only
+// known once the template has one -- createElement on another document and the
+// parser both give it after the element is built -- so it is settled here, on
+// the first look, and every way into the content comes through here.
+pub fn getContent(self: *Template, frame: *Frame) !*DocumentFragment {
+    if (self._content_owned == false) {
+        self._content_owned = true;
+        // A declarative shadow root took the content's place; it belongs to
+        // its host's document.
+        if (self._content.is(ShadowRoot) == null) {
+            const document = self.asNode().ownerDocument(frame) orelse frame.document;
+            try frame.setNodeOwnerDocument(self._content.asNode(), try document.templateContentsOwner(frame));
+        }
+    }
     return self._content;
 }
 
 pub fn setInnerHTML(self: *Template, html: []const u8, frame: *Frame) !void {
-    return self._content.asNode().setHTML(html, .{ .context = self.asElement() }, frame);
+    const content = try self.getContent(frame);
+    return content.asNode().setHTML(html, .{ .context = self.asElement() }, frame);
+}
+
+// A template moved to another document takes its content along, into that
+// document's inert document (Frame.adoptNodeTree). Content nobody has looked
+// at yet stays put: getContent will find the new owner.
+pub fn ownedContent(self: *Template) ?*Node {
+    if (self._content_owned == false or self._content.is(ShadowRoot) != null) {
+        return null;
+    }
+    return self._content.asNode();
 }
 
 pub fn getShadowRootMode(self: *const Template) []const u8 {
@@ -155,8 +183,10 @@ pub const Build = struct {
         }
         const source = source_element.as(Template);
         const clone = cloned_element.as(Template);
+        // The clone's content is left for getContent to own: the clone's
+        // document is only recorded once cloning returns.
         const clone_content = clone._content.asNode();
-        var child_it = source._content.asNode().childrenIterator();
+        var child_it = (try source.getContent(frame)).asNode().childrenIterator();
         while (child_it.next()) |child| {
             if (try child.cloneNodeForAppending(true, frame)) |cloned_child| {
                 try frame.appendNode(clone_content, cloned_child, .{});
@@ -168,4 +198,8 @@ pub const Build = struct {
 const testing = @import("../../../../testing.zig");
 test "WebApi: Template" {
     try testing.htmlRunner("element/html/template.html", .{});
+}
+
+test "WebApi: Template content's inert document" {
+    try testing.htmlRunner("element/html/template_inert_document.html", .{});
 }

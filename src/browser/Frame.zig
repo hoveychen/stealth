@@ -5010,6 +5010,12 @@ pub fn adoptNodeTree(self: *Frame, node: *Node, old_owner: *Document, new_owner:
     if (node.is(Element)) |el| {
         Element.Html.Custom.enqueueAdoptedCallbackOnElement(el, old_owner, new_owner, self);
 
+        if (el.is(Element.Html.Template)) |template| {
+            if (template.ownedContent()) |content| {
+                try self.adoptNodeTree(content, try old_owner.templateContentsOwner(self), try new_owner.templateContentsOwner(self));
+            }
+        }
+
         // The shadow tree follows its host across documents: re-own it and
         // run its adopted reactions too (spec: shadow-including descendants).
         if (el.hostedShadowRoot(self)) |shadow_root| {
@@ -5111,6 +5117,17 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
     const old_root = child.getRootNode(.{});
     const was_connected = rootIsConnected(old_root);
     const old_id_maps = idMapsForRoot(old_root);
+
+    // A node keeps its document when it leaves a tree. One under another
+    // document than this frame's carries that in _node_owner_documents only if
+    // it was created or adopted through the API; one the parser put there --
+    // into a DOMParser document, a template's content -- found its owner
+    // through the root it is leaving.
+    if (old_root != self.document.asNode() and self._node_owner_documents.contains(child) == false) {
+        if (old_root.ownerDocument(self) orelse old_root.is(Document)) |owner| {
+            self.setNodeOwnerDocument(child, owner) catch {};
+        }
+    }
 
     child._parent = null;
 

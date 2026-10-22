@@ -793,7 +793,14 @@ pub fn ownerDocument(self: *const Node, frame: *const Frame) ?*Document {
     }
 
     // Otherwise, this is a detached node. Check if it has a specific owner
-    // document registered (for nodes created via non-main documents).
+    // document registered (for nodes created via non-main documents). Inserting
+    // adopts, so a tree has one document and its root speaks for it: the
+    // parser fills a template's content without registering each node.
+    if (current != self) {
+        if (frame._node_owner_documents.get(@constCast(current))) |owner| {
+            return owner;
+        }
+    }
     if (frame._node_owner_documents.get(@constCast(self))) |owner| {
         return owner;
     }
@@ -1280,7 +1287,22 @@ const CloneError = error{
     JsException,
     ExecutionTerminated,
 };
+// A copy belongs to the original's document (DOM "clone a node"). Only the
+// copy's root is recorded: its descendants were built into its tree, and a
+// tree answers with its root's document (see ownerDocument).
 pub fn cloneNode(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
+    const cloned = try self.cloneTree(deep_, frame);
+    if (self._type != .document) {
+        if (self.ownerDocument(frame)) |owner| {
+            if (owner != frame.document) {
+                frame.setNodeOwnerDocument(cloned, owner) catch return error.CloneError;
+            }
+        }
+    }
+    return cloned;
+}
+
+fn cloneTree(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
     if (self.is(ShadowRoot) != null) {
         return error.NotSupported;
     }
@@ -1345,7 +1367,7 @@ pub fn cloneNode(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
 /// somewhere. In that case, we respect the constructor's decision and return null to signal
 /// that the cloned node should not be appended to our intended parent.
 pub fn cloneNodeForAppending(self: *Node, deep: bool, frame: *Frame) CloneError!?*Node {
-    const cloned = try self.cloneNode(deep, frame);
+    const cloned = try self.cloneTree(deep, frame);
     if (cloned._parent != null) {
         return null;
     }
