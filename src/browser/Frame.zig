@@ -5140,6 +5140,11 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
             if (old_id_maps) |id_maps| {
                 self.unregisterSubtreeIds(child, id_maps);
             }
+            // A <base> carried off to another document stops deciding this
+            // one's base URL.
+            if (Element.Html.Base.firstHref(child) != null) {
+                self.baseLeftDocument(old_root);
+            }
             // but it isn't a REAL disconnect (more like a move), so there's
             // nothing else to do, e.g. no disconnectedCallback
             return;
@@ -5169,10 +5174,17 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
     // The child was connected and now it no longer is. We need to "disconnect"
     // it and all of its descendants. For now "disconnect" just means updating
     // the ID map and invoking disconnectedCallback for custom elements
+    var base_removed = false;
+    defer if (base_removed) self.baseLeftDocument(old_root);
+
     var tw = TreeWalker.Full.Elements.init(child, .{});
     while (tw.next()) |el| {
         if (el.getId()) |id| {
             self.removeElementIdWithMaps(old_id_maps.?, id);
+        }
+
+        if (el.is(Element.Html.Base) != null) {
+            base_removed = true;
         }
 
         Element.Html.Custom.enqueueDisconnectedCallbackOnElement(el, self);
@@ -5224,6 +5236,20 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
             discardIFrameNavigable(iframe);
         }
     }
+}
+
+// A <base> left the document `old_root`: if that was a frame's active
+// document, the next <base href> in tree order (or the document URL) is its
+// base URL now. Chrome puts it back the moment the element goes.
+fn baseLeftDocument(self: *Frame, old_root: *Node) void {
+    const doc = old_root.is(Document) orelse return;
+    const frame = doc._frame orelse return;
+    if (frame.document != doc) {
+        return;
+    }
+    Element.Html.Base.refreshFrameBase(frame) catch |err| {
+        log.err(.frame, "frame.removeNode", .{ .err = err, .element = "base", .type = self._type, .url = self.url });
+    };
 }
 
 /// The nested navigable an <iframe> element held is destroyed when the element
@@ -5490,6 +5516,21 @@ pub fn _insertNodeRelative(self: *Frame, comptime from_parser: bool, parent: *No
         // an element immediately after creating it.
         if (child.is(Element.Html.Image)) |image| {
             try image.imageAddedCallback(self);
+        }
+
+        // <base> and <meta> are void: the parser never pops them, so they
+        // never reach nodeComplete, and insertion is the first moment they are
+        // in a document. Which document is the point: a fragment parse
+        // (DOMParser, innerHTML, <template>) is building a detached tree, and
+        // a <base> or <meta name=referrer> in it must not touch this frame.
+        if (self._parse_mode != .fragment) {
+            if (child.is(Element.Html.Base) != null) {
+                if (Element.Html.Base.activeDocumentFrame(child, self)) |frame| {
+                    try Element.Html.Base.refreshFrameBase(frame);
+                }
+            } else if (child.is(Element.Html.Meta)) |meta| {
+                meta.processReferrer(self);
+            }
         }
 
         if (child.is(Element)) |el| {
@@ -5881,8 +5922,15 @@ fn nodeIsReady(self: *Frame, comptime from_parser: bool, node: *Node) !void {
             log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "iframe", .type = frame._type, .url = frame.url });
             return err;
         };
+    } else if (node.is(Element.Html.Base) != null) {
+        const frame = Element.Html.Base.activeDocumentFrame(node, self) orelse return;
+        Element.Html.Base.refreshFrameBase(frame) catch |err| {
+            log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "base", .type = frame._type, .url = frame.url });
+            return err;
+        };
     } else if (node.is(Element.Html.Meta)) |meta| {
         const frame = if (comptime from_parser) self else node.ownerFrame(self);
+        meta.processReferrer(frame);
         meta.processRefresh(frame) catch |err| {
             log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "meta", .type = frame._type, .url = frame.url });
             return err;

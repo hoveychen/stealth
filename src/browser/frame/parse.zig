@@ -23,6 +23,7 @@ const Node = @import("../webapi/Node.zig");
 const Element = @import("../webapi/Element.zig");
 const Document = @import("../webapi/Document.zig");
 const ShadowRoot = @import("../webapi/ShadowRoot.zig");
+const TreeWalker = @import("../webapi/TreeWalker.zig");
 const slotting = @import("../webapi/element/slotting.zig");
 
 pub fn htmlAsChildren(frame: *Frame, node: *Node, html: []const u8) !void {
@@ -86,11 +87,16 @@ pub fn fragment(frame: *Frame, node: *Node, html: []const u8, opts: FragmentPars
         return error.ExecutionTerminated;
     }
 
-    // html5ever wraps fragment output in an <html> element; unwrap so its
-    // children land directly on `node`. See https://github.com/servo/html5ever/issues/583.
-    // Because of custom element callbacks, the structure might not be what
-    // we expect, and nodes might be altogether removed. We deal with this in a
-    // few different places, but always the same way: leave it as-is.
+    unwrap(node);
+    try settleDocumentState(frame, node);
+}
+
+// html5ever wraps fragment output in an <html> element; unwrap so its
+// children land directly on `node`. See https://github.com/servo/html5ever/issues/583.
+// Because of custom element callbacks, the structure might not be what
+// we expect, and nodes might be altogether removed. We deal with this in a
+// few different places, but always the same way: leave it as-is.
+fn unwrap(node: *Node) void {
     const first = node.firstChild() orelse return;
     if (first.is(Element.Html.Html) == null) {
         return;
@@ -106,6 +112,26 @@ pub fn fragment(frame: *Frame, node: *Node, html: []const u8, opts: FragmentPars
     var it = node.childrenIterator();
     while (it.next()) |child| {
         child._parent = node;
+    }
+}
+
+// The parse wrote straight into `node`, not through the insertion path. When
+// `node` is in a frame's document (innerHTML on a connected element), a <base>
+// or <meta name=referrer> among the new children is in force the way an
+// inserted one is -- Chrome applies both. Anywhere else, nothing moves.
+fn settleDocumentState(frame: *Frame, node: *Node) !void {
+    const owner = Element.Html.Base.activeDocumentFrame(node, frame) orelse return;
+    var base = false;
+    var tw = TreeWalker.Full.Elements.init(node, .{});
+    while (tw.next()) |el| {
+        if (el.is(Element.Html.Base) != null) {
+            base = true;
+        } else if (el.is(Element.Html.Meta)) |meta| {
+            meta.processReferrer(owner);
+        }
+    }
+    if (base) {
+        try Element.Html.Base.refreshFrameBase(owner);
     }
 }
 

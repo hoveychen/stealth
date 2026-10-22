@@ -830,9 +830,21 @@ pub const ResolveURLOpts = struct {
 pub fn resolveURL(self: *const Node, url: anytype, frame: *Frame, opts: ResolveURLOpts) ![:0]const u8 {
     const owner_frame = self.ownerFrame(frame);
     const allocator = opts.allocator orelse frame.call_arena;
-    const doc: ?*const Document = self.ownerDocumentIncludingSelf(frame);
+    const doc = self.ownerDocumentIncludingSelf(frame);
     const encoding = if (doc) |d| d.getCharset() else owner_frame.charset;
-    return URL.resolve(allocator, owner_frame.base(), url, .{ .encoding = encoding });
+    const base = if (doc) |d| try documentBase(d, allocator, frame) else owner_frame.base();
+    return URL.resolve(allocator, base, url, .{ .encoding = encoding });
+}
+
+// A document in a frame resolves against the frame's base URL; one without a
+// browsing context (DOMParser, createHTMLDocument) against its own <base>, so
+// that the <base> in a parsed string moves that document's URLs and not the
+// page's.
+fn documentBase(doc: *Document, allocator: Allocator, frame: *const Frame) ![:0]const u8 {
+    if (doc._frame) |doc_frame| {
+        return doc_frame.base();
+    }
+    return Element.Html.Base.detachedDocumentBase(doc, allocator, frame);
 }
 
 // Same as `resolveURL` but can't return `TypeError`, this is needed for multiple
@@ -1898,12 +1910,9 @@ pub const JsApi = struct {
     pub const normalize = bridge.function(Node.normalize, .{ .ce_reactions = true });
     pub const removeChild = bridge.function(Node.removeChild, .{ .ce_reactions = true });
     pub const replaceChild = bridge.function(Node.replaceChild, .{ .ce_reactions = true });
-    fn _baseURI(self: *Node, frame: *const Frame) []const u8 {
+    fn _baseURI(self: *Node, frame: *const Frame) ![]const u8 {
         const doc = self.ownerDocumentIncludingSelf(frame) orelse return frame.base();
-        if (doc._frame) |doc_frame| {
-            return doc_frame.base();
-        }
-        return doc.getURL(frame);
+        return documentBase(doc, frame.call_arena, frame);
     }
 };
 
