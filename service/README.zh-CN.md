@@ -484,7 +484,8 @@ claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id
   结束那一次补上最后一次调用之后页面脚本才设的 cookie。写回按 [Session](#session) 的合并规则：只写这个
   会话自己改过的 cookie（和它上一次写回时比），别人（并行的 `/crawl` 或另一个 MCP 会话）这期间改的不会被
   它盖掉。没有变化时不写盘。
-- **代价**：每次调用多一次引擎往返（导出 cookie）。实测 ___。
+- **代价**：每次调用多一次引擎往返（导出 cookie）。2026-10-22 在 bt 上，session 里 21 个 cookie、各 200 次调用的中位数：
+  `getUrl` 1.22→1.56 毫秒、`goto` 一个小页面 9.31→9.41 毫秒（两轮里多 0.1–0.9 毫秒）；cookie 没变的调用不写盘。
 - **进程挂了**：引擎进程挂掉时会话丢失，session 里留下的是最后一次调用之后的 cookie（只丢最后一次调用之后、
   页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。服务本身重启同理。
 - **单向的部分**：MCP 会话开始之后 `/crawl` 再写进 session 的 cookie，不会进到这个已经开着的浏览器；要用上就
@@ -839,5 +840,5 @@ node service/test/unit.mjs                 # 不需要引擎的单元测试
 cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405、会话列表、历史字段和筛选、杀掉 MCP 进程后
 会话 404 且能新建、DELETE；`session_id`：`/crawl` 登录的 HttpOnly cookie 带进 MCP、MCP 里登录后会话未结束
 `/crawl` 就已登录、绑不同 session 互不串、不绑的没有 cookie、DELETE 写回最后一次调用之后的 cookie、历史按
-session_id 同时查到两种行）；`/crawl` 的两种翻页写法。__RESULT__ 单元测试另有 MCP
+session_id 同时查到两种行）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 100 项全部通过。 单元测试另有 MCP
 网关的路由、会话、过期、历史和 cookie 带入/写回/合并（假引擎，不需要 Docker）。

@@ -405,7 +405,9 @@ How it is put together (`lib/mcp.mjs`):
   goes out — so a `/crawl` sent after the agent saw its login click succeed
   already has the login — and once more when the session ends (`DELETE` or
   idle), for what page scripts set after the last call. An unchanged jar is
-  not rewritten. An engine process that dies loses only what changed since
+  not rewritten. Measured on bt with 21 cookies in the jar, the write-back
+  added 0.1–0.9 ms to the median call (200 calls each of `getUrl` and a
+  small-page `goto`). An engine process that dies loses only what changed since
   the session's last call. The binding is fixed at `initialize`; cookies a
   `/crawl` writes to the jar later do not reach a browser already open.
   History lines of a bound session carry its `session_id`, so
