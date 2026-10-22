@@ -1081,3 +1081,33 @@
   testing.expectEqual(true, err instanceof TypeError);
 }
 </script>
+
+<!--
+  Every document script builds is complete from the start, whatever DOMParser
+  was asked to parse and whether it parsed: Chrome 151, headed, warm profile
+  (probes/expr-domparser-readystate.js). Only the page's own document loads.
+  Ours used to start every one of them at `loading` but createHTMLDocument's.
+-->
+<script id=readyState>
+{
+  const p = new DOMParser();
+  const docs = {
+    'text/html': '<p>x</p>',
+    'text/xml': '<a><b/></a>',
+    'application/xml': '<a><b/></a>',
+    'application/xhtml+xml': '<html xmlns="http://www.w3.org/1999/xhtml"><body/></html>',
+    'image/svg+xml': '<svg xmlns="http://www.w3.org/2000/svg"/>',
+  };
+  const got = [];
+  for (const [t, ok] of Object.entries(docs)) {
+    got.push(t + ' ' + p.parseFromString(ok, t).readyState);
+    got.push(t + ' bad ' + p.parseFromString('<a><b></a>', t).readyState);
+  }
+  got.push('createDocument ' + document.implementation.createDocument(null, 'a').readyState);
+  got.push('createDocumentNs ' + document.implementation.createDocument('http://www.w3.org/1999/xhtml', 'html').readyState);
+  got.push('createHTMLDocument ' + document.implementation.createHTMLDocument('').readyState);
+  got.push('new Document ' + new Document().readyState);
+  testing.expectEqual('', got.filter((s) => !s.endsWith(' complete')).join(', '));
+  testing.expectEqual('loading', document.readyState);
+}
+</script>

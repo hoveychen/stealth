@@ -75,7 +75,11 @@ _content_type: ?[]const u8 = null,
 // encoding override: documents synthesized by script (createHTMLDocument,
 // createDocument) are UTF-8 regardless of the frame's encoding
 _charset: ?[]const u8 = null,
-_ready_state: ReadyState = .loading,
+// Every document script can build -- DOMParser of any type, well-formed or
+// not, createDocument, createHTMLDocument, `new Document()` -- reads `complete`
+// on Chrome 151 (probes/expr-domparser-readystate.js). Only a frame's own
+// document starts out loading, and Frame sets that where it makes one.
+_ready_state: ReadyState = .complete,
 _current_script: ?*Element.Html.Script = null,
 _elements_by_id: std.StringHashMapUnmanaged(*Element) = .empty,
 // Track IDs that were removed from the map - they might have duplicates in the tree
