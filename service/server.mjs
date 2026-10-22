@@ -67,6 +67,9 @@ const config = {
     // leaves room for an agent that thinks for minutes between calls.
     mcpIdleMs: nonNegInt('MCP_SESSION_IDLE_MS', 30 * 60 * 1000),
     mcpCallTimeoutMs: int('MCP_CALL_TIMEOUT_MS', 120000),
+    // Time the MCP sessions get to write their cookies back when the service
+    // stops; with the history's 2 s it stays inside docker stop's 10 s.
+    shutdownSaveMs: int('SHUTDOWN_SAVE_MS', 5000),
     mcpProxy: null,
 };
 if (env('PROXY_PROBE', '')) {
@@ -409,10 +412,20 @@ server.listen(config.port, config.host, 1024, () => {
     log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs, historyDir: config.historyDir, historyRetentionDays: config.historyRetentionDays, historyReplica: history.replica, mcpProcs: config.mcpProcs, mcpProxy: config.mcpProxy && redact(config.mcpProxy) });
 });
 
+// `docker stop` gives 10 s before SIGKILL: up to SHUTDOWN_SAVE_MS for the
+// MCP sessions' last cookie write-back, then up to 2 s for the history.
+let stopping = false;
 for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, () => {
+    process.on(sig, async () => {
+        if (stopping) return;
+        stopping = true;
         server.close();
         pool.close();
+        if (mcp) {
+            const t0 = Date.now();
+            const r = await mcp.shutdown(config.shutdownSaveMs);
+            if (r.sessions) log({ msg: 'mcp cookies saved on shutdown', signal: sig, ...r, ms: Date.now() - t0 });
+        }
         mcpEngines?.stop();
         // The last second of history is still queued; give it a moment.
         const exit = () => process.exit(0);

@@ -86,6 +86,9 @@ export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
                 req.on('end', () => done(new URLSearchParams(Buffer.concat(chunks).toString()).get('user') ?? 'anon'));
                 return;
             }
+            case '/logout':
+                // The site deletes its HttpOnly session cookie.
+                return html(200, `<!doctype html><html><head><title>logged out</title></head><body>bye</body></html>`, { 'set-cookie': 'auth=; Path=/; HttpOnly; Max-Age=0' });
             case '/account': {
                 // Who the auth cookie says this is, as the title.
                 const auth = /(?:^|;\s*)auth=user-([^;]*)/.exec(req.headers.cookie ?? '');

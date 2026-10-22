@@ -23,8 +23,14 @@
 //   cookies go back into the jar (cookies_export, merged by the jar's rules)
 //   after every tool call, before its answer goes out -- so a /crawl sent
 //   after a login click already finds the login -- and once more when the
-//   session ends (DELETE or idle). A process that dies takes with it only
-//   what changed since the last call.
+//   session ends (DELETE, idle, or the service stopping). A process that
+//   dies takes with it only what changed since the last call.
+//   The other way, before every tool call: if anyone else (a /crawl, another
+//   MCP session on the jar) changed the jar since this session last synced --
+//   one in-memory comparison, no engine call when not -- the browser's own
+//   changes since then are merged in first, then the browser is brought to
+//   the jar: changed cookies imported, deleted ones imported already expired
+//   (which removes them). See pullCookies.
 //
 // The engine processes are started here (not in entrypoint.sh) so that a
 // process that dies is noticed at once: its sessions are gone with it, and
@@ -35,7 +41,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
-import { SESSION_ID } from './sessions.mjs';
+import { SESSION_ID, key, same, storable } from './sessions.mjs';
 
 // Tools an agent of a shared service must not have (see above).
 // cookies_import / cookies_export are the gateway's own, for session_id.
@@ -129,7 +135,11 @@ export function spawnBackends({ bin = '/bin/lightpanda', count, basePort, proxy 
         if (process.env.MALLOC_CONF) childEnv.MALLOC_CONF = process.env.MALLOC_CONF;
         const start = () => {
             if (stopping) return;
-            const child = spawn(bin, args, { cwd, env: childEnv, stdio: ['ignore', 'inherit', 'pipe'] });
+            // detached: a process group of its own, so the SIGTERM that
+            // `docker stop` sends to the whole group (tini -g) does not take
+            // the engines down before the service has saved their sessions'
+            // cookies; stop() ends them after that.
+            const child = spawn(bin, args, { cwd, env: childEnv, stdio: ['ignore', 'inherit', 'pipe'], detached: true });
             children[i] = child;
             backend.pid = child.pid;
             let ready = false;
@@ -156,6 +166,10 @@ export function spawnBackends({ bin = '/bin/lightpanda', count, basePort, proxy 
         };
         start();
     }
+    // Outside the group, they would outlive a service that dies.
+    process.on('exit', () => {
+        for (const c of children) if (c && c.exitCode == null) c.kill('SIGTERM');
+    });
     return {
         backends,
         stop() {
@@ -180,9 +194,10 @@ export class McpGateway {
         this.record = record;
         this.now = now;
         // id -> { id, backend, created, lastUsed, calls, url, busy, sessionId,
-        // jarBase (the jar's cookies as of this session's last write-back) }
+        // jarBase (the jar's cookies as of this session's last sync with it) }
         this.sessions = new Map();
-        this.counts = { started: 0, closed: 0, expired: 0, lost: 0, calls: 0, toolErrors: 0, refused: 0, cookieSaves: 0, cookieSaveErrors: 0 };
+        this.counts = { started: 0, closed: 0, expired: 0, lost: 0, calls: 0, toolErrors: 0, refused: 0, cookieSaves: 0, cookieSaveErrors: 0, cookiePulls: 0, cookiePullErrors: 0 };
+        this.closing = false;
     }
 
     // The process behind `backend` went away, and its sessions with it.
@@ -233,9 +248,32 @@ export class McpGateway {
             .map((s) => ({ id: s.id, session_id: s.sessionId, process: s.backend.name, created: new Date(s.created).toISOString(), lastUsed: new Date(s.lastUsed).toISOString(), idleMs: now - s.lastUsed, calls: s.calls, url: s.url, busy: s.busy }));
     }
 
+    // The service is stopping: refuses new requests, and writes every bound
+    // session's cookies back (after the call it has in flight, if any).
+    // Resolves within timeoutMs to { sessions, saved, timedOut }.
+    async shutdown(timeoutMs) {
+        this.closing = true;
+        const bound = [...this.sessions.values()].filter((s) => s.sessionId);
+        let saved = 0;
+        const all = Promise.all(
+            bound.map((s) =>
+                s.tail.then(async () => {
+                    if (await this.saveCookies(s)) saved++;
+                }),
+            ),
+        );
+        let timer;
+        const timedOut = await Promise.race([all.then(() => false), new Promise((r) => (timer = setTimeout(() => r(true), timeoutMs)))]);
+        clearTimeout(timer);
+        for (const s of this.sessions.values()) this.recordEvent(s, 'session_end', null, 'the service is stopping');
+        this.sessions.clear();
+        return { sessions: bound.length, saved, timedOut };
+    }
+
     // Handles one request to /mcp. `body` is the raw request body (POST).
     async handle(req, res, body) {
         const sid = req.headers['mcp-session-id'] || null;
+        if (this.closing) return send(res, 503, rpcError(null, -32000, 'the service is stopping'));
         if (req.method === 'DELETE') return this.handleDelete(res, sid);
         if (req.method !== 'POST') {
             // No server-to-client stream: every answer comes back on its POST.
@@ -362,6 +400,7 @@ export class McpGateway {
         s.calls++;
         s.busy++;
         this.counts.calls++;
+        await this.pullCookies(s);
         const r = await this.forward(s, body);
         // Before the answer: the agent may hand over to /crawl as soon as it
         // has it.
@@ -427,19 +466,55 @@ export class McpGateway {
 
     // Merges the browser's cookies into the bound jar (sessions.mjs's rules,
     // against what this session last wrote). Failures are counted and
-    // logged, never the agent's problem.
+    // logged, never the agent's problem. -> whether it saved.
     async saveCookies(s) {
-        if (!s.sessionId || !s.jarBase) return;
-        const r = await this.callTool(s, 'cookies_export', {});
+        if (!s.sessionId || !s.jarBase) return false;
         try {
-            if (r.error) throw new Error(r.error);
-            const cookies = JSON.parse(r.text).map((c) => ({ ...c, sameSite: SAME_SITE[c.sameSite] ?? c.sameSite }));
-            s.jarBase = await this.cookieJars.checkpoint(s.sessionId, s.jarBase, cookies);
+            s.jarBase = await this.cookieJars.checkpoint(s.sessionId, s.jarBase, await this.exportCookies(s));
             this.counts.cookieSaves++;
+            return true;
         } catch (e) {
             this.counts.cookieSaveErrors++;
             console.error(`mcp ${s.id}: could not save cookies to session ${s.sessionId}: ${e.message}`);
+            return false;
         }
+    }
+
+    // Brings the browser up to the bound jar when someone else changed the
+    // jar since this session last synced. The browser's own changes since
+    // then (page scripts between calls) are merged into the jar first, by
+    // the same rules as a write-back, so whichever change reached the jar
+    // last wins, as between two crawls; then cookies the jar has and the
+    // browser lacks or holds differently are imported, and cookies the
+    // browser has and the jar no longer has are imported expired, which
+    // deletes them. Nothing changed (the usual case): no engine call.
+    async pullCookies(s) {
+        if (!s.sessionId || !s.jarBase || !this.cookieJars.changedSince(s.sessionId, s.jarBase)) return;
+        try {
+            const browser = await this.exportCookies(s);
+            s.jarBase = await this.cookieJars.checkpoint(s.sessionId, s.jarBase, browser);
+            const target = await this.cookieJars.load(s.sessionId);
+            const want = new Map(target.map((c) => [key(c), c]));
+            const have = new Map(browser.map((c) => [key(c), storable(c)]));
+            const put = target.filter((c) => !have.has(key(c)) || !same(have.get(key(c)), c));
+            const drop = [...have].filter(([k]) => !want.has(k)).map(([, c]) => ({ ...c, value: '', expires: 1 }));
+            if (put.length || drop.length) {
+                const r = await this.callTool(s, 'cookies_import', { cookies: [...drop, ...put] });
+                if (r.error) throw new Error(r.error);
+            }
+            s.jarBase = target;
+            this.counts.cookiePulls++;
+        } catch (e) {
+            this.counts.cookiePullErrors++;
+            console.error(`mcp ${s.id}: could not bring session ${s.sessionId}'s cookies into the browser: ${e.message}`);
+        }
+    }
+
+    // The browser's cookies, in the jar's spelling.
+    async exportCookies(s) {
+        const r = await this.callTool(s, 'cookies_export', {});
+        if (r.error) throw new Error(r.error);
+        return JSON.parse(r.text).map((c) => ({ ...c, sameSite: SAME_SITE[c.sameSite] ?? c.sameSite }));
     }
 
     // One of the gateway's own engine tool calls. -> { text } or { error }.

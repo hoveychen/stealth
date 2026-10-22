@@ -106,6 +106,7 @@ CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 \
 | `MCP_MAX_SESSIONS` | `32` | MCP 会话上限，满了 `initialize` 返回 503 |
 | `MCP_SESSION_IDLE_MS` | `1800000`（30 分钟） | 会话多久没有调用就关闭，`0` 永不 |
 | `MCP_CALL_TIMEOUT_MS` | `120000` | 单个 MCP 请求等引擎回答的上限，超过返回 504 |
+| `SHUTDOWN_SAVE_MS` | `5000` | 服务停止（SIGTERM/SIGINT）时，留给开着的绑定 `session_id` 的 MCP 会话写回 cookie 的时间上限 |
 | `MCP_PROXY` | | MCP 浏览走的代理 URL（所有会话共用一个），格式同 `proxy` 字段 |
 | `MCP_BASE_PORT` | `9300` | MCP 进程在容器内监听的第一个端口（依次加 1） |
 | `LP_BIN` | `/bin/lightpanda` | MCP 进程用的引擎二进制 |
@@ -383,7 +384,7 @@ else:
 - **多副本时 session 是各副本自己的**：副本会把用过的 session 留在内存里，所以负载均衡要按 `session_id`
   做哈希，让同一个 session 总是落到同一个副本。
 - **MCP 会话也能用同一个 session**：连 `/mcp?session_id=<id>`，agent 的浏览器从这个 session 的 cookie 出发，
-  它登录拿到的 cookie 也写回这里，规则同上。见 [与 /crawl 的 session 互通](#与-crawl-的-session-互通session_id)。
+  它登录拿到的 cookie 也写回这里，规则同上；会话开着时别人写进 session 的 cookie，下一次调用前也会同步进它的浏览器。见 [与 /crawl 的 session 互通](#与-crawl-的-session-互通session_id)。
 
 ## Agent 接入（MCP）
 
@@ -479,18 +480,34 @@ claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id
 - **在 `initialize` 时生效**：服务把这个 session 的全部 cookie（含 HttpOnly 的）放进新浏览器。之后请求上的
   `session_id` 不再看，一个 MCP 会话从头到尾只绑一个 session。`session_id` 的格式同 `/crawl`（1–128 个
   `A-Z a-z 0-9 . _ -`），不合法返回 400。
-- **写回时机：每个工具调用之后、把结果交给 agent 之前**，再加上会话结束时（`DELETE` 或闲置回收）各一次。
-  所以 agent 看到「点了登录」的结果时，cookie 已经在 session 里了，紧接着发的 `/crawl` 就能用上；会话
-  结束那一次补上最后一次调用之后页面脚本才设的 cookie。写回按 [Session](#session) 的合并规则：只写这个
-  会话自己改过的 cookie（和它上一次写回时比），别人（并行的 `/crawl` 或另一个 MCP 会话）这期间改的不会被
-  它盖掉。没有变化时不写盘。
-- **代价**：每次调用多一次引擎往返（导出 cookie）。2026-10-22 在 bt 上，session 里 21 个 cookie、各 200 次调用的中位数：
-  `getUrl` 1.22→1.56 毫秒、`goto` 一个小页面 9.31→9.41 毫秒（两轮里多 0.1–0.9 毫秒）；cookie 没变的调用不写盘。
+- **双向同步**，以 session 为准，浏览器是它的一份副本：
+  - **写出：每个工具调用之后、把结果交给 agent 之前**，再加上会话结束时（`DELETE`、闲置回收或服务停止）
+    各一次。所以 agent 看到「点了登录」的结果时，cookie 已经在 session 里了，紧接着发的 `/crawl` 就能用上；
+    会话结束那一次补上最后一次调用之后页面脚本才设的 cookie。写出按 [Session](#session) 的合并规则：只写
+    这个会话自己改过的 cookie（和它上一次同步时比），别人这期间改的不会被它盖掉。没有变化时不写盘。
+  - **拉入：每个工具调用之前**，如果自这个会话上一次同步以来别人（`/crawl`，或绑同一个 `session_id` 的另一个
+    MCP 会话）改过 session，就把浏览器改成和 session 一致：新增和改过的 cookie（含 HttpOnly）放进去，session
+    里已经没有的从浏览器删掉。所以 MCP 开着时用 `/crawl` 登录，agent 下一步打开的页面就是已登录；`/crawl`
+    访问登出页让站点删掉 cookie，MCP 里下一步也没了。
+  - **冲突规则：同一个 cookie（name、domain、path）两边都改了，后到 session 的赢**，和两个并发 `/crawl` 一样。
+    浏览器里的改动在每次调用结束时到达 session；两次调用之间页面脚本自己改的，在下一次调用开始时（拉入之前
+    先写出一次）才到达。所以「上一次调用结束后，页面脚本和 `/crawl` 改了同一个 cookie」时，页面脚本的改动
+    后到、它赢；其余情况都是谁先写进 session 谁先、后写的盖掉前面的。不同的 cookie 互不影响。
+- **代价**：写出是每次调用多一次引擎往返（导出 cookie）。拉入只在 session 被别人改过时才有：判断「有没有被改过」
+  是内存里比一个版本号，不调用引擎；被改过的那一次多一次导出和一次导入。2026-10-22 在 bt 上，session 里 21 个 cookie、各 200 次调用的中位数（两轮）：没被改过时与只写出的上一版
+  持平（`getUrl` 1.62/2.55→1.67/2.24 毫秒，`goto` 小页面 9.05/12.30→10.17/9.26 毫秒，差异在机器噪声内）；每次调用前都有
+  `/crawl` 改一个 cookie 的极端情况，`getUrl` 多 1.1–1.9 毫秒、`goto` 多 2.1–2.2 毫秒。cookie 没变的调用不写盘。
 - **进程挂了**：引擎进程挂掉时会话丢失，session 里留下的是最后一次调用之后的 cookie（只丢最后一次调用之后、
-  页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。服务本身重启同理。
-- **单向的部分**：MCP 会话开始之后 `/crawl` 再写进 session 的 cookie，不会进到这个已经开着的浏览器；要用上就
-  新开一个 MCP 会话。
-- 两个 MCP 会话可以绑同一个 `session_id`（各自一个浏览器，写回按上面的规则合并），绑不同 `session_id` 的互不相干。
+  页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。
+- **服务停止**：收到 SIGTERM/SIGINT（`docker stop`、`docker compose down`）时，服务先拒绝新的 `/mcp` 请求
+  （503），等每个绑定会话手上的调用结束，再给它们写出最后一次、落盘，然后才退出；整个写出最多等
+  `SHUTDOWN_SAVE_MS`（默认 5 秒），加上历史落盘最多 2 秒，在 `docker stop` 默认的 10 秒宽限之内。日志里有一行
+  `mcp cookies saved on shutdown`（会话数、写出数、是否超时、耗时）。实测（bt，`docker stop`）：最后一次调用后页面脚本设的 cookie，停容器再起新容器后 `/crawl` 能看到，
+  `docker stop` 用时约 0.6 秒、写出 5–6 毫秒、退出码 0；上一版镜像同样操作后这个 cookie 丢失。镜像里 PID 1 是 tini，
+  Node 是它的子进程、收得到转发的 SIGTERM；MCP 引擎进程放在自己的进程组里，不会和 Node 同时被这个信号结束。被 `kill -9` 或宽限超时被强杀时
+  没有这一次，丢的是最后一次调用之后页面脚本设的 cookie。
+- 两个 MCP 会话可以绑同一个 `session_id`（各自一个浏览器，按上面的规则双向同步，一边登录、另一边下一步就是
+  已登录），绑不同 `session_id` 的互不相干。
 - 看绑定：`GET /mcp/sessions` 和管理页的「MCP 会话」表有 `session_id` 一列；绑定会话的每一行历史都带
   `session_id`，所以 `GET /history?session_id=shop-login-1` 会同时列出这个 session 的 `/crawl` 请求和
   MCP 调用。`session_start` 那一行写着带入了几个 cookie。
@@ -751,7 +768,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
   "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "..." },
   "mcp": { "enabled": true, "processes": [
     { "name": "mcp0", "pid": 47, "up": true, "sessions": 2, "inFlight": 0, "calls": 18, "restarts": 0 }
-  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0, "cookieSaves": 9, "cookieSaveErrors": 0 }
+  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0, "cookieSaves": 9, "cookieSaveErrors": 0, "cookiePulls": 2, "cookiePullErrors": 0 }
 }
 ```
 
@@ -762,7 +779,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 - `history.written` 是启动以来写入的行数，`queued` 是还没落盘的，`writeErrors`/`dropped` 不为 0 要查磁盘。
 - `mcp.processes[].up` 为 false 是进程正在重启；`lost` 是因进程挂掉丢失的会话数；`refused` 是被拒绝的
   `session_*` / `save` 调用数；`cookieSaves` / `cookieSaveErrors` 是绑定 `session_id` 的会话写回 cookie 的
-  次数和失败数（失败只记数和打日志，不影响调用）。`MCP_PROCS=0` 时是 `{"enabled": false}`。
+  次数和失败数，`cookiePulls` / `cookiePullErrors` 是把别人写进 session 的 cookie 拉进浏览器的次数和失败数
+  （失败只记数和打日志，不影响调用）。`MCP_PROCS=0` 时是 `{"enabled": false}`。
 
 ## 扩容建议
 
@@ -840,5 +858,7 @@ node service/test/unit.mjs                 # 不需要引擎的单元测试
 cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405、会话列表、历史字段和筛选、杀掉 MCP 进程后
 会话 404 且能新建、DELETE；`session_id`：`/crawl` 登录的 HttpOnly cookie 带进 MCP、MCP 里登录后会话未结束
 `/crawl` 就已登录、绑不同 session 互不串、不绑的没有 cookie、DELETE 写回最后一次调用之后的 cookie、历史按
-session_id 同时查到两种行）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 100 项全部通过。 单元测试另有 MCP
-网关的路由、会话、过期、历史和 cookie 带入/写回/合并（假引擎，不需要 Docker）。
+session_id 同时查到两种行；MCP 开着时 `/crawl` 登录和登出下一步就生效、两个 MCP 会话绑同一个 session 互相看到
+登录和登出、`docker stop` 时写回最后一次调用之后的 cookie）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 105 项
+全部通过。单元测试另有 MCP 网关的路由、会话、过期、历史、cookie 带入/写回/合并/拉入/冲突和停服务写回
+（假引擎，不需要 Docker）。

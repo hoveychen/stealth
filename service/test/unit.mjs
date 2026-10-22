@@ -379,7 +379,11 @@ function fakeEngine() {
                 s.cookies.push({ path: '/', expires: null, secure: false, httpOnly: false, sameSite: null, ...c });
             };
             if (name === 'cookies_import') {
-                for (const c of args.cookies) addCookie({ ...c, sameSite: c.sameSite?.toLowerCase() ?? null });
+                // An already expired cookie removes its namesake, as the engine's jar does.
+                for (const c of args.cookies) {
+                    if (typeof c.expires === 'number' && c.expires > 0 && c.expires * 1000 <= Date.now()) s.cookies = s.cookies.filter((x) => `${x.name} ${x.domain} ${x.path}` !== `${c.name} ${c.domain} ${c.path ?? '/'}`);
+                    else addCookie({ ...c, sameSite: c.sameSite?.toLowerCase() ?? null });
+                }
                 return text(`imported ${args.cookies.length} of ${args.cookies.length} cookie(s)`);
             }
             if (name === 'cookies_export') return text(JSON.stringify(s.cookies));
@@ -632,6 +636,152 @@ await check('MCP gateway: without session_id no cookie calls reach the engine; a
         assert.ok(f.records.every((r) => r.session_id == null));
         assert.equal(f.jars.jars.size, 0);
         await assert.rejects(new McpClient(`${f.url}?session_id=no/slash`).initialize(), /HTTP 400.*session_id/);
+    } finally {
+        f.close();
+    }
+});
+
+await check('SessionStore: changedSince tells a holder whether anyone else changed the jar', async () => {
+    const st = new SessionStore();
+    const c = (name, value) => ({ name, value, domain: 'a.example', path: '/', httpOnly: false, secure: false });
+    let mine = await st.load('v');
+    assert.equal(st.changedSince('v', mine), false);
+    mine = await st.checkpoint('v', mine, [c('x', '1')]);
+    assert.equal(st.changedSince('v', mine), false, 'its own write does not count');
+    assert.equal(await st.checkpoint('v', mine, [c('x', '1')]), mine);
+    assert.equal(st.changedSince('v', mine), false, 'nor does an unchanged checkpoint');
+    // Someone else writes the very value the jar already has: no change.
+    await st.save('v', await st.load('v'), [c('x', '1')]);
+    assert.equal(st.changedSince('v', mine), false, 'a save that changes nothing is not a change');
+    await st.save('v', await st.load('v'), [c('x', '1'), c('y', '2')]);
+    assert.equal(st.changedSince('v', mine), true);
+    // A checkpoint on top of someone else's change does not claim it.
+    mine = await st.checkpoint('v', mine, [c('x', '3')]);
+    assert.equal(st.changedSince('v', mine), true, 'y is still to be pulled');
+    mine = await st.load('v');
+    assert.equal(st.changedSince('v', mine), false);
+    await st.delete('v');
+    assert.equal(st.changedSince('v', mine), false, 'a dropped jar has nothing to pull');
+});
+
+const cookieNames = (cs) => cs.map((k) => `${k.name}=${k.value}`).sort();
+
+await check('MCP gateway: what /crawl writes to the jar reaches an open session before its next call; deletes too; no engine call when nothing changed', async () => {
+    const f = await gatewayFixture();
+    try {
+        const c = new McpClient(`${f.url}?session_id=pull`);
+        await c.initialize();
+        await c.tool('goto', { url: 'http://site.example/' });
+        const exports0 = toolCalls(f, 'cookies_export').length;
+        await c.tool('goto', { url: 'http://site.example/' });
+        await c.tool('click', { selector: 'a' });
+        assert.equal(toolCalls(f, 'cookies_export').length - exports0, 2, 'one write-back export per call, no pull');
+        assert.equal(toolCalls(f, 'cookies_import').length, 0);
+        // A /crawl logs in (an HttpOnly cookie) while the session is open.
+        let base = await f.jars.load('pull');
+        await f.jars.save('pull', base, [{ name: 'auth', value: 'tok', domain: 'site.example', path: '/', httpOnly: true, secure: false, sameSite: 'Lax', expires: -1 }]);
+        await c.tool('goto', { url: 'http://site.example/account' });
+        const es = f.engineSession(c.sessionId);
+        assert.deepEqual(es.cookies.map((k) => [k.name, k.value, k.httpOnly]), [['auth', 'tok', true]]);
+        assert.equal(toolCalls(f, 'cookies_import').length, 1);
+        // The site has the /crawl delete it again.
+        base = await f.jars.load('pull');
+        await f.jars.save('pull', base, []);
+        await c.tool('goto', { url: 'http://site.example/account' });
+        assert.deepEqual(es.cookies, [], 'deleted in the browser too');
+        assert.deepEqual(await f.jars.load('pull'), []);
+        assert.equal(f.gw.stats().cookiePulls, 2);
+        // Nothing changed since: no import, and the export count is the write-back's.
+        const [i, e] = [toolCalls(f, 'cookies_import').length, toolCalls(f, 'cookies_export').length];
+        await c.tool('getUrl');
+        assert.deepEqual([toolCalls(f, 'cookies_import').length, toolCalls(f, 'cookies_export').length], [i, e + 1]);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: two sessions on one jar see each other\'s login and logout at their next call', async () => {
+    const f = await gatewayFixture();
+    try {
+        const a = new McpClient(`${f.url}?session_id=two`), b = new McpClient(`${f.url}?session_id=two`);
+        await a.initialize();
+        await b.initialize();
+        await a.tool('goto', { url: 'http://site.example/login?set=sid=1;httponly' });
+        await b.tool('getUrl').catch(() => {});
+        assert.deepEqual(cookieNames(f.engineSession(b.sessionId).cookies), ['sid=1']);
+        // b's page changes another cookie; a gets it, and keeps its own sid.
+        await b.tool('goto', { url: 'http://site.example/?set=theme=dark' });
+        await a.tool('getUrl');
+        assert.deepEqual(cookieNames(f.engineSession(a.sessionId).cookies), ['sid=1', 'theme=dark']);
+        // a logs out (the site expires sid): gone from b at its next call.
+        f.engineSession(a.sessionId).cookies = f.engineSession(a.sessionId).cookies.filter((k) => k.name !== 'sid');
+        await a.tool('getUrl');
+        await b.tool('getUrl');
+        assert.deepEqual(cookieNames(f.engineSession(b.sessionId).cookies), ['theme=dark']);
+        assert.deepEqual(cookieNames(await f.jars.load('two')), ['theme=dark']);
+        assert.equal(f.gw.stats().cookiePullErrors, 0);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: a pull first saves the browser\'s own changes; on one cookie, the change that reached the jar last wins', async () => {
+    const f = await gatewayFixture();
+    try {
+        const c = new McpClient(`${f.url}?session_id=race`);
+        await c.initialize();
+        await c.tool('goto', { url: 'http://site.example/?set=k=0' });
+        // Between two calls: a page script sets k=page and adds own=1, and a
+        // /crawl then writes k=crawl and other=1 to the jar.
+        const es = f.engineSession(c.sessionId);
+        es.cookies = es.cookies.map((k) => (k.name === 'k' ? { ...k, value: 'page' } : k));
+        es.cookies.push({ name: 'own', value: '1', domain: 'site.example', path: '/', expires: null, secure: false, httpOnly: false, sameSite: null });
+        const base = await f.jars.load('race');
+        await f.jars.save('race', base, [...base.filter((k) => k.name !== 'k'), { ...base.find((k) => k.name === 'k'), value: 'crawl' }, { name: 'other', value: '1', domain: 'site.example', path: '/', httpOnly: false, secure: false }]);
+        await c.tool('getUrl');
+        // The browser's k=page reached the jar at this call, after the /crawl's k=crawl.
+        assert.deepEqual(cookieNames(es.cookies), ['k=page', 'other=1', 'own=1']);
+        assert.deepEqual(cookieNames(await f.jars.load('race')), ['k=page', 'other=1', 'own=1']);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: shutdown writes every bound session back (after its call in flight), then refuses requests', async () => {
+    const f = await gatewayFixture();
+    try {
+        const a = new McpClient(`${f.url}?session_id=sa`), b = new McpClient(`${f.url}?session_id=sb`), u = new McpClient(f.url);
+        await a.initialize();
+        await b.initialize();
+        await u.initialize();
+        f.engineSession(a.sessionId).cookies.push({ name: 'late', value: 'a', domain: 'site.example', path: '/', expires: null, secure: false, httpOnly: false, sameSite: null });
+        // b is in a slow call whose page sets a cookie when it is done.
+        const slow = b.tool('goto', { url: 'http://site.example/?set=slow=1', delay: 300 });
+        await new Promise((r) => setTimeout(r, 50));
+        const r = await f.gw.shutdown(5000);
+        await slow;
+        assert.deepEqual(r, { sessions: 2, saved: 2, timedOut: false });
+        assert.deepEqual(cookieNames(await f.jars.load('sa')), ['late=a']);
+        assert.deepEqual(cookieNames(await f.jars.load('sb')), ['slow=1']);
+        await assert.rejects(u.tool('getUrl'), /HTTP 503.*stopping/);
+        assert.equal(f.records.filter((x) => x.tool === 'session_end' && /stopping/.test(x.message)).length, 3);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: shutdown gives up after its time limit', async () => {
+    const f = await gatewayFixture();
+    try {
+        const a = new McpClient(`${f.url}?session_id=st`);
+        await a.initialize();
+        const stuck = a.tool('goto', { url: 'http://site.example/', delay: 1000 });
+        await new Promise((r) => setTimeout(r, 50));
+        const t0 = Date.now();
+        const r = await f.gw.shutdown(200);
+        assert.ok(Date.now() - t0 < 600, `${Date.now() - t0} ms`);
+        assert.deepEqual(r, { sessions: 1, saved: 0, timedOut: true });
+        await stuck.catch(() => {});
     } finally {
         f.close();
     }
