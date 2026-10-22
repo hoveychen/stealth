@@ -4,14 +4,18 @@
 CDP 连接（每条连接在引擎里有自己的工作线程和浏览器），每条连接同一时间只跑
 一个抓取；所有连接都忙时，新请求按先来后到排队。
 
+同一个端口还提供 MCP 接口（`/mcp`），让 agent 像用 Playwright 一样一步步操作页面
+（打开、点击、填表、翻页……），见 [Agent 接入（MCP）](#agent-接入mcp)。
+
 - 运行环境：Node ≥ 22，没有任何依赖。
 - **没有鉴权**，服务和管理页都只应放在内网。
 - 英文版（更细的实现说明和测量数据）：[README.md](README.md)。
 
 目录：[部署](#部署) · [调用示例](#调用示例) · [请求与响应](#请求与响应) ·
 [错误码](#错误码) · [超时与部分结果](#超时与部分结果) · [代理与代理池](#代理与代理池) ·
-[Session](#session) · [请求历史](#请求历史) · [管理页](#管理页) ·
-[健康检查](#健康检查-get-health) · [扩容建议](#扩容建议) · [测试](#测试)
+[Session](#session) · [Agent 接入（MCP）](#agent-接入mcp) · [翻页](#翻页) ·
+[请求历史](#请求历史) · [管理页](#管理页) · [健康检查](#健康检查-get-health) ·
+[扩容建议](#扩容建议) · [测试](#测试)
 
 ## 部署
 
@@ -35,11 +39,14 @@ curl -s localhost:8080/crawl -d '{"url":"https://example.com/","formats":["markd
   - `lightpanda serve`，只监听容器内的 `127.0.0.1:9222`，CDP 端口不对外。引擎退出后
     隔 `LP_RESTART_DELAY` 秒自动重启；正在跑的请求返回 `engine_disconnected`，排队中
     的请求会等它回来。
-  - 本服务，监听 `0.0.0.0:8080`。服务退出则容器退出，由重启策略拉起。
+  - 本服务，监听 `0.0.0.0:8080`。服务退出则容器退出，由重启策略拉起。服务再启动
+    `MCP_PROCS` 个 `lightpanda mcp` 进程（默认 2 个，只监听容器内的 `127.0.0.1:9300` 起），
+    供 `/mcp` 使用，挂掉的自动重启。
 - 以 `-` 开头的参数会追加到 `serve` 命令行（`docker run lp-crawl --log-level debug`），
   其他参数会代替服务执行（`docker run --rm lp-crawl lightpanda version`）。
 - **不要**给引擎加 `--obey-robots`、`--web-bot-auth-*` 或 `--webmcp`：每一个都会把客户端
-  暴露成机器人。
+  暴露成机器人。MCP 进程带 `--no-webmcp` 启动，页面里没有 `navigator.modelContext` 等
+  三个 Chrome 没有的名字（见 [Agent 接入](#伪装)）。
 
 ### `/data` 卷
 
@@ -95,6 +102,13 @@ CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 \
 | `HOST` / `PORT` | `0.0.0.0` / `8080` | 服务监听地址 |
 | `MAX_BODY_BYTES` | `1048576` | 请求体上限 |
 | `LP_CDP_URL` | `ws://127.0.0.1:9222/` | 引擎的 CDP 地址（镜像里自动设置） |
+| `MCP_PROCS` | 镜像里 `2`；裸跑时 `0`（关闭 `/mcp`） | `lightpanda mcp` 进程数。一个进程同一时间只执行一个工具调用，这就是能同时有调用在执行的 agent 数，见[多会话](#多会话与并发) |
+| `MCP_MAX_SESSIONS` | `32` | MCP 会话上限，满了 `initialize` 返回 503 |
+| `MCP_SESSION_IDLE_MS` | `1800000`（30 分钟） | 会话多久没有调用就关闭，`0` 永不 |
+| `MCP_CALL_TIMEOUT_MS` | `120000` | 单个 MCP 请求等引擎回答的上限，超过返回 504 |
+| `MCP_PROXY` | | MCP 浏览走的代理 URL（所有会话共用一个），格式同 `proxy` 字段 |
+| `MCP_BASE_PORT` | `9300` | MCP 进程在容器内监听的第一个端口（依次加 1） |
+| `LP_BIN` | `/bin/lightpanda` | MCP 进程用的引擎二进制 |
 
 镜像额外的变量：
 
@@ -369,16 +383,237 @@ else:
 - **多副本时 session 是各副本自己的**：副本会把用过的 session 留在内存里，所以负载均衡要按 `session_id`
   做哈希，让同一个 session 总是落到同一个副本。
 
+## Agent 接入（MCP）
+
+`/mcp` 是 [MCP](https://modelcontextprotocol.io/)（Model Context Protocol）的 Streamable HTTP 接口。
+agent 连上后得到一个**属于它自己的浏览器**，用 `goto`、`click`、`fill`、`press`、`scroll`、
+`waitForSelector`、`markdown`、`extract`、`evaluate` 等工具一步步操作页面，页面状态在调用之间保留——
+和 Playwright 驱动一个浏览器是一样的用法。`/crawl` 适合「一个 URL 进、一份结果出」；要看了页面
+再决定下一步（找按钮、翻页、填表、登录）就用 MCP。
+
+### Claude Code
+
+```bash
+claude mcp add --transport http crawl http://crawl.internal:8080/mcp
+```
+
+或者写进项目的 `.mcp.json` / 用 `--mcp-config` 传入：
+
+```json
+{ "mcpServers": { "crawl": { "type": "http", "url": "http://crawl.internal:8080/mcp" } } }
+```
+
+非交互地跑一个任务（工具名是 `mcp__crawl__<工具>`；`--tools ""` 关掉内置工具，只用浏览器）：
+
+```bash
+claude -p "打开 http://shop.example/list ，点下一页直到最后一页，汇总每页商品的编号、标题、价格，输出 JSON" \
+  --mcp-config crawl-mcp.json --strict-mcp-config --tools "" --allowedTools "mcp__crawl"
+```
+
+### 其他 MCP 客户端
+
+任何支持 Streamable HTTP 的 MCP 客户端（Claude Desktop、Cursor、OpenAI Agents SDK、LangChain 的
+MCP 适配器、官方 Python / TypeScript SDK……）填同一个 URL 即可。服务只回 JSON（不发 SSE 事件流，
+`GET /mcp` 返回 405，这是协议允许的）。
+
+不用 SDK 时，协议就是几个 POST：
+
+```bash
+# 1. initialize：响应头 mcp-session-id 就是你的浏览器
+curl -si localhost:8080/mcp -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"me","version":"1"}}}' | grep -i mcp-session-id
+# mcp-session-id: mcp-9b82a0a916bd8109c7d10eb7
+
+# 2. 之后每个请求都带上它
+S=mcp-9b82a0a916bd8109c7d10eb7
+curl -s localhost:8080/mcp -H 'content-type: application/json' -H "mcp-session-id: $S" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"goto","arguments":{"url":"https://example.com/"}}}'
+curl -s localhost:8080/mcp -H 'content-type: application/json' -H "mcp-session-id: $S" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"click","arguments":{"selector":"a.next"}}}'
+
+# 3. 用完关掉（不关也会在 MCP_SESSION_IDLE_MS 后被回收）
+curl -s -X DELETE localhost:8080/mcp -H "mcp-session-id: $S"
+```
+
+`tools/call` 的结果是 `{"content":[{"type":"text","text":"..."}],"isError":false}`；工具失败（比如选择器
+找不到元素）是 `isError: true`，HTTP 仍是 200。`tools/list` 列出全部工具和参数说明。
+仓库里的 [`service/test/mcp-client.mjs`](test/mcp-client.mjs) 是一个 60 行、零依赖的 Node 客户端，可以直接拿去用。
+
+### 多会话与并发
+
+- **一次 `initialize` 就是一个独立的浏览器**（引擎里一个单独的浏览器实例）：自己的页面和 cookie。多个 agent
+  各自 `initialize` 就互不干扰（实测两个会话同时打开不同页面、cookie 互不可见）。会话 id 是服务端生成的
+  随机串，没有 `mcp-session-id` 头的请求（`initialize` 除外）返回 400，不认识的 id 返回 404——
+  按 MCP 协议，客户端收到 404 应该重新 `initialize`。
+- 想让两个 agent **故意共用**一个浏览器，就让它们带同一个 `mcp-session-id`。
+- **并发**：每个 `lightpanda mcp` 进程同一时间只执行一个工具调用（引擎里所有会话共用一个线程），
+  实测同一进程里一个会话打开 4 秒的慢页面时，另一个会话打开快页面也要等 3.8 秒。所以服务开
+  `MCP_PROCS` 个进程，新会话分到会话最少的进程上，之后一直留在那个进程。同时在跑工具调用的 agent
+  多于进程数时，同一进程上的调用排队。实测 `MCP_PROCS=2`：一个会话打开 3 秒的慢页面时，另一个会话
+  打开页面只用了 21 毫秒。
+- 资源：空闲的 MCP 进程每个约 8–9 MB（同一镜像 `MCP_PROCS=2` 比 `0` 多 17 MB）；每个会话是一个浏览器，
+  内存和打开的页面有关（4 个会话、其中 3 个跑完翻页后，整个容器 70 MB）。要更多并发就加 `MCP_PROCS`，会话上限是 `MCP_MAX_SESSIONS`。
+- 会话 `MCP_SESSION_IDLE_MS`（默认 30 分钟）没有调用就关闭。**Claude Code 跑完 `claude -p` 不会发
+  DELETE**，会话就是靠这个回收的；自己写的客户端用完请 `DELETE`。
+- 某个 MCP 进程挂了会自动重启，它上面的会话丢失（之后返回 404，历史里记一行 `session_lost`），
+  其他进程上的会话不受影响。
+- 当前会话列表：`GET /mcp/sessions`（id、所在进程、开始时间、最后调用、调用次数、当前页面），
+  管理页的状态标签里也有。
+- 多副本部署时，同一个会话的请求必须落到同一个副本（负载均衡按 `mcp-session-id` 头做粘性）。
+
+### 代理
+
+MCP 浏览走 `MCP_PROXY`（一个代理 URL，所有会话共用，支持的格式同 `/crawl` 的 `proxy` 字段，账号密码写在
+URL 里）。没有按会话或按调用选代理，也**不走代理池**：引擎的 MCP 工具没有代理参数，代理是 MCP 进程
+启动时定的。需要不同出口时，起多个容器各配一个 `MCP_PROXY`。
+
+### 工具说明
+
+可用工具：`goto`、`markdown`、`html`、`tree`、`links`、`interactiveElements`、`findElement`、`nodeDetails`、
+`extract`、`structuredData`、`detectForms`、`evaluate`、`click`、`fill`、`press`、`hover`、`scroll`、
+`selectOption`、`setChecked`、`waitForSelector`、`waitForScript`、`waitForState`、`screenshot`、
+`consoleLogs`、`getUrl`、`getCookies`、`getEnv`、`search`。initialize 的响应里有一大段 `instructions`
+（工具的用法建议），MCP 客户端会交给模型。
+
+- 引擎原有的 `session_new`、`session_list`、`session_close` 和 `save` 不提供：前三个能列出、加入、关闭
+  别人的会话，`save` 会往容器里写文件。调用它们会得到 `isError` 的结果。新会话请用 `initialize`。
+- `getEnv` 和 `$LP_*` 占位符：MCP 进程不带任何 `LP_*` 环境变量启动，所以没有可用的凭据占位符。
+- `screenshot` 渲染的是引擎的文字布局，不是真实像素截图。
+- `search` 会去访问搜索引擎。
+
+### 伪装
+
+MCP 进程带 `--no-webmcp` 启动，页面里 `typeof navigator.modelContext`、`typeof ModelContext`、
+`typeof ModelContextClient` 都是 `"undefined"`，`Navigator.prototype` 上也没有这个名字（引擎的 `mcp`
+命令原本会挂上这三个 Chrome 没有的名字，Kasada 实测会读）。同一个页面分别经 `/crawl` 和 MCP 打开，
+主文档的 14 个请求头和 `navigator.userAgent` / `webdriver` / `plugins` / `languages` 完全相同。
+测试套件每次都检查这几项。
+
+### 实测：agent 找翻页按钮点到底
+
+2026-10-22 在 bt 上，`claude -p`（Sonnet 5.5）经 SSH 隧道连容器的 `/mcp`，浏览器在 bt 的容器里跑。页面是
+测试用的商品列表（[`service/test/paging-server.mjs`](test/paging-server.mjs)），提示词只说「找到翻页按钮
+一页页点到最后一页，汇总每页商品」，没给选择器：
+
+| 页面 | agent 的工具调用 | 结果 |
+|---|---|---|
+| 链接翻页（5 页，每页一个 URL），要求点击「下一页」 | `markdown{url}` → `interactiveElements` → 4 ×（`click a.next` → `markdown`） | 25 条全对，17.5 秒 |
+| 链接翻页，没要求必须点击 | `markdown{url}` → `links` → 直接 `markdown{url}` 打开第 2–5 页 | 25 条全对，13 秒 |
+| ajax 翻页（4 页，URL 不变） | `goto` → `interactiveElements` → `html` → 3 ×（`click #next` → `extract`） | 20 条全对，14 秒 |
+
+ajax 型里 agent 点击后直接 `extract`，读到的就是新一页（测试页的接口延迟 150 毫秒；更慢的站点让
+agent 用 `waitForSelector` / `waitForScript` 等内容变化）。每一步调用都在
+[请求历史](#请求历史)里（`kind: "mcp"`），点击那一行的 `url` → `finalUrl` 就是从第几页翻到了第几页。
+
+## 翻页
+
+三种做法，从简单到灵活：
+
+1. **交给 agent**：用 [MCP](#agent-接入mcp)，告诉它「点下一页直到最后一页」。页面结构未知、每个站
+   不一样时最省事。
+2. **ajax 翻页**（点「下一页」只换列表、URL 不变）：一次 `/crawl`，在 `js` 里循环点击。
+3. **链接翻页**（每页一个 URL）：调用方循环，每次 `/crawl` 的 `js` 返回本页数据和下一页链接，
+   带同一个 `session_id`。
+
+下面两段代码在 bt 上对测试页面实跑通过（测试套件第 19 节，每次都跑）。
+
+### ajax 翻页：一次请求里循环点击
+
+```json
+{
+  "url": "https://shop.example/list",
+  "formats": ["eval"],
+  "timeout": 60000,
+  "js": "(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const pages = []; for (let n = 1; n <= 50; n++) { pages.push([...document.querySelectorAll('li.item')].map((li) => ({ id: li.dataset.id, title: li.querySelector('.title').textContent }))); const next = document.querySelector('#next'); if (!next) break; const before = document.querySelector('#list').innerHTML; next.click(); for (let i = 0; i < 100 && document.querySelector('#list').innerHTML === before; i++) await sleep(100); } return pages; })()"
+}
+```
+
+`js` 展开后：
+
+```js
+(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const pages = [];
+  for (let n = 1; n <= 50; n++) {                      // 最多 50 页，防止死循环
+    pages.push([...document.querySelectorAll('li.item')].map((li) => ({
+      id: li.dataset.id, title: li.querySelector('.title').textContent })));
+    const next = document.querySelector('#next');      // 末页没有下一页按钮就结束
+    if (!next) break;
+    const before = document.querySelector('#list').innerHTML;
+    next.click();
+    // 等列表内容变化（最多 10 秒），而不是固定睡一段时间
+    for (let i = 0; i < 100 && document.querySelector('#list').innerHTML === before; i++) await sleep(100);
+  }
+  return pages;
+})()
+```
+
+`eval.value` 是每页一个数组。上面的 JSON 请求体原样在 bt 上跑过；4 页、每页一次 150 毫秒的接口请求，
+整个请求 0.64 秒。
+
+- 选择器（`li.item`、`#next`、`#list`）换成目标站的；末页的判断按站点改：按钮消失、`disabled`、
+  或者带某个 class。
+- **整个循环共用一个 `timeout`**（包括页面加载），页数多就把 `timeout` 调大（最大 `MAX_TIMEOUT_MS`，
+  默认 120 秒）。超时了拿不到 `eval`，只有 `partial` 里的页面快照，所以宁可分几次。
+- 「加载更多」/ 无限滚动是同一个写法：点按钮或 `window.scrollTo(0, document.body.scrollHeight)`，
+  等条目数变多，最后一次性收集。
+
+### 链接翻页：调用方循环
+
+`js` 返回本页数据和下一页的绝对链接（`a.href` 已经是绝对地址），没有下一页时是 `null`：
+
+```js
+(() => ({
+  items: [...document.querySelectorAll('li.item')].map((li) => ({
+    id: li.dataset.id, title: li.querySelector('.title').textContent })),
+  next: document.querySelector('a.next')?.href ?? null,
+}))()
+```
+
+Python：
+
+```python
+import requests
+
+JS = """(() => ({
+  items: [...document.querySelectorAll('li.item')].map((li) => ({ id: li.dataset.id, title: li.querySelector('.title').textContent })),
+  next: document.querySelector('a.next')?.href ?? null,
+}))()"""
+
+def crawl_all(start_url, session_id, max_pages=50):
+    items, url = [], start_url
+    for _ in range(max_pages):
+        r = requests.post("http://crawl.internal:8080/crawl",
+                          json={"url": url, "js": JS, "formats": ["eval"], "session_id": session_id},
+                          timeout=40)
+        r.raise_for_status()
+        value = r.json()["eval"]["value"]
+        items += value["items"]
+        url = value["next"]
+        if not url:
+            break
+    return items
+
+items = crawl_all("https://shop.example/list?page=1", session_id="shop-list-1")
+```
+
+这段 Python 原样在 bt 上跑过（25 条全对）；测试套件里同样逻辑的 Node 循环 5 页 5 个请求共 0.12 秒。
+
+- 每次 `/crawl` 是一个新的浏览器上下文：**只有 cookie** 靠 `session_id` 带到下一页（登录态、站点
+  的分页 cookie），localStorage、内存里的 JS 状态都不保留。翻页依赖这些的站点用 MCP。
+- 下一页是「表单提交」或者 JS 跳转、拿不到链接的，也用 MCP（或者在 `js` 里点了之后读 `location.href`，
+  但那一次的结果还是旧页面的）。
+- 每页一个请求，可以并发抓不同的列表；同一个列表的页是串行的。
+
 ## 请求历史
 
 设置了 `HISTORY_DIR`（镜像默认 `/data/history`）时，每个 `POST /crawl`——成功、失败、超时、参数错误
-（400）——都会写一行 JSON 到 `HISTORY_DIR/crawl-YYYY-MM-DD.<副本>.jsonl`（日期按 **UTC**）。
+（400）——以及每个 MCP 工具调用都会写一行 JSON 到 `HISTORY_DIR/crawl-YYYY-MM-DD.<副本>.jsonl`（日期按 **UTC**）。
 同一行也打到 stdout（`docker logs` 里能看到）。**只记录发生了什么，不保存页面内容。**
 
 样例（一次超时，带回了部分结果）：
 
 ```json
-{"time":"2026-10-22T00:18:56.217Z","url":"http://172.17.0.1:41879/slow-load","finalUrl":"http://172.17.0.1:41879/slow-load","status":504,"code":"timeout","message":"request exceeded its 1500ms timeout (...)","pageStatus":200,"ms":1504,"queueMs":0,"proxyMode":"direct","proxy":null,"proxiesTried":0,"session_id":null,"formats":["html","markdown","meta"],"htmlBytes":null,"markdownBytes":null,"partial":{"source":"dom","htmlBytes":147,"markdownBytes":36},"replica":"6f0888d64ad7"}
+{"time":"2026-10-22T00:18:56.217Z","kind":"crawl","url":"http://172.17.0.1:41879/slow-load","finalUrl":"http://172.17.0.1:41879/slow-load","status":504,"code":"timeout","message":"request exceeded its 1500ms timeout (...)","pageStatus":200,"ms":1504,"queueMs":0,"proxyMode":"direct","proxy":null,"proxiesTried":0,"session_id":null,"formats":["html","markdown","meta"],"htmlBytes":null,"markdownBytes":null,"partial":{"source":"dom","htmlBytes":147,"markdownBytes":36},"replica":"6f0888d64ad7"}
 ```
 
 | 字段 | 说明 |
@@ -393,6 +628,24 @@ else:
 | `htmlBytes` / `markdownBytes` | 返回的 html / markdown 的 UTF-8 字节数，没返回为 `null` |
 | `partial` | 超时带回部分结果时：`source` 及其中 html / markdown 的字节数 |
 | `replica` | 写这行的副本 |
+| `kind` | `crawl`（`POST /crawl`）或 `mcp`（MCP 工具调用）。没有这个字段的旧行算 `crawl` |
+
+MCP 的行和 `/crawl` 的行字段相同（不适用的为 `null`），另有 `tool`、`mcp_session`、`mcp_process`、
+`args`、`resultBytes`。一次 agent 点击翻页：
+
+```json
+{"time":"2026-10-22T01:49:06.503Z","kind":"mcp","tool":"click","url":"http://172.17.0.1:32871/links/1","finalUrl":"http://172.17.0.1:32871/links/2","status":200,"code":null,"message":null,"pageStatus":null,"ms":11,"queueMs":null,"proxyMode":"url","proxy":"http://user:***@172.17.0.1:18575","proxiesTried":0,"session_id":null,"mcp_session":"mcp-707c836f23ba051c64f225a8","mcp_process":"mcp0","args":{"selector":"a.next"},"resultBytes":108,"replica":"9a206d73dcd8"}
+```
+
+| 字段（MCP） | 说明 |
+|---|---|
+| `tool` | 工具名；另有 `session_start`、`session_end`（客户端 DELETE 或闲置过期，`message` 写原因）、`session_lost`（进程挂了） |
+| `url` / `finalUrl` | 调用参数里的 `url`（没有时是调用前所在的页面）；调用后所在的页面。`goto`、`click`、`press` 之后服务会问一次引擎当前 URL，所以点链接翻页能看到去了哪 |
+| `code` / `message` | 成功为 `null`；`tool_error`（工具报错，`message` 是错误文字）、`timeout`（`goto` 没等到加载完）、`rpc_error`、`engine_error`（连不上 MCP 进程） |
+| `ms` | 这次调用的耗时；会话事件是会话已存在的时长 |
+| `mcp_session` / `mcp_process` | 会话 id；所在的 MCP 进程 |
+| `args` | 调用参数的摘要：选择器、按键之类的短参数，长字符串截到 200 字符，`fill` 的值只记长度，不含 `url` |
+| `resultBytes` | 工具返回文字的字节数（不保存内容） |
 
 - **代价**：小页面压测（`bench/profile/ab.sh`，与不带历史的镜像对比，同一个引擎二进制，各 3 轮）：写文件本身
   测不出影响（16 槽位：有历史 723 / 716 / 750 页每秒，`HISTORY_DIR` 置空 718 / 726 / 731）；更完整的那一行
@@ -418,7 +671,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 | `url` | `url` 或 `finalUrl` 包含的子串，不分大小写 |
 | `status` | 本服务的 HTTP 状态，逗号分隔（`200,504`） |
 | `code` | 错误码，逗号分隔；`ok` 表示成功 |
-| `session_id` | 精确匹配 |
+| `session_id` | 精确匹配；也匹配 MCP 行的 `mcp_session` |
+| `kind` | `crawl` 或 `mcp` |
 | `since` / `until` | ISO 时间或毫秒时间戳 |
 | `days` | 不给 `since` 时往前查几天（含今天），默认 3 |
 | `limit` | 1–1000，默认 100 |
@@ -437,9 +691,10 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 浏览器打开 `http://<服务地址>:8080/`。一个静态页面（内联样式和脚本，不加载任何外部资源），四个标签：
 
 - **状态**：每 3 秒读一次 `/health`——连接池的槽位、忙、闲、已连接、排队、重连次数；代理池每个代理
-  可用还是被剔除、使用/成功/失败次数和最近错误；session 和请求历史的统计。
-- **请求历史**：按 URL、HTTP 状态、错误码、session_id、时间范围、天数、条数筛选；点一行看完整记录；
-  可选每 10 秒自动刷新。
+  可用还是被剔除、使用/成功/失败次数和最近错误；session 和请求历史的统计；MCP 进程、会话数和调用
+  统计，以及当前 MCP 会话列表（点一行看这个会话的全部调用）。
+- **请求历史**：按 URL、HTTP 状态、错误码、类型（crawl / mcp）、session_id（也匹配 MCP 会话）、时间范围、
+  天数、条数筛选；MCP 的行在「输出 / 工具」列显示工具名和选择器；点一行看完整记录；可选每 10 秒自动刷新。
 - **试抓**：填一个 URL，选输出（html / markdown / meta / eval 加 JS）、代理（直连 / 代理池 / 指定 URL）、
   session_id、timeout、waitUntil，直接调 `/crawl` 并显示结果、meta 和耗时；长文本先显示前 2 万字符。
 - **Session**：列出 session（最后使用、过期时间、cookie 数、域名），可以跳到该 session 的历史，或删除。
@@ -456,7 +711,10 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
     { "proxy": "http://user:***@10.0.0.1:3128", "state": "active", "uses": 41, "ok": 40, "failed": 1, "consecutiveFails": 0, "lastError": "..." }
   ] },
   "sessions": { "persisted": true, "dir": "/data/sessions", "ttlMs": 604800000, "stored": 30, "loaded": 12, "saves": 340, "writeErrors": 0, "expired": 4, "deleted": 1, "lastSweep": "..." },
-  "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "..." }
+  "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "..." },
+  "mcp": { "enabled": true, "processes": [
+    { "name": "mcp0", "pid": 47, "up": true, "sessions": 2, "inFlight": 0, "calls": 18, "restarts": 0 }
+  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0 }
 }
 ```
 
@@ -465,6 +723,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 - `proxies` 没配代理池时是 `null`；`state: "ejected"` 的代理带 `retryInMs`。
 - `sessions.stored` 是现有 session 数，`loaded` 是在内存里的；`expired`/`deleted` 是启动以来的计数。
 - `history.written` 是启动以来写入的行数，`queued` 是还没落盘的，`writeErrors`/`dropped` 不为 0 要查磁盘。
+- `mcp.processes[].up` 为 false 是进程正在重启；`lost` 是因进程挂掉丢失的会话数；`refused` 是被拒绝的
+  `session_*` / `save` 调用数。`MCP_PROCS=0` 时是 `{"enabled": false}`。
 
 ## 扩容建议
 
@@ -537,4 +797,8 @@ node service/test/unit.mjs                 # 不需要引擎的单元测试
 
 覆盖四种输出、跳转、404、脚本异常、参数错误、超时与部分结果、并发排队、代理与代理池（轮询、重试、剔除、
 密码）、session（跨请求、并发合并、重启、删除、过期）、引擎被杀与恢复、请求历史（字段、代理打码、筛选、
-过期清理、重启后保留）、管理页可访问且无外部资源、session 列表。
+过期清理、重启后保留）、管理页可访问且无外部资源、session 列表；MCP（进程命令行带 `--no-webmcp` 且没有
+暴露机器人的参数、页面里没有 WebMCP 的三个名字、链接型和 ajax 型翻页点到底、两个并发会话互不等待互不串页、
+cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405、会话列表、历史字段和筛选、杀掉 MCP 进程后
+会话 404 且能新建、DELETE）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 94 项全部通过。单元测试另有 MCP
+网关的路由、会话、过期和历史（假引擎，不需要 Docker）。

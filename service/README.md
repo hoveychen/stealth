@@ -15,6 +15,9 @@ LP_CDP_URL=ws://127.0.0.1:9222/ POOL_SIZE=4 node service/server.mjs
 Don't start the engine with `--obey-robots`, `--web-bot-auth-*` or `--webmcp`;
 each of them identifies the client as a bot (see `AGENTS.md`).
 
+The same port also serves MCP (`/mcp`), for agents that drive a page step by
+step (goto, click, fill, page through...); see [MCP](#mcp-mcp).
+
 ## Docker
 
 One image, one container: `lightpanda serve` built from this checkout plus
@@ -90,6 +93,13 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `HISTORY_DIR`        | (none: no history)      | directory for the request history, one file per UTC day and replica (see [Request history](#request-history)) |
 | `HISTORY_RETENTION_DAYS` | `7`                 | days of history kept, today included; older files are deleted at startup and hourly. `0` keeps everything |
 | `HISTORY_REPLICA`    | the hostname (in a container: its id) | this process's part of the history file names, so replicas sharing a volume never write the same file |
+| `MCP_PROCS`          | `0` (the image: `2`)    | engine `lightpanda mcp` processes the service starts for `/mcp`; `0` turns `/mcp` off. Each runs one tool call at a time (see [MCP](#mcp-mcp)) |
+| `MCP_MAX_SESSIONS`   | `32`                    | MCP sessions at once; `initialize` beyond it is a 503 |
+| `MCP_SESSION_IDLE_MS`| `1800000` (30 min)      | an MCP session with no call for this long is closed; `0` never |
+| `MCP_CALL_TIMEOUT_MS`| `120000`                | longest wait for the engine's answer to one MCP request (then 504) |
+| `MCP_PROXY`          |                         | one proxy URL for all MCP browsing (the engine's `--http-proxy`) |
+| `MCP_BASE_PORT`      | `9300`                  | first loopback port of the MCP processes (one each, consecutive) |
+| `LP_BIN`             | `/bin/lightpanda`       | the engine binary the MCP processes run |
 
 There is no authentication; the service, its admin page included, is meant
 for an internal network.
@@ -335,15 +345,86 @@ The sessions there are, most recently used first (`?limit=`, default 200):
 Cookie values are never listed. `expiresAt` is `null` with `SESSION_TTL_MS=0`;
 `loaded` says whether the jar is held in memory (otherwise it is only on disk).
 
+## MCP (`/mcp`)
+
+`/mcp` is an MCP Streamable HTTP endpoint (JSON responses; `GET` is 405, no
+event stream). Each `initialize` gets a browser of its own, driven with the
+engine's MCP tools (`goto`, `click`, `fill`, `press`, `scroll`,
+`waitForSelector`, `markdown`, `extract`, `evaluate`, ...); the page stays
+between calls, as with Playwright. Chinese guide with client configuration:
+[README.zh-CN.md](README.zh-CN.md#agent-接入mcp).
+
+```bash
+claude mcp add --transport http crawl http://crawl.internal:8080/mcp
+```
+
+How it is put together (`lib/mcp.mjs`):
+
+- The service starts `MCP_PROCS` `lightpanda mcp --port` processes on
+  loopback, with `--no-webmcp` and a clean environment (no `LP_*`: the
+  engine's `getEnv` tool would hand them to the agent), and restarts one that
+  exits. `mcp --port` cannot share a process with `serve`: it and
+  `--cdp-port` each need the main thread for their accept loop
+  (`src/main.zig`).
+- One engine `mcp` process runs all of its sessions' tool calls on one
+  thread, one at a time: measured, a goto that waited 4 s for a slow page
+  held a second session's goto of a fast page for 3.8 s. So sessions are
+  spread over the processes (fewest sessions first) and stay on theirs; with
+  `MCP_PROCS=2` the same pair took 21 ms for the fast page while the slow one
+  loaded.
+- Sessions are minted by the service on `initialize`, as random ids. A
+  request without `Mcp-Session-Id` (other than `initialize`) is a 400 rather
+  than the engine's shared `default` session; an unknown id is a 404, which
+  tells an MCP client to initialize again. The engine's `session_new`,
+  `session_list`, `session_close` (list, join or close other agents'
+  sessions) and `save` (writes a file in the container) are left out of
+  `tools/list` and refused.
+- Calls to one session are forwarded one at a time. After `goto`, `click`
+  and `press` the service asks the engine for the page URL (`getUrl`), so
+  the history shows where a click led.
+- Idle sessions are closed after `MCP_SESSION_IDLE_MS`; Claude Code's
+  `claude -p` does not send `DELETE` when it ends. A process that dies takes
+  its sessions with it: they answer 404 and the history gets a
+  `session_lost` line.
+- `MCP_PROXY` is the only proxy: the engine's MCP tools take none, so there
+  is no per-session proxy and no pool.
+- `GET /mcp/sessions` lists the live sessions (process, created, last call,
+  calls, current URL); `/health` has an `mcp` block.
+
+The pages carry no WebMCP surface: `typeof navigator.modelContext`,
+`ModelContext` and `ModelContextClient` are `"undefined"` (the engine's `mcp`
+command adds all three unless given `--no-webmcp`). The same page opened
+through `/crawl` and through MCP sent the same 14 request headers and the
+same `navigator.userAgent` / `webdriver` / `plugins` / `languages`.
+
+Measured on bt (2026-10-22): `claude -p` (Sonnet 5.5) over an SSH tunnel to
+the container's `/mcp`, told only to find the next-page control and page to
+the end, collected all 25 items of a 5-page link-paged list (clicking
+`a.next` four times when told to click; otherwise reading the page links and
+opening each) and all 20 of a 4-page ajax list (`click #next` then `extract`,
+three times), 13–18 s each.
+
+## Paging
+
+Three ways, from least to most code: give the task to an agent over MCP; for
+ajax paging (the next-page button swaps the list, the URL stays) loop over
+the clicks inside one `/crawl` request's `js`; for link paging (a URL per
+page) loop in the caller, each `js` returning the page's items and the next
+page's link, with one `session_id` so cookies carry over. Both `/crawl`
+recipes are in [README.zh-CN.md](README.zh-CN.md#翻页) and run in
+`test/run.mjs` (section 19). The ajax loop shares the request's one
+`timeout`; each link-paged request is a fresh browser context in which only
+cookies carry over (via `session_id`).
+
 ## Request history
 
 With `HISTORY_DIR` set (the image sets `/data/history`), every `POST /crawl`
-— finished, failed, timed out, or rejected with 400 — adds one JSON line to
+— finished, failed, timed out, or rejected with 400 — and every MCP tool call adds one JSON line to
 `HISTORY_DIR/crawl-YYYY-MM-DD.<replica>.jsonl` (the UTC date). The same line
 goes to stdout. It records what happened, never the page itself:
 
 ```json
-{"time":"2026-10-22T00:18:56.217Z","url":"http://172.17.0.1:41879/slow-load","finalUrl":"http://172.17.0.1:41879/slow-load","status":504,"code":"timeout","message":"request exceeded its 1500ms timeout (...)","pageStatus":200,"ms":1504,"queueMs":0,"proxyMode":"direct","proxy":null,"proxiesTried":0,"session_id":null,"formats":["html","markdown","meta"],"htmlBytes":null,"markdownBytes":null,"partial":{"source":"dom","htmlBytes":147,"markdownBytes":36},"replica":"6f0888d64ad7"}
+{"time":"2026-10-22T00:18:56.217Z","kind":"crawl","url":"http://172.17.0.1:41879/slow-load","finalUrl":"http://172.17.0.1:41879/slow-load","status":504,"code":"timeout","message":"request exceeded its 1500ms timeout (...)","pageStatus":200,"ms":1504,"queueMs":0,"proxyMode":"direct","proxy":null,"proxiesTried":0,"session_id":null,"formats":["html","markdown","meta"],"htmlBytes":null,"markdownBytes":null,"partial":{"source":"dom","htmlBytes":147,"markdownBytes":36},"replica":"6f0888d64ad7"}
 ```
 
 | field | meaning |
@@ -358,6 +439,15 @@ goes to stdout. It records what happened, never the page itself:
 | `htmlBytes`, `markdownBytes` | UTF-8 size of the returned `html` / `markdown`, `null` when not returned |
 | `partial` | after a timeout with `partial`: its `source` and the sizes of what it carried |
 | `replica` | which process wrote it |
+| `kind` | `crawl` or `mcp`; lines from before the field existed are crawls |
+
+An MCP line has the same fields (`null` where they don't apply) plus `tool`
+(also `session_start`, `session_end`, `session_lost`), `mcp_session`,
+`mcp_process`, `args` (short arguments such as a selector; long strings
+clipped, `fill` values reduced to their length) and `resultBytes`. Its `url`
+is the call's `url` argument or the page the call started on, `finalUrl` the
+page after it; `code` is `tool_error` (the tool's message in `message`),
+`timeout` (a `goto` that did not reach load), `rpc_error` or `engine_error`.
 
 What it costs, through the service on small pages (`list.html`, the A/B
 runs of `bench/profile/ab.sh` against the image without history, same
@@ -392,7 +482,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 | `url` | substring of `url` or `finalUrl`, case-insensitive |
 | `status` | HTTP statuses of this service, comma-separated (`200,504`) |
 | `code` | error codes, comma-separated; `ok` matches successes |
-| `session_id` | exact |
+| `session_id` | exact; also matches an MCP line's `mcp_session` |
+| `kind` | `crawl` or `mcp` |
 | `since`, `until` | ISO time or milliseconds since the epoch |
 | `days` | without `since`: how many days back to read, today included (default 3) |
 | `limit` | 1–1000, default 100 |
@@ -409,6 +500,7 @@ Without `HISTORY_DIR` the answer is `{ "enabled": false, "entries": [] }`.
 
 - the live status, from `/health` every 3 s: slots busy / idle / queued,
   reconnects, each pool proxy and whether it is ejected, sessions, history,
+  the MCP processes and the live MCP sessions,
 - the request history with the filters above; a row opens the full line,
 - a form to try a crawl (formats, `js`, proxy, `session_id`, `timeout`,
   `waitUntil`) showing the result and its `meta`,
@@ -599,7 +691,12 @@ cookies (across requests, concurrent requests, a service restart, `DELETE`,
 and expiry after `SESSION_TTL_MS`), partial results after a timeout, killing
 and restarting the engine, pages stuck in script, the request history (fields,
 redacted proxies, filters, retention at startup, surviving a restart), the
-admin page (served, no external resources) and `GET /sessions`. Against the container it
+admin page (served, no external resources), `GET /sessions`, MCP (the
+processes' flags, no WebMCP surface on the page, link and ajax paging clicked
+to the end, two concurrent sessions neither waiting on nor seeing each other,
+cookie isolation, `MCP_PROXY` with credentials, refused session tools,
+400/404/405, `/mcp/sessions`, the history lines and filters, a killed MCP
+process, `DELETE`) and the two `/crawl` paging recipes. Against the container it
 also checks the engine's command line for `--http-max-concurrent`.
 Use a ReleaseFast engine build; the Debug build in `zig-out` is about 3.5×
 slower.
@@ -619,4 +716,5 @@ when you set it up by hand.
 `node service/test/unit.mjs` checks the pool, the dead-proxy / dead-site
 diagnosis (against local test proxies), the session store (cookie merge,
 TTL, delete) and the history (daily files per replica, failed writes,
-retention, query filters) without an engine.
+retention, query filters) and the MCP gateway (routing, sessions, hidden
+tools, idle sweep, history; against fake engine MCP servers) without an engine.
