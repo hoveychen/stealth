@@ -233,6 +233,44 @@ export class SessionStore {
         return n;
     }
 
+    // The sessions there are, most recently used first, at most `limit`:
+    // { id, lastUsed, expiresAt, cookies, domains, loaded }. Cookie values
+    // are not part of it. Sessions only on disk are ordered by their file's
+    // mtime, and only the `limit` listed have their file read.
+    async list(limit = 200) {
+        const rows = new Map();
+        for (const [id, jar] of this.jars) rows.set(id, { id, lastUsed: jar.lastUsed, jar });
+        if (this.dir) {
+            for (const id of this.onDisk) {
+                if (rows.has(id)) continue;
+                try {
+                    rows.set(id, { id, lastUsed: (await fs.stat(this.file(id))).mtimeMs });
+                } catch {}
+            }
+        }
+        const top = [...rows.values()].sort((a, b) => b.lastUsed - a.lastUsed).slice(0, limit);
+        const out = [];
+        for (const r of top) {
+            let cookies = r.jar ? [...r.jar.cookies.values()] : null;
+            if (!cookies) {
+                try {
+                    cookies = JSON.parse(await fs.readFile(this.file(r.id), 'utf8')).cookies ?? [];
+                } catch {
+                    continue;
+                }
+            }
+            out.push({
+                id: r.id,
+                lastUsed: new Date(r.lastUsed).toISOString(),
+                expiresAt: this.ttlMs ? new Date(r.lastUsed + this.ttlMs).toISOString() : null,
+                cookies: cookies.length,
+                domains: [...new Set(cookies.map((c) => c.domain.replace(/^\./, '')))].sort(),
+                loaded: !!r.jar,
+            });
+        }
+        return { total: rows.size, sessions: out };
+    }
+
     stats() {
         const stored = this.dir ? new Set([...this.onDisk, ...this.jars.keys()]).size : this.jars.size;
         return {

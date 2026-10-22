@@ -3,9 +3,11 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import { Pool } from './lib/pool.mjs';
 import { crawl, normalizeRequest, RequestError } from './lib/crawl.mjs';
-import { normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool } from './lib/proxies.mjs';
+import { History, MAX_LIMIT } from './lib/history.mjs';
+import { normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool, redact } from './lib/proxies.mjs';
 import { SESSION_ID, SessionStore } from './lib/sessions.mjs';
 
 const env = (name, fallback) => process.env[name] ?? fallback;
@@ -44,6 +46,15 @@ const config = {
     sessionTtlMs: nonNegInt('SESSION_TTL_MS', 7 * 24 * 3600 * 1000),
     sessionSweepMs: int('SESSION_SWEEP_MS', 10 * 60 * 1000),
     proxyRetries: nonNegInt('PROXY_POOL_RETRIES', 2),
+    historyDir: env('HISTORY_DIR', '') || null,
+    // Days of request history kept, today included (0: keep everything). A
+    // week covers "what happened yesterday / last week" and bounds the disk:
+    // a line is ~0.4 KB, so a container kept busy around the clock writes
+    // ~20 GB a day (see README), and a week of that is already a lot.
+    historyRetentionDays: nonNegInt('HISTORY_RETENTION_DAYS', 7),
+    // Part of the file names, so replicas sharing a volume don't share files.
+    // In a container the hostname is the container id.
+    historyReplica: env('HISTORY_REPLICA', '') || os.hostname(),
     proxyProbe: null,
 };
 if (env('PROXY_PROBE', '')) {
@@ -81,7 +92,20 @@ const sweepSessions = () =>
 await sweepSessions();
 if (config.sessionTtlMs) setInterval(sweepSessions, config.sessionSweepMs).unref();
 
+const history = new History({ dir: config.historyDir, retentionDays: config.historyRetentionDays, replica: config.historyReplica });
+await history.init();
+const sweepHistory = () =>
+    history.sweep().then(
+        (n) => n && log({ msg: 'history files expired', count: n, retentionDays: config.historyRetentionDays }),
+        (e) => console.error(`history sweep failed: ${e.message}`),
+    );
+await sweepHistory();
+if (history.enabled && config.historyRetentionDays) setInterval(sweepHistory, 3600 * 1000).unref();
+
 const pool = new Pool({ cdpUrl: config.cdpUrl, size: config.poolSize, queueMax: config.queueMax });
+
+// The admin page: one static file, no external resources.
+const ADMIN_PAGE = fs.readFileSync(new URL('./admin.html', import.meta.url));
 
 const STATUS = {
     queue_full: 503,
@@ -95,10 +119,13 @@ const STATUS = {
     timeout: 504,
 };
 
+// Encoded once: Buffer.byteLength and then res.end(text) would go over a
+// large html response twice; on a 34 KB page with a character above U+00FF
+// the second pass is ~25 us, which pays for the history's byte counts.
 function reply(res, status, body) {
-    const text = JSON.stringify(body);
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) });
-    res.end(text);
+    const buf = Buffer.from(JSON.stringify(body));
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length });
+    res.end(buf);
 }
 
 function readBody(req) {
@@ -120,10 +147,10 @@ function readBody(req) {
 }
 
 async function handleCrawl(req, res) {
-    let params;
+    const t0 = Date.now();
+    let params, body;
     try {
         const raw = await readBody(req);
-        let body;
         try {
             body = JSON.parse(raw);
         } catch {
@@ -131,24 +158,107 @@ async function handleCrawl(req, res) {
         }
         params = normalizeRequest(body, config);
     } catch (e) {
-        if (e instanceof RequestError) return reply(res, 400, { error: { code: 'bad_request', message: e.message } });
+        if (e instanceof RequestError) {
+            reply(res, 400, { error: { code: 'bad_request', message: e.message } });
+            const url = typeof body?.url === 'string' ? body.url : null;
+            return logCrawl({ url, status: 400, code: 'bad_request', message: e.message, ms: Date.now() - t0 });
+        }
         throw e;
     }
-    const t0 = Date.now();
+    const info = {};
+    const request = { session_id: params.sessionId ?? null, formats: params.formats, proxyMode: params.proxy.mode };
     try {
-        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe });
+        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe }, info);
         reply(res, 200, { url: params.url, ...out });
-        log({ url: params.url, status: 200, ms: Date.now() - t0 });
+        logCrawl({ url: params.url, status: 200, code: null, message: null, ms: Date.now() - t0, ...request, ...info, htmlBytes: bytes(out.html), markdownBytes: bytes(out.markdown), partial: null });
     } catch (e) {
         const code = e.code in STATUS ? e.code : 'internal';
         const status = STATUS[code] ?? 500;
         reply(res, status, { error: { code, message: e.message }, ...(e.partial ? { partial: e.partial } : {}) });
-        log({ url: params.url, status, code, ms: Date.now() - t0, message: e.message });
+        const partial = e.partial ? { source: e.partial.source, htmlBytes: bytes(e.partial.html), markdownBytes: bytes(e.partial.markdown) } : null;
+        logCrawl({ url: params.url, status, code, message: e.message, ms: Date.now() - t0, ...request, ...info, htmlBytes: null, markdownBytes: null, partial });
     }
+}
+
+const bytes = (s) => (typeof s === 'string' ? Buffer.byteLength(s) : null);
+const clip = (s, n) => (typeof s === 'string' && s.length > n ? `${s.slice(0, n)}…` : s);
+
+// One crawl's line, the same on stdout and in the history. Page content is
+// never part of it, only its size.
+function logCrawl(f) {
+    const entry = {
+        time: new Date().toISOString(),
+        url: f.url == null ? null : clip(redact(f.url), 2048),
+        finalUrl: f.finalUrl == null ? null : clip(redact(f.finalUrl), 2048),
+        status: f.status,
+        code: f.code,
+        message: clip(f.message, 1000),
+        pageStatus: f.pageStatus ?? null,
+        ms: f.ms,
+        queueMs: f.queueMs ?? null,
+        proxyMode: f.proxyMode ?? null,
+        proxy: f.proxy ?? null,
+        proxiesTried: f.proxiesTried ?? 0,
+        session_id: f.session_id ?? null,
+        formats: f.formats ?? null,
+        htmlBytes: f.htmlBytes ?? null,
+        markdownBytes: f.markdownBytes ?? null,
+        partial: f.partial ?? null,
+        replica: history.replica,
+    };
+    const line = JSON.stringify(entry);
+    console.log(line);
+    history.record(entry, line);
 }
 
 function log(fields) {
     console.log(JSON.stringify({ time: new Date().toISOString(), ...fields }));
+}
+
+// GET /history query string -> History.query filter; throws RequestError.
+function historyFilter(q) {
+    const intParam = (name, min, max, fallback) => {
+        if (!q.has(name)) return fallback;
+        const v = Number(q.get(name));
+        if (!Number.isInteger(v) || v < min || v > max) throw new RequestError(`${name} must be an integer from ${min} to ${max}`);
+        return v;
+    };
+    const time = (name) => {
+        if (!q.has(name)) return undefined;
+        const raw = q.get(name);
+        const v = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw);
+        if (!Number.isFinite(v)) throw new RequestError(`${name} must be an ISO time or milliseconds since the epoch`);
+        return v;
+    };
+    const list = (name) => (q.get(name) ? q.get(name).split(',').map((s) => s.trim()).filter(Boolean) : undefined);
+    const status = list('status')?.map((s) => {
+        if (!/^\d{3}$/.test(s)) throw new RequestError('status must be HTTP status codes, comma-separated');
+        return Number(s);
+    });
+    return {
+        url: q.get('url') || undefined,
+        status,
+        code: list('code'),
+        session_id: q.get('session_id') || undefined,
+        since: time('since'),
+        until: time('until'),
+        limit: intParam('limit', 1, MAX_LIMIT, 100),
+        days: intParam('days', 1, 3650, 3),
+    };
+}
+
+function handleHistory(req, res) {
+    if (!history.enabled) return reply(res, 200, { enabled: false, entries: [] });
+    let filter;
+    try {
+        filter = historyFilter(new URL(req.url, 'http://x').searchParams);
+    } catch (e) {
+        return reply(res, 400, { error: { code: 'bad_request', message: e.message } });
+    }
+    history.query(filter).then(
+        (r) => reply(res, 200, { enabled: true, ...r }),
+        (e) => reply(res, 500, { error: { code: 'internal', message: e.message } }),
+    );
 }
 
 const server = http.createServer((req, res) => {
@@ -176,7 +286,21 @@ const server = http.createServer((req, res) => {
         return;
     }
     if (req.method === 'GET' && path === '/health') {
-        return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats() });
+        return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats() });
+    }
+    if (req.method === 'GET' && path === '/history') return handleHistory(req, res);
+    if (req.method === 'GET' && path === '/sessions') {
+        const limit = Number(new URL(req.url, 'http://x').searchParams.get('limit') ?? 200);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 10000) return reply(res, 400, { error: { code: 'bad_request', message: 'limit must be an integer from 1 to 10000' } });
+        sessions.list(limit).then(
+            (r) => reply(res, 200, r),
+            (e) => reply(res, 500, { error: { code: 'internal', message: e.message } }),
+        );
+        return;
+    }
+    if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': ADMIN_PAGE.length, 'cache-control': 'no-cache' });
+        return res.end(ADMIN_PAGE);
     }
     reply(res, 404, { error: { code: 'not_found', message: `${req.method} ${path}` } });
 });
@@ -184,13 +308,16 @@ const server = http.createServer((req, res) => {
 // Requests may legitimately hold for MAX_TIMEOUT_MS plus queueing.
 server.requestTimeout = 0;
 server.listen(config.port, config.host, 1024, () => {
-    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs });
+    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs, historyDir: config.historyDir, historyRetentionDays: config.historyRetentionDays, historyReplica: history.replica });
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
     process.on(sig, () => {
         server.close();
         pool.close();
-        process.exit(0);
+        // The last second of history is still queued; give it a moment.
+        const exit = () => process.exit(0);
+        setTimeout(exit, 2000).unref();
+        history.close().then(exit, exit);
     });
 }

@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>爬虫服务管理</title>
+<style>
+  :root { --fg: #1d1d1f; --muted: #6b6b70; --line: #d9d9de; --bg2: #f4f4f6; --ok: #1a7f37; --bad: #c0392b; --warn: #9a6700; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--fg); }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; }
+  header .meta { color: var(--muted); font-size: 12px; }
+  nav { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+  nav a { padding: 8px 14px; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; }
+  nav a.on { color: var(--fg); border-bottom-color: var(--fg); }
+  main { padding: 12px 16px 40px; }
+  section { display: none; }
+  section.on { display: block; }
+  h2 { font-size: 14px; margin: 18px 0 6px; }
+  h2:first-child { margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; background: var(--bg2); white-space: nowrap; }
+  table.kv { width: auto; }
+  table.kv th { background: none; font-weight: normal; color: var(--muted); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .url { word-break: break-all; }
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
+  .warn { color: var(--warn); }
+  .muted { color: var(--muted); }
+  .cards { display: flex; flex-wrap: wrap; gap: 24px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-bottom: 10px; }
+  .row > label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
+  .row > label.inline { flex-direction: row; align-items: center; gap: 4px; }
+  input, select, textarea, button { font: inherit; font-size: 13px; }
+  input[type=text], input[type=number], input[type=datetime-local], select, textarea { padding: 3px 6px; border: 1px solid var(--line); border-radius: 3px; color: var(--fg); }
+  button { padding: 3px 12px; border: 1px solid #8e8e93; border-radius: 3px; background: #fff; cursor: pointer; }
+  button:hover { background: var(--bg2); }
+  button.danger { color: var(--bad); border-color: var(--bad); }
+  tr.hit { cursor: pointer; }
+  tr.hit:hover td { background: #fafafa; }
+  tr.detail td { background: var(--bg2); }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 480px; overflow: auto; background: var(--bg2); padding: 8px; }
+  .status { margin: 6px 0; }
+  fieldset { border: 1px solid var(--line); margin: 0 0 10px; padding: 8px 10px; }
+  legend { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>爬虫服务管理</h1>
+  <span class="meta" id="hdr">连接中…</span>
+</header>
+<nav>
+  <a href="#status" data-tab="status">状态</a>
+  <a href="#history" data-tab="history">请求历史</a>
+  <a href="#try" data-tab="try">试抓</a>
+  <a href="#sessions" data-tab="sessions">Session</a>
+</nav>
+<main>
+
+<section id="status">
+  <div class="cards">
+    <div><h2>连接池</h2><table class="kv" id="st-pool"></table></div>
+    <div><h2>Session</h2><table class="kv" id="st-sessions"></table></div>
+    <div><h2>请求历史</h2><table class="kv" id="st-history"></table></div>
+  </div>
+  <h2>代理池</h2>
+  <div id="st-proxies"></div>
+  <p class="muted">每 3 秒刷新一次（页面在后台时暂停）。</p>
+</section>
+
+<section id="history">
+  <form class="row" id="hf">
+    <label>URL 包含<input type="text" name="url" size="28"></label>
+    <label>HTTP 状态<input type="text" name="status" size="8" placeholder="200,504"></label>
+    <label>错误码<input type="text" name="code" size="16" list="codes" placeholder="ok / timeout"></label>
+    <label>session_id<input type="text" name="session_id" size="14"></label>
+    <label>起<input type="datetime-local" name="since" step="1"></label>
+    <label>止<input type="datetime-local" name="until" step="1"></label>
+    <label>最近天数<input type="number" name="days" value="3" min="1" style="width:5em"></label>
+    <label>条数<input type="number" name="limit" value="100" min="1" max="1000" style="width:6em"></label>
+    <button type="submit">查询</button>
+    <button type="button" id="hf-reset">清空</button>
+    <label class="inline"><input type="checkbox" id="hf-auto">每 10 秒自动刷新</label>
+  </form>
+  <datalist id="codes"></datalist>
+  <div class="status muted" id="h-sum"></div>
+  <table id="h-table">
+    <thead><tr><th>时间</th><th>结果</th><th>URL</th><th class="num">页面状态</th><th class="num">耗时 ms</th><th>代理</th><th>session</th><th>输出</th><th class="num">大小</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="muted">点一行看完整记录。不填「起」时只查最近几天（按 UTC 日期分文件）。</p>
+</section>
+
+<section id="try">
+  <form id="tf">
+    <div class="row">
+      <label>URL<input type="text" name="url" size="60" placeholder="https://example.com/" required></label>
+      <label>timeout (ms)<input type="number" name="timeout" placeholder="默认" min="1" style="width:8em"></label>
+      <label>waitUntil<select name="waitUntil"><option value="">load（默认）</option><option>domcontentloaded</option><option>networkidle</option></select></label>
+    </div>
+    <fieldset><legend>输出</legend>
+      <label><input type="checkbox" name="f" value="html" checked> html</label>
+      <label><input type="checkbox" name="f" value="markdown" checked> markdown</label>
+      <label><input type="checkbox" name="f" value="meta" checked> meta</label>
+      <label><input type="checkbox" name="f" value="eval"> eval</label>
+      <div id="js-wrap" style="display:none;margin-top:6px"><textarea name="js" rows="3" cols="80" placeholder="页面加载后执行的 JS 表达式，如 document.title；语句请包成 (async () => { ... })()"></textarea></div>
+    </fieldset>
+    <fieldset><legend>代理与 session</legend>
+      <label>代理 <select name="proxyMode"><option value="">不指定（按服务默认）</option><option value="direct">direct（直连）</option><option value="pool">pool（代理池）</option><option value="url">指定代理 URL</option></select></label>
+      <input type="text" name="proxyUrl" size="40" placeholder="http://user:pass@host:port" style="display:none">
+      &nbsp; <label>session_id <input type="text" name="session_id" size="20" placeholder="可选"></label>
+    </fieldset>
+    <button type="submit">抓取</button> <span class="muted" id="t-wait"></span>
+  </form>
+  <div id="t-out"></div>
+</section>
+
+<section id="sessions">
+  <div class="status muted" id="s-sum"></div>
+  <table id="s-table">
+    <thead><tr><th>session_id</th><th>最后使用</th><th>过期时间</th><th class="num">cookie 数</th><th>域名</th><th>在内存</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="muted">只显示 cookie 数和域名，不显示 cookie 的值。删除后，用同一个 session_id 的下一次抓取从空 cookie 开始。</p>
+</section>
+
+</main>
+<script>
+'use strict';
+const CODES = {
+  ok: '成功', bad_request: '请求参数错误', timeout: '超时', navigation_failed: '页面打不开',
+  proxy_failed: '代理不可用', proxy_auth_failed: '代理认证失败', no_proxy_available: '代理池全部被剔除',
+  queue_full: '排队已满', engine_unavailable: '引擎连不上', engine_disconnected: '引擎连接中断',
+  cdp_error: '引擎拒绝命令', internal: '服务内部错误',
+};
+const $ = (s, root = document) => root.querySelector(s);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k));
+  return e;
+}
+const fmtTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
+const fmtBytes = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(2)} MB`);
+const fmtMs = (ms) => (ms == null ? '' : ms < 1000 ? `${ms} ms` : ms < 120000 ? `${+(ms / 1000).toFixed(1)} 秒` : ms < 7200000 ? `${+(ms / 60000).toFixed(1)} 分钟` : ms < 172800000 ? `${+(ms / 3600000).toFixed(1)} 小时` : `${+(ms / 86400000).toFixed(1)} 天`);
+const kv = (table, rows) => table.replaceChildren(...rows.map(([k, v, cls]) => el('tr', {}, el('th', {}, k), el('td', { class: cls ?? 'num' }, v ?? '—'))));
+async function getJson(url, opts) {
+  const r = await fetch(url, opts);
+  const body = await r.json().catch(() => ({}));
+  return { status: r.status, body };
+}
+function codeCell(e) {
+  const code = e.code || 'ok';
+  return el('span', { class: e.status === 200 ? 'ok' : 'bad', title: CODES[code] || '' }, `${e.status} ${code === 'ok' ? '' : code}`);
+}
+$('#codes').replaceChildren(...Object.entries(CODES).map(([k, v]) => el('option', { value: k }, v)));
+
+// ---- tabs
+const tabs = { status: refreshStatus, history: loadHistory, sessions: loadSessions, try: () => {} };
+function showTab() {
+  const name = location.hash.slice(1) in tabs ? location.hash.slice(1) : 'status';
+  for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.dataset.tab === name);
+  for (const s of document.querySelectorAll('main > section')) s.classList.toggle('on', s.id === name);
+  tabs[name]();
+  if (name !== 'status') refreshStatus();
+}
+addEventListener('hashchange', showTab);
+
+// ---- status (also keeps the header current on every tab)
+async function refreshStatus() {
+  let h;
+  try {
+    h = (await getJson('/health')).body;
+  } catch (e) {
+    $('#hdr').replaceChildren(el('span', { class: 'bad' }, `连不上服务：${e.message}`));
+    return;
+  }
+  $('#hdr').textContent = `副本 ${h.history?.replica ?? '?'} · 刷新于 ${fmtTime(new Date().toISOString())}`;
+  const p = h.pool;
+  kv($('#st-pool'), [
+    ['槽位', p.size], ['忙', p.busy], ['闲', p.size - p.busy], ['已连接', p.connected],
+    ['排队', p.queued, p.queued ? 'num warn' : 'num'], ['重连次数', p.reconnects],
+  ]);
+  const s = h.sessions;
+  kv($('#st-sessions'), [
+    ['持久化目录', s.persisted ? s.dir : '无（只在内存）', ''], ['闲置过期', s.ttlMs ? fmtMs(s.ttlMs) : '永不'],
+    ['现有', s.stored], ['在内存', s.loaded], ['保存次数', s.saves], ['写失败', s.writeErrors, s.writeErrors ? 'num bad' : 'num'],
+    ['已过期', s.expired], ['已删除', s.deleted], ['上次清理', fmtTime(s.lastSweep), ''],
+  ]);
+  const hi = h.history;
+  kv($('#st-history'), hi?.enabled ? [
+    ['目录', hi.dir, ''], ['副本', hi.replica, ''], ['保留天数', hi.retentionDays || '永久'],
+    ['已写入', hi.written], ['待写入', hi.queued], ['写失败', hi.writeErrors, hi.writeErrors ? 'num bad' : 'num'],
+    ['丢弃', hi.dropped, hi.dropped ? 'num bad' : 'num'], ['最近错误', hi.lastError, 'bad'],
+    ['已清理文件', hi.removedFiles], ['上次清理', fmtTime(hi.lastSweep), ''],
+  ] : [['状态', '未开启（没有设置 HISTORY_DIR）', '']]);
+  const px = h.proxies;
+  if (!px) {
+    $('#st-proxies').replaceChildren(el('p', { class: 'muted' }, '未配置代理池（PROXY_POOL / PROXY_POOL_FILE）。'));
+  } else {
+    $('#st-proxies').replaceChildren(
+      el('p', {}, `可用 ${px.active} / ${px.size}；连续失败 ${px.maxFails} 次剔除，剔除 ${fmtMs(px.retryAfterMs)} 后再试。`),
+      el('table', {},
+        el('thead', {}, el('tr', {}, ['代理', '状态', '使用', '成功', '失败', '连续失败', '最近错误'].map((t, i) => el('th', { class: i >= 2 && i <= 5 ? 'num' : null }, t)))),
+        el('tbody', {}, px.proxies.map((x) => el('tr', {},
+          el('td', { class: 'mono url' }, x.proxy),
+          el('td', { class: x.state === 'active' ? 'ok' : 'bad' }, x.state === 'active' ? '可用' : `已剔除（${Math.ceil(x.retryInMs / 1000)} 秒后再试）`),
+          el('td', { class: 'num' }, x.uses), el('td', { class: 'num' }, x.ok), el('td', { class: 'num' }, x.failed),
+          el('td', { class: 'num' }, x.consecutiveFails), el('td', { class: 'mono url' }, x.lastError ?? '')))),
+      ),
+    );
+  }
+}
+setInterval(() => {
+  if (!document.hidden) refreshStatus();
+}, 3000);
+
+// ---- history
+async function loadHistory() {
+  const f = new FormData($('#hf'));
+  const q = new URLSearchParams();
+  for (const k of ['url', 'status', 'code', 'session_id', 'days', 'limit']) if (f.get(k)) q.set(k, f.get(k).trim());
+  for (const k of ['since', 'until']) if (f.get(k)) q.set(k, new Date(f.get(k)).toISOString());
+  $('#h-sum').textContent = '查询中…';
+  let r;
+  try {
+    r = await getJson(`/history?${q}`);
+  } catch (e) {
+    $('#h-sum').replaceChildren(el('span', { class: 'bad' }, `查询失败：${e.message}`));
+    return;
+  }
+  const tbody = $('#h-table tbody');
+  if (r.status !== 200) {
+    $('#h-sum').replaceChildren(el('span', { class: 'bad' }, `查询失败：${r.body.error?.message ?? r.status}`));
+    tbody.replaceChildren();
+    return;
+  }
+  if (!r.body.enabled) {
+    $('#h-sum').textContent = '请求历史未开启：设置 HISTORY_DIR（镜像默认 /data/history）。';
+    tbody.replaceChildren();
+    return;
+  }
+  const { entries, scanned, from } = r.body;
+  $('#h-sum').textContent = `${entries.length} 条（自 ${fmtTime(from)} 起，读了 ${scanned.files} 个文件 ${scanned.lines} 行）`;
+  tbody.replaceChildren(...entries.flatMap((e) => {
+    const detail = el('tr', { class: 'detail', hidden: true }, el('td', { colspan: 9 }, el('pre', {}, JSON.stringify(e, null, 2))));
+    const sizes = [e.htmlBytes != null && `html ${fmtBytes(e.htmlBytes)}`, e.markdownBytes != null && `md ${fmtBytes(e.markdownBytes)}`,
+      e.partial && `部分结果(${e.partial.source ?? '无'}) ${[e.partial.htmlBytes, e.partial.markdownBytes].filter((n) => n != null).map(fmtBytes).join(' / ')}`].filter(Boolean);
+    const row = el('tr', { class: 'hit', onclick: () => (detail.hidden = !detail.hidden) },
+      el('td', { class: 'mono', title: e.time }, fmtTime(e.time)),
+      el('td', {}, codeCell(e)),
+      el('td', { class: 'mono url', title: e.message || '' }, e.url ?? '', e.finalUrl && e.finalUrl !== e.url ? el('div', { class: 'muted' }, `→ ${e.finalUrl}`) : null,
+        e.message ? el('div', { class: 'bad' }, e.message.length > 160 ? `${e.message.slice(0, 160)}…` : e.message) : null),
+      el('td', { class: 'num' }, e.pageStatus ?? ''),
+      el('td', { class: 'num', title: e.queueMs != null ? `排队 ${e.queueMs} ms` : '' }, e.ms),
+      el('td', { class: 'mono url' }, e.proxy ?? (e.proxyMode === 'pool' ? 'pool' : ''), e.proxiesTried > 1 ? el('div', { class: 'muted' }, `试了 ${e.proxiesTried} 个`) : null),
+      el('td', { class: 'mono' }, e.session_id ?? ''),
+      el('td', { class: 'mono' }, (e.formats ?? []).join(' ')),
+      el('td', { class: 'num' }, sizes.map((s) => el('div', {}, s))),
+    );
+    return [row, detail];
+  }));
+}
+$('#hf').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  loadHistory();
+});
+$('#hf-reset').addEventListener('click', () => {
+  $('#hf').reset();
+  loadHistory();
+});
+setInterval(() => {
+  if (!document.hidden && $('#hf-auto').checked && $('#history').classList.contains('on')) loadHistory();
+}, 10000);
+
+// ---- try a crawl
+const tf = $('#tf');
+tf.querySelector('input[value=eval]').addEventListener('change', (ev) => ($('#js-wrap').style.display = ev.target.checked ? '' : 'none'));
+tf.proxyMode.addEventListener('change', () => (tf.proxyUrl.style.display = tf.proxyMode.value === 'url' ? '' : 'none'));
+function textBlock(title, text) {
+  const LIMIT = 20000;
+  const pre = el('pre', {}, text.length > LIMIT ? text.slice(0, LIMIT) : text);
+  const more = text.length > LIMIT ? el('button', { type: 'button', onclick: (ev) => { pre.textContent = text; ev.target.remove(); } }, `显示全部（共 ${text.length} 字符）`) : null;
+  return el('div', {}, el('h2', {}, `${title}（${fmtBytes(new Blob([text]).size)}）`), pre, more);
+}
+tf.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const formats = [...tf.querySelectorAll('input[name=f]:checked')].map((i) => i.value);
+  const body = { url: tf.url.value.trim(), formats };
+  if (formats.includes('eval')) body.js = tf.js.value;
+  if (tf.timeout.value) body.timeout = Number(tf.timeout.value);
+  if (tf.waitUntil.value) body.waitUntil = tf.waitUntil.value;
+  if (tf.proxyMode.value === 'url') body.proxy = tf.proxyUrl.value.trim();
+  else if (tf.proxyMode.value) body.proxy = tf.proxyMode.value;
+  if (tf.session_id.value.trim()) body.session_id = tf.session_id.value.trim();
+  const out = $('#t-out');
+  out.replaceChildren();
+  $('#t-wait').textContent = '抓取中…';
+  const t0 = performance.now();
+  let r;
+  try {
+    r = await getJson('/crawl', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (e) {
+    $('#t-wait').textContent = '';
+    out.replaceChildren(el('p', { class: 'bad' }, `请求失败：${e.message}`));
+    return;
+  }
+  const ms = Math.round(performance.now() - t0);
+  $('#t-wait').textContent = '';
+  const b = r.body;
+  const parts = [el('p', { class: r.status === 200 ? 'ok' : 'bad' }, `HTTP ${r.status}，用时 ${ms} ms`)];
+  if (b.error) parts.push(el('p', { class: 'bad' }, `${b.error.code}（${CODES[b.error.code] ?? ''}）：${b.error.message}`));
+  if (b.meta) {
+    const m = b.meta;
+    const rows = [['最终 URL', m.url, 'mono url'], ['标题', m.title, ''], ['页面状态', `${m.status ?? ''} ${m.statusText ?? ''}`, ''],
+      ['跳转', m.redirects?.length ? m.redirects.join('\n') : '无', 'mono url'], ['cookie 数', m.cookies?.length ?? 0],
+      ['耗时', `排队 ${m.timing?.queueMs} ms，加载 ${m.timing?.navigateMs} ms，总计 ${m.timing?.totalMs} ms`, '']];
+    const t = el('table', { class: 'kv' });
+    kv(t, rows);
+    parts.push(el('h2', {}, 'meta'), t);
+  }
+  if (b.eval) parts.push(el('h2', {}, 'eval'), el('pre', {}, JSON.stringify(b.eval, null, 2)));
+  if (b.partial) {
+    parts.push(el('h2', {}, `部分结果（source: ${b.partial.source ?? 'null'}）`));
+    if (typeof b.partial.html === 'string') parts.push(textBlock('partial.html', b.partial.html));
+    if (typeof b.partial.markdown === 'string') parts.push(textBlock('partial.markdown', b.partial.markdown));
+  }
+  if (typeof b.markdown === 'string') parts.push(textBlock('markdown', b.markdown));
+  if (typeof b.html === 'string') parts.push(textBlock('html', b.html));
+  out.replaceChildren(...parts);
+});
+
+// ---- sessions
+async function loadSessions() {
+  let r;
+  try {
+    r = await getJson('/sessions?limit=500');
+  } catch (e) {
+    $('#s-sum').replaceChildren(el('span', { class: 'bad' }, `读取失败：${e.message}`));
+    return;
+  }
+  const { total, sessions } = r.body;
+  $('#s-sum').textContent = total > sessions.length ? `共 ${total} 个，显示最近使用的 ${sessions.length} 个` : `共 ${total} 个`;
+  $('#s-table tbody').replaceChildren(...sessions.map((s) => el('tr', {},
+    el('td', { class: 'mono' }, s.id),
+    el('td', { class: 'mono' }, fmtTime(s.lastUsed)),
+    el('td', { class: 'mono' }, s.expiresAt ? fmtTime(s.expiresAt) : '永不'),
+    el('td', { class: 'num' }, s.cookies),
+    el('td', { class: 'mono url' }, s.domains.join(' ')),
+    el('td', {}, s.loaded ? '是' : ''),
+    el('td', {},
+      el('button', { type: 'button', onclick: () => { $('#hf').reset(); $('#hf').session_id.value = s.id; location.hash = 'history'; } }, '看历史'), ' ',
+      el('button', { type: 'button', class: 'danger', onclick: () => deleteSession(s.id) }, '删除')),
+  )));
+}
+async function deleteSession(id) {
+  if (!confirm(`删除 session ${id}？它的 cookie 会丢失。`)) return;
+  const r = await getJson(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (r.status !== 200 && r.status !== 404) alert(`删除失败：${r.body.error?.message ?? r.status}`);
+  loadSessions();
+}
+
+showTab();
+</script>
+</body>
+</html>
