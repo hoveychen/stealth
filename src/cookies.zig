@@ -50,6 +50,13 @@ fn _loadFromFile(session: *Session, path: []const u8) !void {
         return;
     };
 
+    const loaded = try addAll(session, json_cookies);
+    log.info(.app, "Cookie.loadFromFile", .{ .path = path, .count = loaded });
+}
+
+/// Add cookies, in the file format, to the session's jar. A cookie the jar
+/// refuses is logged and skipped. Returns how many were added.
+pub fn addAll(session: *Session, json_cookies: []const JsonCookie) !usize {
     const jar = &session.cookie_jar;
     const now = lp.datetime.timestamp(.real);
 
@@ -83,8 +90,7 @@ fn _loadFromFile(session: *Session, path: []const u8) !void {
         };
         loaded += 1;
     }
-
-    log.info(.app, "Cookie.loadFromFile", .{ .path = path, .count = loaded });
+    return loaded;
 }
 
 /// Save all cookies from the jar to a JSON file.
@@ -95,8 +101,6 @@ pub fn saveToFile(jar: *Cookie.Jar, path: []const u8) void {
 }
 
 fn _saveToFile(jar: *Cookie.Jar, path: []const u8) !void {
-    jar.removeExpired(null);
-
     const file = try std.Io.Dir.cwd().createFile(lp.io, path, .{});
     defer file.close(lp.io);
 
@@ -104,6 +108,16 @@ fn _saveToFile(jar: *Cookie.Jar, path: []const u8) !void {
     var writer = file.writer(lp.io, &buf);
     const w = &writer.interface;
 
+    try writeJson(jar, w);
+    try writer.end();
+
+    log.info(.app, "Cookie.saveToFile", .{ .path = path, .count = jar.cookies.items.len });
+}
+
+/// The jar's cookies in the file format: a JSON array, one cookie per line.
+/// Expired cookies are dropped first.
+pub fn writeJson(jar: *Cookie.Jar, w: *std.Io.Writer) !void {
+    jar.removeExpired(null);
     try w.writeByte('[');
     for (jar.cookies.items, 0..) |c, i| {
         if (i > 0) {
@@ -130,12 +144,9 @@ fn _saveToFile(jar: *Cookie.Jar, path: []const u8) !void {
         try w.writeByte('\n');
     }
     try w.writeAll("]\n");
-    try writer.end();
-
-    log.info(.app, "Cookie.saveToFile", .{ .path = path, .count = jar.cookies.items.len });
 }
 
-const JsonCookie = struct {
+pub const JsonCookie = struct {
     name: []const u8,
     value: []const u8,
     domain: []const u8,

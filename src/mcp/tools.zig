@@ -77,6 +77,16 @@ const session_id_schema = browser_tools.minify(
     \\}
 );
 
+const cookies_import_schema = browser_tools.minify(
+    \\{
+    \\  "type": "object",
+    \\  "properties": {
+    \\    "cookies": { "type": "array", "description": "Cookies as cookies_export returns them (the --cookie-file format): name, value, domain, and optionally path, expires (seconds since the epoch), secure, httpOnly, sameSite.", "items": { "type": "object" } }
+    \\  },
+    \\  "required": ["cookies"]
+    \\}
+);
+
 const extra_tools = [_]McpTool{
     .{
         .name = "save",
@@ -106,6 +116,20 @@ const extra_tools = [_]McpTool{
         .description = "Close a browser session, freeing its page and memory. The `default` session cannot be closed.",
         .inputSchema = session_id_schema,
     },
+    .{
+        .name = "cookies_import",
+        .title = "Add cookies to this session",
+        .annotations = .{ .destructiveHint = false, .idempotentHint = true, .openWorldHint = false },
+        .description = "Add cookies, HttpOnly ones included, to this session's cookie jar, replacing any with the same name, domain and path. Takes what cookies_export returns, so a login can move from one session to another.",
+        .inputSchema = cookies_import_schema,
+    },
+    .{
+        .name = "cookies_export",
+        .title = "Export this session's cookies",
+        .annotations = read_only,
+        .description = "Every cookie in this session's jar, HttpOnly ones included, as a JSON array (the --cookie-file format) that cookies_import takes back.",
+        .inputSchema = browser_tools.minify("{ \"type\": \"object\", \"properties\": {} }"),
+    },
 };
 
 const all_tools = browser_tool_list ++ extra_tools;
@@ -116,6 +140,8 @@ const ExtraTool = enum {
     session_new,
     session_list,
     session_close,
+    cookies_import,
+    cookies_export,
 };
 
 pub fn handleList(server: *Server, arena: std.mem.Allocator, req: protocol.Request) !void {
@@ -138,6 +164,8 @@ pub fn handleCall(server: *Server, arena: std.mem.Allocator, req: protocol.Reque
             .session_new => handleSessionNew(server, arena, id, call_params.arguments),
             .session_list => handleSessionList(server, arena, id),
             .session_close => handleSessionClose(server, arena, id, call_params.arguments),
+            .cookies_import => handleCookiesImport(server, arena, id, call_params.arguments),
+            .cookies_export => handleCookiesExport(server, arena, id),
         };
     }
 
@@ -278,6 +306,23 @@ fn handleSessionClose(server: *Server, arena: std.mem.Allocator, id: std.json.Va
     }
 
     return sendToolResultFmt(server, arena, id, "closed session {s}", .{args.id});
+}
+
+fn handleCookiesImport(server: *Server, arena: std.mem.Allocator, id: std.json.Value, arguments: ?std.json.Value) !void {
+    const Args = struct { cookies: []const lp.cookies.JsonCookie };
+    const args = browser_tools.parseArgs(Args, arena, arguments) catch {
+        return server.sendError(id, .InvalidParams, "expected { cookies: [{ name, value, domain, path?, expires?, secure?, httpOnly?, sameSite? }] }");
+    };
+    const added = lp.cookies.addAll(server.active_session.session, args.cookies) catch |err|
+        return sendErrorContent(server, id, @errorName(err));
+    return sendToolResultFmt(server, arena, id, "imported {d} of {d} cookie(s)", .{ added, args.cookies.len });
+}
+
+fn handleCookiesExport(server: *Server, arena: std.mem.Allocator, id: std.json.Value) !void {
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    lp.cookies.writeJson(&server.active_session.session.cookie_jar, &aw.writer) catch
+        return sendErrorContent(server, id, "out of memory");
+    try sendToolResultText(server, id, aw.written(), false);
 }
 
 fn writeScript(path: []const u8, content: []const u8) !void {
@@ -1674,6 +1719,57 @@ test "MCP - getCookies: defaults to current page, url filter, all flag" {
     ;
     try router.handleMessage(server, testing.arena_allocator, empty_msg);
     try testing.expect(std.mem.indexOf(u8, out.written(), "No cookies for http://nope.test/") != null);
+}
+
+test "MCP - cookies_export and cookies_import carry HttpOnly cookies between sessions" {
+    var out: std.Io.Writer.Allocating = .init(testing.arena_allocator);
+    var server = try Server.init(testing.allocator, testing.test_app, &out.writer);
+    defer server.deinit();
+
+    try server.active_session.session.cookie_jar.populateFromResponse("http://example.com/", "auth=s3cret; Path=/; HttpOnly; SameSite=Strict");
+    try server.active_session.session.cookie_jar.populateFromResponse("http://example.com/", "theme=dark; Path=/");
+
+    const export_msg =
+        \\{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"cookies_export"}}
+    ;
+    try router.handleMessage(server, testing.arena_allocator, export_msg);
+    const Res = struct { result: struct { content: []const struct { text: []const u8 }, isError: bool } };
+    const exported = try std.json.parseFromSliceLeaky(Res, testing.arena_allocator, out.written(), .{ .ignore_unknown_fields = true });
+    try testing.expect(!exported.result.isError);
+    const jar_json = exported.result.content[0].text;
+    try testing.expect(std.mem.indexOf(u8, jar_json, "\"httpOnly\":true") != null);
+    try testing.expect(std.mem.indexOf(u8, jar_json, "\"sameSite\":\"strict\"") != null);
+
+    // Into a fresh session, the export as the argument.
+    _ = try server.useSession("other");
+    try testing.expectEqual(0, server.active_session.session.cookie_jar.cookies.items.len);
+    out.clearRetainingCapacity();
+    const import_msg = try std.fmt.allocPrint(testing.arena_allocator,
+        \\{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"cookies_import","arguments":{{"cookies":{s}}}}}}}
+    , .{jar_json});
+    try router.handleMessage(server, testing.arena_allocator, import_msg);
+    try testing.expect(std.mem.indexOf(u8, out.written(), "imported 2 of 2 cookie(s)") != null);
+
+    const jar = &server.active_session.session.cookie_jar;
+    try testing.expectEqual(2, jar.cookies.items.len);
+    for (jar.cookies.items) |c| {
+        if (std.mem.eql(u8, c.name, "auth")) {
+            try testing.expectString("s3cret", c.value);
+            try testing.expect(c.http_only);
+            try testing.expectEqual(.strict, c.same_site);
+        } else {
+            try testing.expectString("theme", c.name);
+            try testing.expect(!c.http_only);
+        }
+    }
+    // The default session's jar is its own.
+    try testing.expectEqual(2, server.defaultSession().session.cookie_jar.cookies.items.len);
+
+    out.clearRetainingCapacity();
+    try router.handleMessage(server, testing.arena_allocator,
+        \\{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"cookies_import","arguments":{"cookies":"nope"}}}
+    );
+    try testing.expect(std.mem.indexOf(u8, out.written(), "expected { cookies") != null);
 }
 
 test "MCP - getCookies without a loaded page refuses instead of dumping the jar" {

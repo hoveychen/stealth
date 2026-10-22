@@ -145,6 +145,7 @@ if (config.mcpProcs) {
         idleMs: config.mcpIdleMs,
         callTimeoutMs: config.mcpCallTimeoutMs,
         proxy: config.mcpProxy && redact(config.mcpProxy),
+        cookieJars: sessions,
         record: logMcp,
     });
     if (config.mcpIdleMs) {
@@ -262,7 +263,8 @@ function logCrawl(f) {
 
 // One MCP tools/call (or session start/end), in the same shape as a crawl's
 // line so /history and the admin page take both; kind "mcp", the tool, the
-// MCP session and the engine process are its own.
+// MCP session and the engine process are its own. session_id is the /crawl
+// session the MCP session is bound to, if any.
 function logMcp(f) {
     const entry = {
         time: new Date().toISOString(),
@@ -279,7 +281,7 @@ function logMcp(f) {
         proxyMode: config.mcpProxy ? 'url' : 'direct',
         proxy: config.mcpProxy && redact(config.mcpProxy),
         proxiesTried: 0,
-        session_id: null,
+        session_id: f.session_id ?? null,
         mcp_session: f.mcp_session,
         mcp_process: f.mcp_process,
         args: f.args,

@@ -237,6 +237,9 @@ longer clobber each other's page:
   (**sharing** — e.g. a workflow where several agents work the same page).
 - The `session_new`, `session_list` and `session_close` tools manage sessions
   explicitly. Sending `DELETE /mcp` with an `Mcp-Session-Id` closes that session.
+- `cookies_export` returns a session's cookies (HttpOnly ones included) in the
+  `--cookie-file` format, and `cookies_import` adds such a list to a session:
+  a login carried in or out of a session.
 
 [Read full documentation](https://lightpanda.io/docs/open-source/guides/mcp-server)
 

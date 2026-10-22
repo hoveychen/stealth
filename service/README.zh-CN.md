@@ -382,6 +382,8 @@ else:
   只给 cookie 数和域名，**不给 cookie 的值**。`loaded` 表示是否在内存里（否则只在磁盘上）。
 - **多副本时 session 是各副本自己的**：副本会把用过的 session 留在内存里，所以负载均衡要按 `session_id`
   做哈希，让同一个 session 总是落到同一个副本。
+- **MCP 会话也能用同一个 session**：连 `/mcp?session_id=<id>`，agent 的浏览器从这个 session 的 cookie 出发，
+  它登录拿到的 cookie 也写回这里，规则同上。见 [与 /crawl 的 session 互通](#与-crawl-的-session-互通session_id)。
 
 ## Agent 接入（MCP）
 
@@ -456,9 +458,42 @@ curl -s -X DELETE localhost:8080/mcp -H "mcp-session-id: $S"
   DELETE**，会话就是靠这个回收的；自己写的客户端用完请 `DELETE`。
 - 某个 MCP 进程挂了会自动重启，它上面的会话丢失（之后返回 404，历史里记一行 `session_lost`），
   其他进程上的会话不受影响。
-- 当前会话列表：`GET /mcp/sessions`（id、所在进程、开始时间、最后调用、调用次数、当前页面），
-  管理页的状态标签里也有。
+- 当前会话列表：`GET /mcp/sessions`（id、绑定的 `session_id`、所在进程、开始时间、最后调用、调用次数、
+  当前页面），管理页的状态标签里也有。
 - 多副本部署时，同一个会话的请求必须落到同一个副本（负载均衡按 `mcp-session-id` 头做粘性）。
+
+### 与 /crawl 的 session 互通（`session_id`）
+
+MCP 会话默认从空 cookie 开始，和 `/crawl` 的 [session](#session) 不相干。在 URL 上带 `session_id`，这个 MCP 会话
+就和同名的 `/crawl` session 共用 cookie：用 `/crawl` 登录过的，agent 一打开页面就是已登录；agent 在浏览器里
+登录的，`/crawl` 带同一个 `session_id` 也是已登录。
+
+```json
+{ "mcpServers": { "crawl": { "type": "http", "url": "http://crawl.internal:8080/mcp?session_id=shop-login-1" } } }
+```
+
+```bash
+claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id=shop-login-1'
+```
+
+- **在 `initialize` 时生效**：服务把这个 session 的全部 cookie（含 HttpOnly 的）放进新浏览器。之后请求上的
+  `session_id` 不再看，一个 MCP 会话从头到尾只绑一个 session。`session_id` 的格式同 `/crawl`（1–128 个
+  `A-Z a-z 0-9 . _ -`），不合法返回 400。
+- **写回时机：每个工具调用之后、把结果交给 agent 之前**，再加上会话结束时（`DELETE` 或闲置回收）各一次。
+  所以 agent 看到「点了登录」的结果时，cookie 已经在 session 里了，紧接着发的 `/crawl` 就能用上；会话
+  结束那一次补上最后一次调用之后页面脚本才设的 cookie。写回按 [Session](#session) 的合并规则：只写这个
+  会话自己改过的 cookie（和它上一次写回时比），别人（并行的 `/crawl` 或另一个 MCP 会话）这期间改的不会被
+  它盖掉。没有变化时不写盘。
+- **代价**：每次调用多一次引擎往返（导出 cookie）。2026-10-22 在 bt 上，session 里 21 个 cookie、各 200 次调用的中位数：
+  `getUrl` 1.22→1.56 毫秒、`goto` 一个小页面 9.31→9.41 毫秒（两轮里多 0.1–0.9 毫秒）；cookie 没变的调用不写盘。
+- **进程挂了**：引擎进程挂掉时会话丢失，session 里留下的是最后一次调用之后的 cookie（只丢最后一次调用之后、
+  页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。服务本身重启同理。
+- **单向的部分**：MCP 会话开始之后 `/crawl` 再写进 session 的 cookie，不会进到这个已经开着的浏览器；要用上就
+  新开一个 MCP 会话。
+- 两个 MCP 会话可以绑同一个 `session_id`（各自一个浏览器，写回按上面的规则合并），绑不同 `session_id` 的互不相干。
+- 看绑定：`GET /mcp/sessions` 和管理页的「MCP 会话」表有 `session_id` 一列；绑定会话的每一行历史都带
+  `session_id`，所以 `GET /history?session_id=shop-login-1` 会同时列出这个 session 的 `/crawl` 请求和
+  MCP 调用。`session_start` 那一行写着带入了几个 cookie。
 
 ### 代理
 
@@ -476,6 +511,7 @@ URL 里）。没有按会话或按调用选代理，也**不走代理池**：引
 
 - 引擎原有的 `session_new`、`session_list`、`session_close` 和 `save` 不提供：前三个能列出、加入、关闭
   别人的会话，`save` 会往容器里写文件。调用它们会得到 `isError` 的结果。新会话请用 `initialize`。
+  引擎的 `cookies_import` / `cookies_export` 是服务实现 `session_id` 用的，也不给 agent。
 - `getEnv` 和 `$LP_*` 占位符：MCP 进程不带任何 `LP_*` 环境变量启动，所以没有可用的凭据占位符。
 - `screenshot` 渲染的是引擎的文字布局，不是真实像素截图。
 - `search` 会去访问搜索引擎。
@@ -644,6 +680,7 @@ MCP 的行和 `/crawl` 的行字段相同（不适用的为 `null`），另有 `
 | `code` / `message` | 成功为 `null`；`tool_error`（工具报错，`message` 是错误文字）、`timeout`（`goto` 没等到加载完）、`rpc_error`、`engine_error`（连不上 MCP 进程） |
 | `ms` | 这次调用的耗时；会话事件是会话已存在的时长 |
 | `mcp_session` / `mcp_process` | 会话 id；所在的 MCP 进程 |
+| `session_id` | 会话用 `/mcp?session_id=` 绑定的 `/crawl` session（每一行都带），没绑定为 `null` |
 | `args` | 调用参数的摘要：选择器、按键之类的短参数，长字符串截到 200 字符，`fill` 的值只记长度，不含 `url` |
 | `resultBytes` | 工具返回文字的字节数（不保存内容） |
 
@@ -671,7 +708,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 | `url` | `url` 或 `finalUrl` 包含的子串，不分大小写 |
 | `status` | 本服务的 HTTP 状态，逗号分隔（`200,504`） |
 | `code` | 错误码，逗号分隔；`ok` 表示成功 |
-| `session_id` | 精确匹配；也匹配 MCP 行的 `mcp_session` |
+| `session_id` | 精确匹配；也匹配 MCP 行的 `mcp_session`。绑定了这个 session 的 MCP 会话的行也会列出 |
 | `kind` | `crawl` 或 `mcp` |
 | `since` / `until` | ISO 时间或毫秒时间戳 |
 | `days` | 不给 `since` 时往前查几天（含今天），默认 3 |
@@ -692,7 +729,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 
 - **状态**：每 3 秒读一次 `/health`——连接池的槽位、忙、闲、已连接、排队、重连次数；代理池每个代理
   可用还是被剔除、使用/成功/失败次数和最近错误；session 和请求历史的统计；MCP 进程、会话数和调用
-  统计，以及当前 MCP 会话列表（点一行看这个会话的全部调用）。
+  统计，以及当前 MCP 会话列表（含绑定的 session_id；点一行看这个会话的全部调用）。
 - **请求历史**：按 URL、HTTP 状态、错误码、类型（crawl / mcp）、session_id（也匹配 MCP 会话）、时间范围、
   天数、条数筛选；MCP 的行在「输出 / 工具」列显示工具名和选择器；点一行看完整记录；可选每 10 秒自动刷新。
 - **试抓**：填一个 URL，选输出（html / markdown / meta / eval 加 JS）、代理（直连 / 代理池 / 指定 URL）、
@@ -714,7 +751,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
   "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "..." },
   "mcp": { "enabled": true, "processes": [
     { "name": "mcp0", "pid": 47, "up": true, "sessions": 2, "inFlight": 0, "calls": 18, "restarts": 0 }
-  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0 }
+  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0, "cookieSaves": 9, "cookieSaveErrors": 0 }
 }
 ```
 
@@ -724,7 +761,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 - `sessions.stored` 是现有 session 数，`loaded` 是在内存里的；`expired`/`deleted` 是启动以来的计数。
 - `history.written` 是启动以来写入的行数，`queued` 是还没落盘的，`writeErrors`/`dropped` 不为 0 要查磁盘。
 - `mcp.processes[].up` 为 false 是进程正在重启；`lost` 是因进程挂掉丢失的会话数；`refused` 是被拒绝的
-  `session_*` / `save` 调用数。`MCP_PROCS=0` 时是 `{"enabled": false}`。
+  `session_*` / `save` 调用数；`cookieSaves` / `cookieSaveErrors` 是绑定 `session_id` 的会话写回 cookie 的
+  次数和失败数（失败只记数和打日志，不影响调用）。`MCP_PROCS=0` 时是 `{"enabled": false}`。
 
 ## 扩容建议
 
@@ -800,5 +838,7 @@ node service/test/unit.mjs                 # 不需要引擎的单元测试
 过期清理、重启后保留）、管理页可访问且无外部资源、session 列表；MCP（进程命令行带 `--no-webmcp` 且没有
 暴露机器人的参数、页面里没有 WebMCP 的三个名字、链接型和 ajax 型翻页点到底、两个并发会话互不等待互不串页、
 cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405、会话列表、历史字段和筛选、杀掉 MCP 进程后
-会话 404 且能新建、DELETE）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 94 项全部通过。单元测试另有 MCP
-网关的路由、会话、过期和历史（假引擎，不需要 Docker）。
+会话 404 且能新建、DELETE；`session_id`：`/crawl` 登录的 HttpOnly cookie 带进 MCP、MCP 里登录后会话未结束
+`/crawl` 就已登录、绑不同 session 互不串、不绑的没有 cookie、DELETE 写回最后一次调用之后的 cookie、历史按
+session_id 同时查到两种行）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 100 项全部通过。 单元测试另有 MCP
+网关的路由、会话、过期、历史和 cookie 带入/写回/合并（假引擎，不需要 Docker）。

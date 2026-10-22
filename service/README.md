@@ -328,6 +328,9 @@ it left alone are not touched — so a change made by the other crawl in the
 meantime survives. If both changed the same cookie, the one that finished
 last wins.
 
+An MCP session can share a jar too: see `?session_id=` under
+[MCP](#mcp-mcp).
+
 ## `DELETE /sessions/:id`
 
 Drops a session's cookie jar; see [Sessions](#sessions).
@@ -378,7 +381,8 @@ How it is put together (`lib/mcp.mjs`):
   tells an MCP client to initialize again. The engine's `session_new`,
   `session_list`, `session_close` (list, join or close other agents'
   sessions) and `save` (writes a file in the container) are left out of
-  `tools/list` and refused.
+  `tools/list` and refused, and so are `cookies_import` / `cookies_export`,
+  which the service uses itself (below).
 - Calls to one session are forwarded one at a time. After `goto`, `click`
   and `press` the service asks the engine for the page URL (`getUrl`), so
   the history shows where a click led.
@@ -388,8 +392,28 @@ How it is put together (`lib/mcp.mjs`):
   `session_lost` line.
 - `MCP_PROXY` is the only proxy: the engine's MCP tools take none, so there
   is no per-session proxy and no pool.
-- `GET /mcp/sessions` lists the live sessions (process, created, last call,
-  calls, current URL); `/health` has an `mcp` block.
+- `GET /mcp/sessions` lists the live sessions (bound `session_id`, process,
+  created, last call, calls, current URL); `/health` has an `mcp` block.
+- `/mcp?session_id=<id>` on `initialize` binds the MCP session to the
+  `/crawl` [session](#sessions) `<id>`, so a login made on either side holds
+  on the other (put the query in the client's URL:
+  `claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id=shop-login-1'`).
+  The jar's cookies, HttpOnly ones included, go into the new browser through
+  the engine's `cookies_import` MCP tool. The browser's cookies
+  (`cookies_export`) are merged back into the jar by the rules above, against
+  what this MCP session last wrote: after every tool call, before its answer
+  goes out — so a `/crawl` sent after the agent saw its login click succeed
+  already has the login — and once more when the session ends (`DELETE` or
+  idle), for what page scripts set after the last call. An unchanged jar is
+  not rewritten. Measured on bt with 21 cookies in the jar, the write-back
+  added 0.1–0.9 ms to the median call (200 calls each of `getUrl` and a
+  small-page `goto`). An engine process that dies loses only what changed since
+  the session's last call. The binding is fixed at `initialize`; cookies a
+  `/crawl` writes to the jar later do not reach a browser already open.
+  History lines of a bound session carry its `session_id`, so
+  `GET /history?session_id=<id>` lists the jar's crawls and MCP calls
+  together. Without `session_id` an MCP session starts from no cookies and
+  nothing is written anywhere, as before.
 
 The pages carry no WebMCP surface: `typeof navigator.modelContext`,
 `ModelContext` and `ModelContextClient` are `"undefined"` (the engine's `mcp`

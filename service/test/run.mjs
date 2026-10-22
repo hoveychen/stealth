@@ -642,6 +642,55 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
 
     check('mcp: DELETE ends the session', (await b.close()) === 204 && (await b.tool('getUrl').then(() => 'alive', (e) => e.message)).includes('HTTP 404'));
     await reborn?.close();
+
+    // session_id: a /crawl login carried into an MCP browser, an MCP login
+    // carried out to /crawl (while the MCP session is still open), each
+    // bound session on its own jar, and an unbound one on none.
+    const tag = Date.now().toString(36);
+    const [jc, jm] = [`mcpck-c-${tag}`, `mcpck-m-${tag}`];
+    const title = async (c) => c.tool('evaluate', { script: 'document.title' });
+    const crawled = await crawl({ url: `${F}/login?user=crawler`, session_id: jc });
+    const c1 = new McpClient(`${MCP}?session_id=${jc}`);
+    await c1.initialize();
+    await c1.tool('goto', { url: `${F}/account` });
+    const [tc1, js1] = [await title(c1), await c1.tool('evaluate', { script: 'document.cookie' })];
+    check('mcp session_id: a /crawl login (HttpOnly cookie) is signed in in the MCP browser', crawled.status === 200 && tc1 === 'account: crawler' && !js1.includes('auth='), `${crawled.status} / ${tc1} / document.cookie ${JSON.stringify(js1)}`);
+
+    const c2 = new McpClient(`${MCP}?session_id=${jm}`);
+    await c2.initialize();
+    await c2.tool('goto', { url: `${F}/login-form` });
+    await c2.tool('fill', { selector: '#user', value: 'agent' });
+    await c2.tool('click', { selector: '#go' });
+    const afterClick = await crawl({ url: `${F}/account`, session_id: jm, formats: ['meta'] });
+    await c2.tool('waitForScript', { script: `document.title === 'logged in'` });
+    const afterWait = await crawl({ url: `${F}/account`, session_id: jm, formats: ['meta'] });
+    check('mcp session_id: an MCP login reaches /crawl while the MCP session is open', afterWait.body?.meta?.title === 'account: agent', `right after click: ${afterClick.body?.meta?.title}; after waitForScript: ${afterWait.body?.meta?.title}`);
+
+    const c3 = new McpClient(MCP);
+    await c3.initialize();
+    await c3.tool('goto', { url: `${F}/account` });
+    await c1.tool('goto', { url: `${F}/account` });
+    await c2.tool('goto', { url: `${F}/account` });
+    const titles = [await title(c3), await title(c1), await title(c2)];
+    const bound = (await (await fetch(`${SVC}/mcp/sessions`)).json()).sessions;
+    const byId = (c) => bound.find((x) => x.id === c.sessionId)?.session_id;
+    check('mcp session_id: bound sessions keep to their own jar, an unbound one has none; /mcp/sessions shows the binding', JSON.stringify(titles) === JSON.stringify(['account: guest', 'account: crawler', 'account: agent']) && byId(c1) === jc && byId(c2) === jm && byId(c3) === null, `${titles.join(' | ')} / ${byId(c1)} ${byId(c2)} ${byId(c3)}`);
+
+    // A cookie a page script sets after the last call reaches the jar when
+    // the session is closed.
+    await c2.tool('evaluate', { script: `setTimeout(() => { document.cookie = 'late=${tag}; path=/'; }, 300); 'ok'` });
+    await sleep(800);
+    await c2.close();
+    const echoed = await crawl({ url: `${F}/echo-cookies`, session_id: jm, formats: ['meta'] });
+    check('mcp session_id: DELETE writes back the cookies set since the last call', (echoed.body?.meta?.title ?? '').includes(`late=${tag}`), echoed.body?.meta?.title);
+
+    await sleep(1200); // the history flushes every second
+    const jHist = (await (await fetch(`${SVC}/history?session_id=${jm}&limit=1000`)).json()).entries;
+    check('mcp session_id: history by session_id has both the /crawl and the MCP lines', jHist.some((e) => e.kind === 'crawl') && jHist.some((e) => e.kind === 'mcp' && e.tool === 'click' && e.mcp_session === c2.sessionId) && jHist.some((e) => e.tool === 'session_start' && /1 cookie|0 cookie/.test(e.message ?? '')), `${jHist.length} lines: ${jHist.map((e) => e.kind === 'mcp' ? e.tool : 'crawl').join(',')}`);
+    const badBind = await fetch(`${MCP}?session_id=bad%2Fid`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }) });
+    check('mcp session_id: an invalid session_id is refused (400)', badBind.status === 400, `${badBind.status}`);
+    await c1.close();
+    await c3.close();
     paging.server.closeAllConnections();
     paging.server.close();
 }
