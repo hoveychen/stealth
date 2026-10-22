@@ -1100,7 +1100,7 @@ test "MCP - save writes the script to disk" {
     try testing.expect(std.mem.indexOf(u8, out.written(), "saved 2 line") != null);
 
     const written = try std.Io.Dir.cwd().readFileAlloc(lp.io, path, testing.arena_allocator, .limited(4096));
-    try std.testing.expectString("const page = new Page();\nawait page.goto(\"https://example.com\");\n", written);
+    try std.testing.expectEqualStrings("const page = new Page();\nawait page.goto(\"https://example.com\");\n", written);
 }
 
 test "MCP - tree rejects stale backendNodeId instead of dumping whole document" {
