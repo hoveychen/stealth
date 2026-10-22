@@ -40,7 +40,9 @@
 // engine processes are (`docker exec NAME sh -c`), to read their command lines
 // and kill one. LP_SERVICE_STOP stops the service the way `docker stop` does
 // (SIGTERM, then SIGKILL after 10 s) and starts it again on the same data,
-// printing `stop_ms=<how long the stop took>` and the service's log lines.
+// printing `stop_ms=<how long the stop took>`, `exit_code=<the service's>`
+// and the service's log lines. The drain checks expect the default
+// SHUTDOWN_DRAIN_MS (5000) and SHUTDOWN_PARTIAL_MS (1000).
 
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -143,11 +145,12 @@ if (EXTERNAL) {
         await promisify(exec)(process.env.LP_SERVICE_RESTART);
         await waitHttp(`${SVC}/health`, 300);
     };
-    // -> { ms, log }: how long the stop took, and what the service logged.
+    // -> { ms, code, log }: how long the stop took, the exit code, and what
+    // the service logged.
     stopService = async () => {
         const out = (await promisify(exec)(process.env.LP_SERVICE_STOP, { maxBuffer: 64 << 20 })).stdout;
         await waitHttp(`${SVC}/health`, 300);
-        return { ms: Number(/stop_ms=(\d+)/.exec(out)?.[1] ?? NaN), log: out };
+        return { ms: Number(/stop_ms=(\d+)/.exec(out)?.[1] ?? NaN), code: Number(/exit_code=(\d+)/.exec(out)?.[1] ?? NaN), log: out };
     };
     sessionFiles = async () => (await promisify(exec)(process.env.LP_SESSION_FILES)).stdout.split('\n').filter(Boolean);
     historySh = async (snippet) => (await promisify(exec)(`${process.env.LP_HISTORY_SH} ${shQuote(snippet)}`)).stdout;
@@ -204,13 +207,13 @@ if (EXTERNAL) {
         const t0 = Date.now();
         svc.kill('SIGTERM');
         const killer = setTimeout(() => svc.kill('SIGKILL'), 10000);
-        await new Promise((r) => svc.once('exit', r));
+        const code = await new Promise((r) => svc.once('exit', (c) => r(c)));
         clearTimeout(killer);
         const ms = Date.now() - t0;
         const log = svc.log;
         startService();
         await waitHttp(`${SVC}/health`);
-        return { ms, log };
+        return { ms, code, log };
     };
     sessionFiles = async () => fs.readdirSync(sessionDir);
 }
@@ -766,6 +769,57 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
     const kept = await crawl({ url: `${F}/echo-cookies`, session_id: js, formats: ['meta'] });
     const savedLine = /"msg":"mcp cookies saved on shutdown"[^\n]*/.exec(stopped.log)?.[0] ?? '(no shutdown line)';
     check('mcp session_id: stopping the service writes back the cookies set since the last call, inside docker stop\'s 10 s', (kept.body?.meta?.title ?? '').includes(`bye=${tag}`) && stopped.ms < 10000 && /"saved":[1-9]/.test(savedLine) && /"timedOut":false/.test(savedLine), `stop took ${stopped.ms} ms / ${savedLine} / jar: ${kept.body?.meta?.title}`);
+
+    // Stopping with /crawl requests in flight. The engine /crawl uses is in a
+    // process group of its own, so docker stop's SIGTERM reaches only the
+    // service, which lets a 3 s crawl finish, abandons the ones still
+    // running after SHUTDOWN_DRAIN_MS with their partial result, refuses
+    // the queued one and new ones at once, and still writes back an MCP
+    // session's cookies -- all inside docker stop's 10 s, exit code 0.
+    if (EXTERNAL) {
+        const pg = (await mcpSh(`e=$(cat /tmp/lightpanda-engine.pgid); s=$(cat /tmp/lightpanda.pid); for f in /proc/[0-9]*/cmdline; do if tr '\\0' ' ' < "$f" | grep -q '^node /app/server.mjs'; then n=\${f#/proc/}; n=\${n%/cmdline}; fi; done; echo "$e $(cut -d' ' -f5 /proc/$s/stat) $(cut -d' ' -f5 /proc/$n/stat)"`)).trim().split(' ').map(Number);
+        check('stop: the /crawl engine runs in its own process group, not the service\'s', pg.length === 3 && pg[0] > 1 && pg[1] === pg[0] && pg[2] !== pg[0], `engine group ${pg[0]}, serve in ${pg[1]}, service in ${pg[2]}`);
+    }
+    const jd = `drain-${tag}`;
+    const sm = new McpClient(`${MCP}?session_id=${jd}`);
+    await sm.initialize();
+    await sm.tool('goto', { url: `${F}/account` });
+    await sm.tool('evaluate', { script: `setTimeout(() => { document.cookie = 'drain=${tag}; path=/; max-age=3600'; }, 300); 'ok'` });
+    await sleep(500);
+    const timed = (p) => p.then((r) => ({ ...r, end: Date.now() }));
+    // A call in flight when the stop starts: it finishes, and the session's
+    // cookies are written back after it, during the drain. (Also what keeps
+    // the jar inside the test's 6 s SESSION_TTL_MS until it is read back
+    // from the next container.)
+    const mcpCall = sm.tool('goto', { url: `${F}/delay?ms=2500&i=mcp` }).then((text) => ({ text, end: Date.now() }), (e) => ({ error: e.message, end: Date.now() }));
+    const short = timed(crawl({ url: `${F}/delay?ms=3000&i=drain`, formats: ['html', 'markdown', 'meta'], timeout: 20000 }));
+    const hung = timed(crawl({ url: `${F}/hang`, formats: ['html'], timeout: 30000 }));
+    const slowLoad = timed(crawl({ url: `${F}/slow-load`, formats: ['html', 'markdown'], timeout: 30000 }));
+    await sleep(150);
+    const queuedUrl = `${F}/delay?ms=100&i=queued-${tag}`;
+    const queued = timed(crawl({ url: queuedUrl, formats: ['meta'] }));
+    await sleep(350);
+    const tStop = Date.now();
+    const stopping = stopService();
+    await sleep(700);
+    const lateUrl = `${F}/delay?ms=1&i=late-${tag}`;
+    const [hz, late] = await Promise.all([fetch(`${SVC}/health`).then(async (r) => ({ status: r.status, body: await r.json() })), crawl({ url: lateUrl, formats: ['meta'] })]);
+    const [rs, rh, rl, rq, rm] = await Promise.all([short, hung, slowLoad, queued, mcpCall]);
+    const sd = await stopping;
+    check('stop: /health answers 503 with stopping while the service drains', hz.status === 503 && hz.body.ok === false && hz.body.stopping?.signal === 'SIGTERM' && hz.body.stopping.inFlight >= 1, `${hz.status} ${JSON.stringify(hz.body.stopping)}`);
+    check('stop: a new /crawl while stopping -> 503 shutting_down', late.status === 503 && late.body.error?.code === 'shutting_down', `${late.status} ${JSON.stringify(late.body.error)}`);
+    check('stop: a request still queued for a slot -> 503 shutting_down at once', rq.status === 503 && rq.body.error?.code === 'shutting_down' && /queued/.test(rq.body.error.message) && rq.end - tStop < 1500, `${rq.status} ${rq.end - tStop} ms after the stop ${JSON.stringify(rq.body.error)}`);
+    check('stop: a 3 s crawl in flight when docker stop starts finishes with its full answer', rs.status === 200 && rs.end > tStop + 1000 && rs.body.meta?.title === 'delay drain' && rs.body.markdown?.includes('Delay page drain') && rs.body.html?.includes('<h1>Delay page drain</h1>'), `${rs.status} ended ${rs.end - tStop} ms after the stop ${JSON.stringify(rs.body.error ?? rs.body.meta?.title)}`);
+    check('stop: crawls still running after SHUTDOWN_DRAIN_MS -> 503 shutting_down with their partial result', [rh, rl].every((r) => r.status === 503 && r.body.error?.code === 'shutting_down' && /SHUTDOWN_DRAIN_MS/.test(r.body.error.message) && 'html' in (r.body.partial ?? {}) && r.end - tStop >= 5000 && r.end - tStop < 8000) && rl.body.partial.html?.includes('Loaded body') && rl.body.partial.source === 'dom', [rh, rl].map((r) => `${r.status} ${r.end - tStop} ms ${JSON.stringify(r.body.error)} partial=${JSON.stringify(r.body.partial)?.slice(0, 100)}`).join(' / '));
+    const stoppedLine = /"msg":"stopped"[^\n]*/.exec(sd.log)?.[0] ?? '(no stopped line)';
+    check('stop: inside docker stop\'s 10 s, exit code 0, engine ended by SIGTERM', sd.ms < 10000 && sd.code === 0 && /"abandoned":2/.test(stoppedLine) && /"queuedRefused":1/.test(stoppedLine) && (!EXTERNAL || /"engine":\{"killed":false/.test(stoppedLine)), `stop ${sd.ms} ms, exit ${sd.code} / ${stoppedLine}`);
+    const drainKept = await crawl({ url: `${F}/echo-cookies`, session_id: jd, formats: ['meta'] });
+    const drainSaved = /"msg":"mcp cookies saved on shutdown"[^\n]*/.exec(sd.log)?.[0] ?? '(no shutdown line)';
+    check('stop: an MCP call in flight finishes, and its session still writes its cookies back', !rm.error && rm.end > tStop + 1000 && (drainKept.body?.meta?.title ?? '').includes(`drain=${tag}`) && /"saved":1/.test(drainSaved), `call ${rm.error ?? 'ok'} ended ${rm.end - tStop} ms after the stop / ${drainSaved} / jar: ${drainKept.body?.meta?.title}`);
+    const refusedLines = (await (await fetch(`${SVC}/history?code=shutting_down&since=${tStop - 1000}&limit=100`)).json()).entries ?? [];
+    const line = (u) => refusedLines.find((e) => e.url === u);
+    const abandonedOk = [`${F}/hang`, `${F}/slow-load`].every((u) => line(u)?.status === 503 && /SHUTDOWN_DRAIN_MS/.test(line(u).message) && line(u).partial);
+    check('stop: the history has a line, with the reason, for every request refused or abandoned', abandonedOk && /queued/.test(line(queuedUrl)?.message ?? '') && /stopping/.test(line(lateUrl)?.message ?? '') && line(`${F}/slow-load`).partial.htmlBytes > 0, refusedLines.map((e) => `${e.url.replace(F, '')} ${e.status} ${e.message} ${JSON.stringify(e.partial)}`).join(' | '));
     paging.server.closeAllConnections();
     paging.server.close();
 }

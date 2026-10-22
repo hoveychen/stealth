@@ -18,6 +18,7 @@ export class Pool {
         this.slots = Array.from({ length: size }, (_, id) => ({ id, conn: null, busy: false }));
         this.waiters = [];
         this.reconnects = 0;
+        this.draining = null;
     }
 
     stats() {
@@ -45,6 +46,7 @@ export class Pool {
     }
 
     lease(deadline) {
+        if (this.draining) return Promise.reject(new CdpError('shutting_down', this.draining));
         const free = this.slots.find((s) => !s.busy);
         if (free) {
             free.busy = true;
@@ -104,6 +106,20 @@ export class Pool {
             return;
         }
         slot.busy = false;
+    }
+
+    // The service is stopping: every queued request fails at once with
+    // shutting_down and `message`, and so does any later lease; leased slots
+    // are left to finish. -> how many queued requests were refused.
+    drain(message) {
+        this.draining = message;
+        const n = this.waiters.length;
+        for (const w of this.waiters) {
+            clearTimeout(w.timer);
+            w.reject(new CdpError('shutting_down', message));
+        }
+        this.waiters = [];
+        return n;
     }
 
     close() {

@@ -59,6 +59,9 @@ case "${LP_MALLOC:-jemalloc}" in
 esac
 
 engine() {
+  # This loop's pid is its process group (setsid, below); the service ends
+  # the whole group when it stops.
+  echo $$ > /tmp/lightpanda-engine.pgid
   while :; do
     LD_PRELOAD="$ENGINE_PRELOAD" /bin/lightpanda serve \
       --host "${LP_HOST:-127.0.0.1}" \
@@ -74,9 +77,19 @@ engine() {
     sleep "${LP_RESTART_DELAY:-1}"
   done
 }
-engine "$@" &
+
+# The engine loop runs as this script again, under setsid: a session and
+# process group of its own, so the SIGTERM that `docker stop` sends to the
+# whole group (tini -g) reaches only the service. The service lets the
+# crawls in flight finish first, then ends the engine through
+# /tmp/lightpanda-engine.pgid (see "Stopping" in README.md).
+if [ "${LP_ENGINE_LOOP:-}" = 1 ]; then
+  unset LP_ENGINE_LOOP
+  engine "$@"
+fi
+LP_ENGINE_LOOP=1 setsid "$0" "$@" &
 
 # The service starts the MCP engine processes itself (MCP_PROCS, see
 # lib/mcp.mjs) and gives them the same malloc.
-export POOL_SIZE LP_CDP_URL="ws://127.0.0.1:${LP_PORT}/" LP_ENGINE_PRELOAD="$ENGINE_PRELOAD"
+export POOL_SIZE LP_CDP_URL="ws://127.0.0.1:${LP_PORT}/" LP_ENGINE_PRELOAD="$ENGINE_PRELOAD" LP_ENGINE_PGID_FILE=/tmp/lightpanda-engine.pgid
 exec node /app/server.mjs

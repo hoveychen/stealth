@@ -172,10 +172,20 @@ export function spawnBackends({ bin = '/bin/lightpanda', count, basePort, proxy 
     });
     return {
         backends,
-        stop() {
+        // SIGTERM to every process; those still running after timeoutMs get
+        // SIGKILL. Resolves to how many had to be killed.
+        async stop(timeoutMs = 1000) {
             stopping = true;
-            for (const c of children) c?.kill('SIGTERM');
             for (const b of backends) b.close();
+            const live = children.filter((c) => c && c.exitCode == null && c.signalCode == null);
+            const exits = live.map((c) => new Promise((r) => c.once('exit', r)));
+            for (const c of live) c.kill('SIGTERM');
+            let timer;
+            await Promise.race([Promise.all(exits), new Promise((r) => (timer = setTimeout(r, timeoutMs)))]);
+            clearTimeout(timer);
+            const stuck = live.filter((c) => c.exitCode == null && c.signalCode == null);
+            for (const c of stuck) c.kill('SIGKILL');
+            return stuck.length;
         },
     };
 }

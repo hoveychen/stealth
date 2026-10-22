@@ -46,6 +46,10 @@ Inside the container, `tini` is PID 1 and `entrypoint.sh` starts:
 - `lightpanda serve` on `127.0.0.1:9222` — the CDP port is not exposed. When
   the engine exits it is restarted after `LP_RESTART_DELAY` seconds;
   requests in flight fail with `engine_disconnected`, queued ones wait for it.
+  The engine and this restart loop run under `setsid`, in a process group of
+  their own, so `docker stop`'s SIGTERM reaches only the service, which ends
+  the engine itself once the crawls in flight are done (see
+  [Stopping](#stopping)).
 - the service on `0.0.0.0:8080`, pointed at that engine. If the service
   exits, the container exits and the restart policy brings it back.
 
@@ -97,7 +101,11 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `MCP_MAX_SESSIONS`   | `32`                    | MCP sessions at once; `initialize` beyond it is a 503 |
 | `MCP_SESSION_IDLE_MS`| `1800000` (30 min)      | an MCP session with no call for this long is closed; `0` never |
 | `MCP_CALL_TIMEOUT_MS`| `120000`                | longest wait for the engine's answer to one MCP request (then 504) |
-| `SHUTDOWN_SAVE_MS`   | `5000`                  | on SIGTERM/SIGINT, longest wait for the open MCP sessions bound to a `session_id` to write their cookies back |
+| `SHUTDOWN_DRAIN_MS`  | `5000`                  | on SIGTERM/SIGINT, longest wait for the `/crawl` requests in flight to finish; those still running then are abandoned (see [Stopping](#stopping)) |
+| `SHUTDOWN_PARTIAL_MS`| `1000`                  | time an abandoned crawl's page gets to hand over a partial result |
+| `SHUTDOWN_SAVE_MS`   | `5000`                  | on SIGTERM/SIGINT, longest wait for the open MCP sessions bound to a `session_id` to write their cookies back (alongside the drain) |
+| `SHUTDOWN_ENGINE_MS` | `1000`                  | after the drain, time the engines get to exit on SIGTERM before SIGKILL |
+| `SHUTDOWN_HISTORY_MS`| `1000`                  | last, time the history's queued lines get to reach the disk |
 | `MCP_PROXY`          |                         | one proxy URL for all MCP browsing (the engine's `--http-proxy`) |
 | `MCP_BASE_PORT`      | `9300`                  | first loopback port of the MCP processes (one each, consecutive) |
 | `LP_BIN`             | `/bin/lightpanda`       | the engine binary the MCP processes run |
@@ -182,6 +190,7 @@ Only the requested formats are present.
 | 502  | `proxy_auth_failed`   | the proxy rejected the credentials (or wanted some and got none) |
 | 503  | `no_proxy_available`  | `proxy: "pool"` and every proxy in the pool is ejected |
 | 503  | `queue_full`          | `QUEUE_MAX` requests already waiting |
+| 503  | `shutting_down`       | the service is stopping: a request sent then, one still queued for a slot, or one still running after `SHUTDOWN_DRAIN_MS` (with `partial`, as after a timeout); see [Stopping](#stopping) |
 | 503  | `engine_unavailable`  | could not connect to the engine before the deadline |
 | 504  | `timeout`             | the deadline passed (queued, loading, or evaluating) |
 
@@ -432,8 +441,8 @@ How it is put together (`lib/mcp.mjs`):
 - On SIGTERM/SIGINT (`docker stop`) the service refuses new `/mcp`
   requests (503), lets every bound session finish its call in flight, writes
   its cookies back one last time and persists them, then exits — at most
-  `SHUTDOWN_SAVE_MS` (5 s) for that plus up to 2 s for the history, inside
-  `docker stop`'s default 10 s. It logs `mcp cookies saved on shutdown`
+  `SHUTDOWN_SAVE_MS` (5 s) for that, alongside the `/crawl` drain, all inside
+  `docker stop`'s default 10 s (see [Stopping](#stopping)). It logs `mcp cookies saved on shutdown`
   (sessions, saved, timedOut, ms). The MCP engine processes run in a process
   group of their own so that the signal tini forwards to the service's group
   does not end them before that write-back.
@@ -565,6 +574,7 @@ Without `HISTORY_DIR` the answer is `{ "enabled": false, "entries": [] }`.
 ```json
 {
   "ok": true,
+  "stopping": false,
   "pool": { "size": 4, "busy": 1, "connected": 3, "queued": 0, "reconnects": 0 },
   "proxies": {
     "size": 2, "active": 1, "maxFails": 3, "retryAfterMs": 60000,
@@ -578,12 +588,79 @@ Without `HISTORY_DIR` the answer is `{ "enabled": false, "entries": [] }`.
 }
 ```
 
+While the service is stopping, `/health` answers **503** with `"ok": false`
+and `"stopping": { "signal": "SIGTERM", "since": "…", "phase": "draining", "inFlight": 2 }`
+(`phase` goes `draining` → `stopping engines` → `writing history`), so a load
+balancer checking it takes the instance out at once.
+
 `proxies` is `null` when no pool is configured. In `sessions`, `stored` is the
 number of sessions there are (on disk, or in memory without `SESSION_DIR`),
 `loaded` the ones held in memory, `expired` / `deleted` count since startup.
 In `history`, `written` counts lines since startup, `queued` the ones not yet
 on disk, `dropped` lines lost because the disk stayed unwritable (the queue
 is capped at 100,000), `removedFiles` files deleted for age.
+
+## Stopping
+
+On SIGTERM or SIGINT (`docker stop`, `docker compose down`, Ctrl-C):
+
+1. **At once:** `/health` answers 503 with `stopping`; a new `/crawl` gets
+   503 `shutting_down` and a new `/mcp` request 503; every answer from then
+   on closes its connection. Requests still **queued** for a browser slot
+   fail at once with 503 `shutting_down` too: they have not started, so a
+   client can send them to another instance right away instead of waiting
+   out the drain only to be refused at its end.
+2. **Drain, up to `SHUTDOWN_DRAIN_MS` (5 s):** the `/crawl` requests in
+   flight run on. Those still running when it is up are **abandoned**: the
+   page gets `SHUTDOWN_PARTIAL_MS` (1 s) to hand over what it has, and the
+   answer is 503 `shutting_down` with `partial`, exactly as after a timeout
+   (see [Timeouts and partial results](#timeouts-and-partial-results)).
+   Their session cookies are saved as usual. At the same time the MCP
+   sessions bound to a `session_id` write their cookies back (up to
+   `SHUTDOWN_SAVE_MS`, 5 s).
+3. **Engines, up to `SHUTDOWN_ENGINE_MS` (1 s):** SIGTERM to the `serve`
+   engine's process group and the MCP engines, SIGKILL to whatever is left.
+4. **History, up to `SHUTDOWN_HISTORY_MS` (1 s),** then exit code 0.
+
+Every request refused or abandoned has its history line, `code`
+`shutting_down`, the reason in `message` (`…sent while stopping`, `…still
+queued…`, `…still running after SHUTDOWN_DRAIN_MS…`) and, for an abandoned
+one, the partial result's size. The log has a `stopping` line at the signal
+and a `stopped` line before exit (requests refused from the queue, crawls in
+flight and abandoned, whether the engine had to be killed, each phase's ms).
+
+With the defaults the worst case is 5 + 1 (+0.5 slack) + 1 + 1 = 8.5 s,
+inside `docker stop`'s default 10 s grace; a stop with nothing in flight
+takes well under a second. To let longer crawls finish, raise
+`SHUTDOWN_DRAIN_MS` **and** the grace period with it, keeping the grace
+above `max(SHUTDOWN_DRAIN_MS + SHUTDOWN_PARTIAL_MS + 500, SHUTDOWN_SAVE_MS) +
+SHUTDOWN_ENGINE_MS + SHUTDOWN_HISTORY_MS` plus a second or so: for 30 s
+crawls, `SHUTDOWN_DRAIN_MS: 30000` with `stop_grace_period: 35s` in compose
+(`docker stop -t 35`, `docker run --stop-timeout 35`). The service logs a
+warning at startup when the sum is above 9.5 s. Past the grace Docker sends
+SIGKILL, and whatever is still in flight is cut off without an answer or a
+history line.
+
+Measured on bt (`lp-crawl:drain`, `service/test/docker-test.sh`): with POOL_SIZE 3, three crawls in flight
+and one queued when `docker stop` started: the queued one got 503
+`shutting_down` 135 ms later; a 3 s page finished 2.5 s into the stop with
+its full answer (200); a new request and `/health` 0.7 s in got 503; two
+pages that never finish loading were abandoned at 5.14 s with their partial
+result (one with the DOM it had, 147 bytes of html); an MCP call in flight
+finished at 2.0 s and its session's cookies were written back; the engine
+exited on SIGTERM in 52 ms; `docker stop` took 5.57 s, exit code 0. With
+nothing in flight it took 0.6 s. With `SHUTDOWN_DRAIN_MS=12000` and
+`docker stop -t 15`, a 10 s page finished (200 at 10.1 s) and the stop took
+10.2 s, exit code 0. With the previous image (`lp-crawl:mcpsync`), the same
+3 s crawl and a never-finishing one sent 0.5 s before `docker stop` got no
+answer at all: their connections closed ~0.08 s after the signal, and the
+container was gone 0.59 s after it.
+
+Why the engine has its own process group: tini (PID 1, `-g`) forwards
+`docker stop`'s SIGTERM to its child's whole process group. Before, the
+`serve` engine was in that group and died with the service at once, so
+every crawl in flight failed (with the previous image the service was gone
+in ~0.6 s and the clients got no answer at all).
 
 ## Scaling
 
@@ -750,7 +827,11 @@ processes' flags, no WebMCP surface on the page, link and ajax paging clicked
 to the end, two concurrent sessions neither waiting on nor seeing each other,
 cookie isolation, `MCP_PROXY` with credentials, refused session tools,
 400/404/405, `/mcp/sessions`, the history lines and filters, a killed MCP
-process, `DELETE`) and the two `/crawl` paging recipes. Against the container it
+process, `DELETE`), stopping (`docker stop` with crawls in flight: the
+finished one's full answer, the abandoned ones' partial results, the queued
+and new ones refused, `/health` 503, the history lines, an MCP session's
+cookies written back, exit code 0 within 10 s) and the two `/crawl` paging
+recipes. Against the container it
 also checks the engine's command line for `--http-max-concurrent`.
 Use a ReleaseFast engine build; the Debug build in `zig-out` is about 3.5×
 slower.
