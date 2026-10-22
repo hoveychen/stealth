@@ -137,11 +137,12 @@ export class History {
         return [...byDay].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([day, files]) => ({ day, files }));
     }
 
-    // filter: { url, status: [n], code: [s], session_id, since, until (ms),
-    // limit, days }. Newest first. Without `since`, only the last `days` days
+    // filter: { url, status: [n], code: [s], session_id, kind, since, until
+    // (ms), limit, days }. session_id also matches an MCP line's mcp_session;
+    // kind is "crawl" (lines from before kind existed count as crawl) or "mcp". Newest first. Without `since`, only the last `days` days
     // (today included) are read. Days are read newest first and the read
     // stops at the first day that brings the matches up to `limit`.
-    async query({ url, status, code, session_id, since, until, limit = 100, days = 3 } = {}) {
+    async query({ url, status, code, session_id, kind, since, until, limit = 100, days = 3 } = {}) {
         await this.flush();
         const from = since ?? dayStart(this.now() - (days - 1) * DAY_MS);
         const fromDay = dayOf(from);
@@ -151,7 +152,8 @@ export class History {
             (!needle || (e.url ?? '').toLowerCase().includes(needle) || (e.finalUrl ?? '').toLowerCase().includes(needle)) &&
             (!status || status.includes(e.status)) &&
             (!code || code.includes(e.code ?? 'ok')) &&
-            (!session_id || e.session_id === session_id) &&
+            (!session_id || e.session_id === session_id || e.mcp_session === session_id) &&
+            (!kind || (e.kind ?? 'crawl') === kind) &&
             (since === undefined || Date.parse(e.time) >= since) &&
             (until === undefined || Date.parse(e.time) <= until);
         let out = [];

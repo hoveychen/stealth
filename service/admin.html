@@ -67,7 +67,10 @@
     <div><h2>连接池</h2><table class="kv" id="st-pool"></table></div>
     <div><h2>Session</h2><table class="kv" id="st-sessions"></table></div>
     <div><h2>请求历史</h2><table class="kv" id="st-history"></table></div>
+    <div><h2>MCP</h2><table class="kv" id="st-mcp"></table></div>
   </div>
+  <h2>MCP 会话</h2>
+  <div id="st-mcp-sessions"></div>
   <h2>代理池</h2>
   <div id="st-proxies"></div>
   <p class="muted">每 3 秒刷新一次（页面在后台时暂停）。</p>
@@ -78,7 +81,8 @@
     <label>URL 包含<input type="text" name="url" size="28"></label>
     <label>HTTP 状态<input type="text" name="status" size="8" placeholder="200,504"></label>
     <label>错误码<input type="text" name="code" size="16" list="codes" placeholder="ok / timeout"></label>
-    <label>session_id<input type="text" name="session_id" size="14"></label>
+    <label>类型<select name="kind"><option value="">全部</option><option value="crawl">crawl（/crawl）</option><option value="mcp">mcp（agent）</option></select></label>
+    <label>session_id<input type="text" name="session_id" size="14" title="也匹配 MCP 会话 id"></label>
     <label>起<input type="datetime-local" name="since" step="1"></label>
     <label>止<input type="datetime-local" name="until" step="1"></label>
     <label>最近天数<input type="number" name="days" value="3" min="1" style="width:5em"></label>
@@ -90,7 +94,7 @@
   <datalist id="codes"></datalist>
   <div class="status muted" id="h-sum"></div>
   <table id="h-table">
-    <thead><tr><th>时间</th><th>结果</th><th>URL</th><th class="num">页面状态</th><th class="num">耗时 ms</th><th>代理</th><th>session</th><th>输出</th><th class="num">大小</th></tr></thead>
+    <thead><tr><th>时间</th><th>结果</th><th>URL</th><th class="num">页面状态</th><th class="num">耗时 ms</th><th>代理</th><th>session</th><th>输出 / 工具</th><th class="num">大小</th></tr></thead>
     <tbody></tbody>
   </table>
   <p class="muted">点一行看完整记录。不填「起」时只查最近几天（按 UTC 日期分文件）。</p>
@@ -137,6 +141,7 @@ const CODES = {
   proxy_failed: '代理不可用', proxy_auth_failed: '代理认证失败', no_proxy_available: '代理池全部被剔除',
   queue_full: '排队已满', engine_unavailable: '引擎连不上', engine_disconnected: '引擎连接中断',
   cdp_error: '引擎拒绝命令', internal: '服务内部错误',
+  tool_error: 'MCP 工具报错', rpc_error: 'MCP 请求错误', engine_error: 'MCP 引擎连不上', engine_restarted: 'MCP 引擎重启，会话丢失',
 };
 const $ = (s, root = document) => root.querySelector(s);
 function el(tag, attrs, ...kids) {
@@ -209,6 +214,24 @@ async function refreshStatus() {
     ['丢弃', hi.dropped, hi.dropped ? 'num bad' : 'num'], ['最近错误', hi.lastError, 'bad'],
     ['已清理文件', hi.removedFiles], ['上次清理', fmtTime(hi.lastSweep), ''],
   ] : [['状态', '未开启（没有设置 HISTORY_DIR）', '']]);
+  const m = h.mcp;
+  kv($('#st-mcp'), m?.enabled ? [
+    ['引擎进程', m.processes.map((p) => `${p.name}${p.up ? '' : '（重启中）'}`).join(' '), ''],
+    ['会话', `${m.sessions} / ${m.maxSessions}`], ['闲置关闭', m.idleMs ? fmtMs(m.idleMs) : '永不'], ['代理', m.proxy ?? '直连', ''],
+    ['工具调用', m.calls], ['工具报错', m.toolErrors], ['已开始', m.started], ['已关闭', m.closed], ['闲置过期', m.expired],
+    ['引擎重启丢失', m.lost, m.lost ? 'num warn' : 'num'],
+  ] : [['状态', '未开启（MCP_PROCS=0）', '']]);
+  if (m?.enabled) {
+    const ms = await getJson('/mcp/sessions').then((r) => r.body.sessions ?? [], () => []);
+    $('#st-mcp-sessions').replaceChildren(ms.length ? el('table', {},
+      el('thead', {}, el('tr', {}, ['会话', '进程', '开始', '最后调用', '调用数', '当前页面'].map((t, i) => el('th', { class: i === 4 ? 'num' : null }, t)))),
+      el('tbody', {}, ms.map((x) => el('tr', { class: 'hit', title: '看这个会话的历史', onclick: () => { $('#hf').reset(); $('#hf').session_id.value = x.id; location.hash = 'history'; } },
+        el('td', { class: 'mono' }, x.id), el('td', { class: 'mono' }, x.process), el('td', { class: 'mono' }, fmtTime(x.created)),
+        el('td', { class: 'mono' }, `${fmtTime(x.lastUsed)}${x.busy ? '（调用中）' : ''}`), el('td', { class: 'num' }, x.calls), el('td', { class: 'mono url' }, x.url ?? ''))))) :
+      el('p', { class: 'muted' }, '当前没有 MCP 会话。'));
+  } else {
+    $('#st-mcp-sessions').replaceChildren();
+  }
   const px = h.proxies;
   if (!px) {
     $('#st-proxies').replaceChildren(el('p', { class: 'muted' }, '未配置代理池（PROXY_POOL / PROXY_POOL_FILE）。'));
@@ -234,7 +257,7 @@ setInterval(() => {
 async function loadHistory() {
   const f = new FormData($('#hf'));
   const q = new URLSearchParams();
-  for (const k of ['url', 'status', 'code', 'session_id', 'days', 'limit']) if (f.get(k)) q.set(k, f.get(k).trim());
+  for (const k of ['url', 'status', 'code', 'kind', 'session_id', 'days', 'limit']) if (f.get(k)) q.set(k, f.get(k).trim());
   for (const k of ['since', 'until']) if (f.get(k)) q.set(k, new Date(f.get(k)).toISOString());
   $('#h-sum').textContent = '查询中…';
   let r;
@@ -259,7 +282,7 @@ async function loadHistory() {
   $('#h-sum').textContent = `${entries.length} 条（自 ${fmtTime(from)} 起，读了 ${scanned.files} 个文件 ${scanned.lines} 行）`;
   tbody.replaceChildren(...entries.flatMap((e) => {
     const detail = el('tr', { class: 'detail', hidden: true }, el('td', { colspan: 9 }, el('pre', {}, JSON.stringify(e, null, 2))));
-    const sizes = [e.htmlBytes != null && `html ${fmtBytes(e.htmlBytes)}`, e.markdownBytes != null && `md ${fmtBytes(e.markdownBytes)}`,
+    const sizes = [e.resultBytes != null && `结果 ${fmtBytes(e.resultBytes)}`, e.htmlBytes != null && `html ${fmtBytes(e.htmlBytes)}`, e.markdownBytes != null && `md ${fmtBytes(e.markdownBytes)}`,
       e.partial && `部分结果(${e.partial.source ?? '无'}) ${[e.partial.htmlBytes, e.partial.markdownBytes].filter((n) => n != null).map(fmtBytes).join(' / ')}`].filter(Boolean);
     const row = el('tr', { class: 'hit', onclick: () => (detail.hidden = !detail.hidden) },
       el('td', { class: 'mono', title: e.time }, fmtTime(e.time)),
@@ -269,8 +292,8 @@ async function loadHistory() {
       el('td', { class: 'num' }, e.pageStatus ?? ''),
       el('td', { class: 'num', title: e.queueMs != null ? `排队 ${e.queueMs} ms` : '' }, e.ms),
       el('td', { class: 'mono url' }, e.proxy ?? (e.proxyMode === 'pool' ? 'pool' : ''), e.proxiesTried > 1 ? el('div', { class: 'muted' }, `试了 ${e.proxiesTried} 个`) : null),
-      el('td', { class: 'mono' }, e.session_id ?? ''),
-      el('td', { class: 'mono' }, (e.formats ?? []).join(' ')),
+      el('td', { class: 'mono' }, e.session_id ?? e.mcp_session ?? ''),
+      el('td', { class: 'mono' }, e.kind === 'mcp' ? `mcp ${e.tool ?? ''}${e.args?.selector ? ` ${e.args.selector}` : ''}` : (e.formats ?? []).join(' ')),
       el('td', { class: 'num' }, sizes.map((s) => el('div', {}, s))),
     );
     return [row, detail];

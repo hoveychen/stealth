@@ -1,6 +1,7 @@
 // Unit checks for the proxy pool, telling a dead proxy from a dead target,
 // the session store (cookie merge, TTL, delete) and the request history
-// (daily files, retention, queries); no engine.
+// (daily files, retention, queries) and the MCP gateway (against fake engine
+// MCP servers); no engine.
 //
 //   node service/test/unit.mjs
 
@@ -10,7 +11,10 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { diagnoseProxyFailure, normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool, redact } from '../lib/proxies.mjs';
+import http from 'node:http';
 import { History } from '../lib/history.mjs';
+import { Backend, HIDDEN_TOOLS, McpGateway } from '../lib/mcp.mjs';
+import { McpClient } from './mcp-client.mjs';
 import { SessionStore } from '../lib/sessions.mjs';
 import { startHttpProxy, startSocksProxy } from './proxy-server.mjs';
 
@@ -321,6 +325,206 @@ await check('History: disabled without a directory', async () => {
     assert.equal(h.enabled, false);
     assert.equal(h.stats().queued, 0);
     assert.equal(await h.sweep(), 0);
+});
+
+await check('History: kind filter (lines without kind are crawls) and session_id matches mcp_session', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    const now = Date.parse('2026-10-21T12:00:00Z');
+    const h = new History({ dir, replica: 'k', now: () => now });
+    h.record(hEntry(now - 3000, { url: 'https://old-line.example/' }));
+    h.record(hEntry(now - 2000, { url: 'https://crawl.example/', kind: 'crawl' }));
+    h.record(hEntry(now - 1000, { url: 'https://agent.example/', kind: 'mcp', tool: 'goto', mcp_session: 'mcp-abc' }));
+    await h.flush();
+    const urls = async (f) => (await h.query(f)).entries.map((e) => e.url);
+    assert.deepEqual(await urls({ kind: 'mcp' }), ['https://agent.example/']);
+    assert.deepEqual(await urls({ kind: 'crawl' }), ['https://crawl.example/', 'https://old-line.example/']);
+    assert.deepEqual(await urls({ session_id: 'mcp-abc' }), ['https://agent.example/']);
+    fs.rmSync(dir, { recursive: true });
+});
+
+// A stand-in for `lightpanda mcp --port`: sessions by Mcp-Session-Id, a page
+// URL per session, and the tools the gateway treats specially.
+function fakeEngine() {
+    const sessions = new Map();
+    const seen = [];
+    const server = http.createServer((req, res) => {
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => {
+            const sid = req.headers['mcp-session-id'] || 'default';
+            seen.push({ method: req.method, sid, host: req.headers.host, origin: req.headers.origin ?? null, body: Buffer.concat(chunks).toString() });
+            if (req.method === 'DELETE') {
+                sessions.delete(sid);
+                res.writeHead(202);
+                return res.end();
+            }
+            const msg = JSON.parse(Buffer.concat(chunks).toString());
+            if (!sessions.has(sid)) sessions.set(sid, { url: null });
+            const s = sessions.get(sid);
+            const ok = (result) => {
+                res.writeHead(200, { 'content-type': 'application/json', 'mcp-session-id': sid });
+                res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
+            };
+            const text = (t, isError = false) => ok({ content: [{ type: 'text', text: t }], isError });
+            if (msg.id === undefined) {
+                res.writeHead(202);
+                return res.end();
+            }
+            if (msg.method === 'initialize') return ok({ protocolVersion: '2025-06-18', serverInfo: { name: 'fake' } });
+            if (msg.method === 'tools/list') return ok({ tools: ['goto', 'click', 'getUrl', ...HIDDEN_TOOLS].map((name) => ({ name })) });
+            const { name, arguments: args = {} } = msg.params;
+            if (name === 'goto') {
+                s.url = args.url;
+                return setTimeout(() => text('Navigated successfully.'), args.delay ?? 0);
+            }
+            if (name === 'click') {
+                if (args.selector === '#missing') return text('no element matches #missing', true);
+                s.url = `${s.url}?clicked`;
+                return text('Clicked.');
+            }
+            if (name === 'getUrl') return text(s.url ?? '', !s.url);
+            return text(`ran ${name} (should not have been forwarded)`);
+        });
+    });
+    return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, sessions, seen, url: `http://127.0.0.1:${server.address().port}/mcp` })));
+}
+
+async function gatewayFixture(opts = {}) {
+    const engines = [await fakeEngine(), await fakeEngine()];
+    const backends = engines.map((e, i) => new Backend(e.url, { name: `mcp${i}` }));
+    const records = [];
+    let now = 1_000_000;
+    const gw = new McpGateway({ backends, record: (e) => records.push(e), now: () => now, ...opts });
+    const front = http.createServer((req, res) => {
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => gw.handle(req, res, Buffer.concat(chunks).toString()));
+    });
+    await new Promise((r) => front.listen(0, '127.0.0.1', r));
+    const url = `http://127.0.0.1:${front.address().port}/mcp`;
+    return {
+        engines, backends, gw, records, url,
+        advance: (ms) => (now += ms),
+        close() {
+            front.close();
+            for (const e of engines) e.server.close();
+            for (const b of backends) b.close();
+        },
+    };
+}
+
+await check('MCP gateway: initialize mints distinct unguessable ids, spread over the engine processes', async () => {
+    const f = await gatewayFixture();
+    try {
+        const a = new McpClient(f.url), b = new McpClient(f.url);
+        await a.initialize();
+        await b.initialize();
+        assert.match(a.sessionId, /^mcp-[0-9a-f]{24}$/);
+        assert.notEqual(a.sessionId, b.sessionId);
+        assert.ok(f.engines[0].sessions.has(a.sessionId) !== f.engines[1].sessions.has(a.sessionId));
+        assert.notEqual(f.gw.sessions.get(a.sessionId).backend, f.gw.sessions.get(b.sessionId).backend, 'two sessions, two processes');
+        // The engine sees an IP Host and no Origin (it refuses anything else).
+        const seen = f.engines.flatMap((e) => e.seen);
+        assert.ok(seen.every((r) => /^127\.0\.0\.1:\d+$/.test(r.host) && r.origin === null));
+        assert.deepEqual(f.records.map((r) => r.tool), ['session_start', 'session_start']);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: no session header -> 400, unknown session -> 404, never the engine default session', async () => {
+    const f = await gatewayFixture();
+    try {
+        const anon = new McpClient(f.url);
+        await assert.rejects(anon.request('tools/list'), /HTTP 400/);
+        const stale = new McpClient(f.url, { sessionId: 'mcp-doesnotexist' });
+        await assert.rejects(stale.tool('goto', { url: 'http://x/' }), /HTTP 404/);
+        assert.equal(f.engines.flatMap((e) => e.seen).length, 0);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: session tools and save are hidden from tools/list and refused', async () => {
+    const f = await gatewayFixture();
+    try {
+        const c = new McpClient(f.url);
+        await c.initialize();
+        const names = (await c.request('tools/list')).tools.map((t) => t.name);
+        assert.deepEqual(names, ['goto', 'click', 'getUrl']);
+        for (const t of HIDDEN_TOOLS) await assert.rejects(c.tool(t, { id: 'default' }), /not available on this server/);
+        assert.ok(!f.engines.flatMap((e) => e.seen).some((r) => r.body.includes('session_list')));
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: tool calls go to the history with url, final url, result and session', async () => {
+    const f = await gatewayFixture();
+    try {
+        const c = new McpClient(f.url);
+        await c.initialize();
+        assert.equal(await c.tool('goto', { url: 'http://site.example/list/1' }), 'Navigated successfully.');
+        await c.tool('click', { selector: 'a.next' });
+        await assert.rejects(c.tool('click', { selector: '#missing' }), /no element matches/);
+        await new Promise((r) => setTimeout(r, 50)); // the getUrl after a navigating tool
+        const calls = f.records.filter((r) => r.tool !== 'session_start');
+        assert.deepEqual(calls.map((r) => [r.tool, r.code, r.url, r.finalUrl]), [
+            ['goto', null, 'http://site.example/list/1', 'http://site.example/list/1'],
+            ['click', null, 'http://site.example/list/1', 'http://site.example/list/1?clicked'],
+            ['click', 'tool_error', 'http://site.example/list/1?clicked', 'http://site.example/list/1?clicked'],
+        ]);
+        assert.ok(calls.every((r) => r.kind === 'mcp' && r.mcp_session === c.sessionId && r.status === 200 && typeof r.ms === 'number'));
+        assert.deepEqual(calls[1].args, { selector: 'a.next' });
+        assert.equal(calls[2].message, 'no element matches #missing');
+        assert.deepEqual(f.gw.list().map((s) => [s.id, s.calls, s.url]), [[c.sessionId, 3, 'http://site.example/list/1?clicked']]);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: DELETE closes the engine session; idle sessions are swept; a dead engine loses its sessions', async () => {
+    const f = await gatewayFixture({ idleMs: 60_000 });
+    try {
+        const a = new McpClient(f.url), b = new McpClient(f.url), c = new McpClient(f.url);
+        await a.initialize();
+        await b.initialize();
+        await c.initialize();
+        assert.equal(await a.close(), 204);
+        assert.ok(!f.engines.some((e) => e.sessions.has(a.sessionId)), 'engine session closed');
+        await assert.rejects(a.tool('goto', { url: 'http://x/' }), /HTTP 404/);
+
+        f.advance(30_000);
+        await c.tool('goto', { url: 'http://x/' });
+        f.advance(40_000);
+        assert.equal(await f.gw.sweep(), 1, 'b idle 70 s, c only 40 s');
+        await assert.rejects(b.tool('goto', { url: 'http://x/' }), /HTTP 404/);
+        assert.ok(!f.engines.some((e) => e.sessions.has(b.sessionId)));
+
+        f.gw.backendRestarted(f.gw.sessions.get(c.sessionId).backend);
+        await assert.rejects(c.tool('goto', { url: 'http://x/' }), /HTTP 404/);
+        assert.deepEqual(f.records.filter((r) => r.tool.startsWith('session_')).map((r) => [r.tool, r.code]), [
+            ['session_start', null], ['session_start', null], ['session_start', null],
+            ['session_end', null], ['session_end', null], ['session_lost', 'engine_restarted'],
+        ]);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: initialize moves on from a dead process; MCP_MAX_SESSIONS is enforced', async () => {
+    const f = await gatewayFixture({ maxSessions: 2 });
+    try {
+        f.engines[0].server.close(); // refuses connections, but still marked up
+        f.engines[0].server.closeAllConnections();
+        const a = new McpClient(f.url), b = new McpClient(f.url), c = new McpClient(f.url);
+        await a.initialize();
+        assert.equal(f.gw.sessions.get(a.sessionId).backend.name, 'mcp1');
+        await b.initialize();
+        await assert.rejects(c.initialize(), /HTTP 503.*MCP_MAX_SESSIONS/);
+    } finally {
+        f.close();
+    }
 });
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

@@ -7,6 +7,7 @@ import os from 'node:os';
 import { Pool } from './lib/pool.mjs';
 import { crawl, normalizeRequest, RequestError } from './lib/crawl.mjs';
 import { History, MAX_LIMIT } from './lib/history.mjs';
+import { McpGateway, spawnBackends } from './lib/mcp.mjs';
 import { normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool, redact } from './lib/proxies.mjs';
 import { SESSION_ID, SessionStore } from './lib/sessions.mjs';
 
@@ -56,12 +57,33 @@ const config = {
     // In a container the hostname is the container id.
     historyReplica: env('HISTORY_REPLICA', '') || os.hostname(),
     proxyProbe: null,
+    // MCP (POST /mcp): engine `mcp` processes to spread agent sessions over;
+    // 0 turns /mcp off. Each process runs its sessions' tool calls one at a
+    // time, so this is how many agents can have a call in flight at once.
+    mcpProcs: nonNegInt('MCP_PROCS', 0),
+    mcpBasePort: int('MCP_BASE_PORT', 9300),
+    mcpMaxSessions: int('MCP_MAX_SESSIONS', 32),
+    // Sessions with no call for this long are closed (0: never). Half an hour
+    // leaves room for an agent that thinks for minutes between calls.
+    mcpIdleMs: nonNegInt('MCP_SESSION_IDLE_MS', 30 * 60 * 1000),
+    mcpCallTimeoutMs: int('MCP_CALL_TIMEOUT_MS', 120000),
+    mcpProxy: null,
 };
 if (env('PROXY_PROBE', '')) {
     try {
         config.proxyProbe = parseHostPort(process.env.PROXY_PROBE);
     } catch (e) {
         throw new Error(`PROXY_PROBE: ${e.message}`);
+    }
+}
+
+// One proxy for all MCP browsing (the engine's --http-proxy); the MCP tools
+// have no per-call proxy.
+if (env('MCP_PROXY', '')) {
+    try {
+        config.mcpProxy = normalizeProxyUrl(process.env.MCP_PROXY);
+    } catch (e) {
+        throw new Error(`MCP_PROXY: ${e.message}`);
     }
 }
 
@@ -103,6 +125,32 @@ await sweepHistory();
 if (history.enabled && config.historyRetentionDays) setInterval(sweepHistory, 3600 * 1000).unref();
 
 const pool = new Pool({ cdpUrl: config.cdpUrl, size: config.poolSize, queueMax: config.queueMax });
+
+let mcp = null, mcpEngines = null;
+if (config.mcpProcs) {
+    mcpEngines = spawnBackends({
+        bin: env('LP_BIN', '/bin/lightpanda'),
+        count: config.mcpProcs,
+        basePort: config.mcpBasePort,
+        proxy: config.mcpProxy,
+        preload: env('LP_ENGINE_PRELOAD', ''),
+        logLevel: env('LP_LOG_LEVEL', 'info'),
+        restartDelayMs: 1000 * Number(env('LP_RESTART_DELAY', 1)),
+        onRestart: (b) => mcp?.backendRestarted(b),
+        log,
+    });
+    mcp = new McpGateway({
+        backends: mcpEngines.backends,
+        maxSessions: config.mcpMaxSessions,
+        idleMs: config.mcpIdleMs,
+        callTimeoutMs: config.mcpCallTimeoutMs,
+        proxy: config.mcpProxy && redact(config.mcpProxy),
+        record: logMcp,
+    });
+    if (config.mcpIdleMs) {
+        setInterval(() => mcp.sweep().then((n) => n && log({ msg: 'mcp sessions expired', count: n, idleMs: config.mcpIdleMs })), Math.min(60000, Math.max(1000, config.mcpIdleMs / 4))).unref();
+    }
+}
 
 // The admin page: one static file, no external resources.
 const ADMIN_PAGE = fs.readFileSync(new URL('./admin.html', import.meta.url));
@@ -188,6 +236,7 @@ const clip = (s, n) => (typeof s === 'string' && s.length > n ? `${s.slice(0, n)
 function logCrawl(f) {
     const entry = {
         time: new Date().toISOString(),
+        kind: 'crawl',
         url: f.url == null ? null : clip(redact(f.url), 2048),
         finalUrl: f.finalUrl == null ? null : clip(redact(f.finalUrl), 2048),
         status: f.status,
@@ -204,6 +253,37 @@ function logCrawl(f) {
         htmlBytes: f.htmlBytes ?? null,
         markdownBytes: f.markdownBytes ?? null,
         partial: f.partial ?? null,
+        replica: history.replica,
+    };
+    const line = JSON.stringify(entry);
+    console.log(line);
+    history.record(entry, line);
+}
+
+// One MCP tools/call (or session start/end), in the same shape as a crawl's
+// line so /history and the admin page take both; kind "mcp", the tool, the
+// MCP session and the engine process are its own.
+function logMcp(f) {
+    const entry = {
+        time: new Date().toISOString(),
+        kind: 'mcp',
+        tool: f.tool,
+        url: f.url == null ? null : clip(redact(f.url), 2048),
+        finalUrl: f.finalUrl == null ? null : clip(redact(f.finalUrl), 2048),
+        status: f.status,
+        code: f.code,
+        message: clip(f.message, 1000),
+        pageStatus: null,
+        ms: f.ms,
+        queueMs: null,
+        proxyMode: config.mcpProxy ? 'url' : 'direct',
+        proxy: config.mcpProxy && redact(config.mcpProxy),
+        proxiesTried: 0,
+        session_id: null,
+        mcp_session: f.mcp_session,
+        mcp_process: f.mcp_process,
+        args: f.args,
+        resultBytes: f.resultBytes,
         replica: history.replica,
     };
     const line = JSON.stringify(entry);
@@ -235,11 +315,14 @@ function historyFilter(q) {
         if (!/^\d{3}$/.test(s)) throw new RequestError('status must be HTTP status codes, comma-separated');
         return Number(s);
     });
+    const kind = q.get('kind') || undefined;
+    if (kind && kind !== 'crawl' && kind !== 'mcp') throw new RequestError('kind must be crawl or mcp');
     return {
         url: q.get('url') || undefined,
         status,
         code: list('code'),
         session_id: q.get('session_id') || undefined,
+        kind,
         since: time('since'),
         until: time('until'),
         limit: intParam('limit', 1, MAX_LIMIT, 100),
@@ -285,8 +368,21 @@ const server = http.createServer((req, res) => {
         );
         return;
     }
+    if (path === '/mcp') {
+        if (!mcp) return reply(res, 404, { error: { code: 'not_found', message: 'MCP is off (MCP_PROCS=0)' } });
+        readBody(req)
+            .then((body) => mcp.handle(req, res, body))
+            .catch((e) => {
+                if (!res.headersSent) reply(res, e instanceof RequestError ? 400 : 500, { jsonrpc: '2.0', id: null, error: { code: -32603, message: e.message } });
+            });
+        return;
+    }
+    if (req.method === 'GET' && path === '/mcp/sessions') {
+        if (!mcp) return reply(res, 404, { error: { code: 'not_found', message: 'MCP is off (MCP_PROCS=0)' } });
+        return reply(res, 200, { total: mcp.sessions.size, sessions: mcp.list() });
+    }
     if (req.method === 'GET' && path === '/health') {
-        return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats() });
+        return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats(), mcp: mcp?.stats() ?? { enabled: false } });
     }
     if (req.method === 'GET' && path === '/history') return handleHistory(req, res);
     if (req.method === 'GET' && path === '/sessions') {
@@ -308,13 +404,14 @@ const server = http.createServer((req, res) => {
 // Requests may legitimately hold for MAX_TIMEOUT_MS plus queueing.
 server.requestTimeout = 0;
 server.listen(config.port, config.host, 1024, () => {
-    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs, historyDir: config.historyDir, historyRetentionDays: config.historyRetentionDays, historyReplica: history.replica });
+    log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs, historyDir: config.historyDir, historyRetentionDays: config.historyRetentionDays, historyReplica: history.replica, mcpProcs: config.mcpProcs, mcpProxy: config.mcpProxy && redact(config.mcpProxy) });
 });
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
     process.on(sig, () => {
         server.close();
         pool.close();
+        mcpEngines?.stop();
         // The last second of history is still queued; give it a moment.
         const exit = () => process.exit(0);
         setTimeout(exit, 2000).unref();

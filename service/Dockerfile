@@ -7,8 +7,8 @@
 #   docker build -f service/Dockerfile -t lp-crawl .
 #   docker run --rm -p 8080:8080 lp-crawl
 #
-# The engine's CDP port stays on the container's loopback; only the HTTP
-# service is exposed.
+# The engine's CDP port and its MCP processes stay on the container's
+# loopback; only the HTTP service (/crawl, /mcp, ...) is exposed.
 #
 # Multi-arch: linux/amd64 and linux/arm64 via TARGETPLATFORM (build each arch
 # natively; there is no cross-compilation here).
@@ -218,7 +218,8 @@ ENV LIGHTPANDA_DISABLE_TELEMETRY=true \
     LP_RESTART_DELAY=1 \
     LP_MALLOC=jemalloc \
     SESSION_DIR=/data/sessions \
-    HISTORY_DIR=/data/history
+    HISTORY_DIR=/data/history \
+    MCP_PROCS=2
 
 EXPOSE 8080/tcp
 

@@ -48,8 +48,9 @@ for, and both should stay off for any run whose point is to look like a browser:
   interface objects. Chrome has none of those three names, and Kasada was
   measured reading `navigator.modelContext` twice on x-hyatt, so one expression
   separates the engine from every real browser. The `mcp` command carries the
-  surface unconditionally — that is what it is for — and the CDP `WebMCP` domain
-  needs this flag to be usable from `serve`.
+  surface by default — that is what it is for — unless given `--no-webmcp`
+  (its browser tools never use it; the crawl service's `/mcp` runs with it off),
+  and the CDP `WebMCP` domain needs this flag to be usable from `serve`.
 
 ## Conventions
 

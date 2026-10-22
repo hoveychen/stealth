@@ -459,6 +459,7 @@ const Commands = cli.Builder(.{
             .{ .name = "port", .type = ?u16 },
             .{ .name = "host", .type = []const u8, .default = "127.0.0.1" },
             .{ .name = "cdp_port", .type = ?u16 },
+            .{ .name = "no_webmcp", .type = bool },
         },
         .shared_options = CommonOptions,
     },
@@ -594,13 +595,16 @@ pub fn experimentalFeatures(self: *const Config) ExperimentalFeatures {
 // `navigator.modelContext` twice on x-hyatt (see the prop_read log in
 // tools/fingerprint/results/prop-reads-hyatt.json). So the surface is opt-in.
 //
-// `mcp` is the run mode whose entire purpose is WebMCP, so it always carries
-// it. The modes that only speak CDP have to ask with `--webmcp`, which is what
-// keeps the CDP `WebMCP` domain usable from `serve` -- a page cannot register a
-// tool through a surface it cannot see.
+// `mcp` is the run mode whose entire purpose is WebMCP, so it carries it unless
+// told `--no-webmcp`: its browser tools (goto, click, markdown, ...) never touch
+// the surface, so an MCP server that drives pages which must not see it -- the
+// crawl service's /mcp, service/README.md -- turns it off. The modes that only
+// speak CDP have to ask with `--webmcp`, which is what keeps the CDP `WebMCP`
+// domain usable from `serve` -- a page cannot register a tool through a surface
+// it cannot see.
 pub fn enableWebMcp(self: *const Config) bool {
     return switch (self.mode) {
-        .mcp => true,
+        .mcp => |opts| !opts.no_webmcp,
         inline .serve, .fetch, .agent => |opts| opts.webmcp,
         else => unreachable,
     };
@@ -1591,10 +1595,15 @@ test "Config: WebMCP is off unless the run asked for it" {
     defer fetch.deinit(std.testing.allocator);
     try std.testing.expectEqual(false, fetch.enableWebMcp());
 
-    // `mcp` exists to serve WebMCP; the flag is not its to refuse.
+    // `mcp` exists to serve WebMCP, so it carries it by default...
     var mcp = try Config.init(std.testing.allocator, "test", .{ .mcp = .{} });
     defer mcp.deinit(std.testing.allocator);
     try std.testing.expectEqual(true, mcp.enableWebMcp());
+
+    // ...unless its pages must not see it (the crawl service's /mcp).
+    var mcp_off = try Config.init(std.testing.allocator, "test", .{ .mcp = .{ .no_webmcp = true } });
+    defer mcp_off.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, mcp_off.enableWebMcp());
 }
 
 test "Config: adblockLists splits comma-separated paths" {
