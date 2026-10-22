@@ -1060,3 +1060,76 @@ handler runs, abort() cancels the re-send and no load is delivered.
     });
   }
 </script>
+
+<!--
+  A document XHR parses for the page claims the response's address -- URL,
+  documentURI, and the base everything relative in it resolves against -- and
+  the response's MIME essence as its contentType. Chrome 151, headed, warm
+  profile (probes/expr-xhr-document.js). Ours claimed the page's URL.
+-->
+<script id=xhr_responsexml_document_fields type=module>
+  {
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.open('GET', 'http://127.0.0.1:9582/xhr/svg');
+    req.onload = () => state.resolve();
+    req.send();
+    await state.done(() => {
+      const doc = req.responseXML;
+      testing.expectEqual('XMLDocument', doc.constructor.name);
+      testing.expectEqual('http://127.0.0.1:9582/xhr/svg', doc.URL);
+      testing.expectEqual('http://127.0.0.1:9582/xhr/svg', doc.documentURI);
+      testing.expectEqual('http://127.0.0.1:9582/xhr/svg', doc.baseURI);
+      testing.expectEqual('image/svg+xml', doc.contentType);
+      testing.expectEqual('complete', doc.readyState);
+      testing.expectEqual('hidden', doc.visibilityState);
+    });
+  }
+</script>
+
+<!--
+  responseType "document" of an HTML response is an HTMLDocument parsed as
+  HTML: its <base> moves its own baseURI, its scripts stay inert, and Chrome
+  151 leaves it `interactive` -- it never finishes loading a document it has
+  no frame for. Ours parsed the markup as children of a generic Document and
+  reported the page's URL and application/xml.
+-->
+<script id=xhr_document_html type=module>
+  {
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.open('GET', 'http://127.0.0.1:9582/xhr/html');
+    req.responseType = 'document';
+    req.onload = () => state.resolve();
+    req.send();
+    await state.done(() => {
+      const doc = req.response;
+      testing.expectEqual('HTMLDocument', doc.constructor.name);
+      testing.expectEqual('text/html', doc.contentType);
+      testing.expectEqual('interactive', doc.readyState);
+      testing.expectEqual('http://127.0.0.1:9582/xhr/html', doc.URL);
+      testing.expectEqual('https://evil.example/d/', doc.baseURI);
+      testing.expectEqual('https://evil.example/d/rel', doc.querySelector('a').href);
+      testing.expectEqual('HTML', doc.documentElement.nodeName);
+      testing.expectEqual('T', doc.title);
+      testing.expectEqual(1, doc.scripts.length);
+      testing.expectEqual(undefined, window.__xhr_html_ran);
+      testing.expectEqual(true, req.responseXML === doc);
+    });
+  }
+</script>
+
+<script id=xhr_responsexml_after_redirect type=module>
+  {
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.open('GET', 'http://127.0.0.1:9582/xhr/redirect');
+    req.responseType = 'document';
+    req.onload = () => state.resolve();
+    req.send();
+    await state.done(() => {
+      // /xhr/redirect lands on /xhr, which is text/html
+      testing.expectEqual('http://127.0.0.1:9582/xhr', req.response.URL);
+    });
+  }
+</script>

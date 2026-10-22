@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A document with no frame is hidden. Chrome 151, headed, warm profile
+  (probes/expr-detached-visibility.js): the page reads visible/false, and
+  every document script can build reads hidden/true, webkit-prefixed reads
+  included. Ours answered visible for all of them.
+-->
+<script id=detached_documents_are_hidden>
+{
+  const v = (d) => d.visibilityState + '/' + d.hidden + '/' + d.webkitVisibilityState + '/' + d.webkitHidden;
+  const p = new DOMParser();
+  testing.expectEqual('visible/false/visible/false', v(document));
+  testing.expectEqual('hidden/true/hidden/true', v(p.parseFromString('<p>x</p>', 'text/html')));
+  testing.expectEqual('hidden/true/hidden/true', v(p.parseFromString('<a/>', 'application/xml')));
+  testing.expectEqual('hidden/true/hidden/true', v(document.implementation.createHTMLDocument('')));
+  testing.expectEqual('hidden/true/hidden/true', v(document.implementation.createDocument(null, 'a')));
+  testing.expectEqual('hidden/true/hidden/true', v(new Document()));
+}
+</script>
+
+<script id=iframe_document_is_visible>
+{
+  const f = document.createElement('iframe');
+  document.documentElement.appendChild(f);
+  testing.expectEqual('visible', f.contentDocument.visibilityState);
+  f.remove();
+}
+</script>

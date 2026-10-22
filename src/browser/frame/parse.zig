@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
+
 const Frame = @import("../Frame.zig");
 const Parser = @import("../parser/Parser.zig");
 
@@ -138,6 +140,42 @@ fn settleDocumentState(frame: *Frame, node: *Node) !void {
 // Build a detached XMLDocument from `xml` (DOMParser.parseFromString and
 // XMLHttpRequest.responseXML). Returns null when the input isn't well-formed
 // XML.
+// A whole HTML document parsed with no browsing context: DOMParser's text/html
+// and XHR's responseType "document". Like any fragment parse, its scripts never
+// run and nothing it names is fetched. `url` is in place before the parse, so a
+// <base> in the markup resolves against it.
+pub fn htmlDocument(frame: *Frame, html: []const u8, url: [:0]const u8) !*Document.HTMLDocument {
+    const arena = try frame.getArena(.medium, "parse.htmlDocument");
+    defer arena.release();
+
+    const previous_parse_mode = frame._parse_mode;
+    frame._parse_mode = .fragment;
+    defer frame._parse_mode = previous_parse_mode;
+
+    // No browsing context, so no custom element registry.
+    const previous_creation = frame._custom_element_creation;
+    frame._custom_element_creation = .undefined;
+    defer frame._custom_element_creation = previous_creation;
+
+    const doc = try frame._factory.document(Document.HTMLDocument{ ._proto = undefined });
+    doc.asDocument()._url = url;
+
+    var normalized = std.mem.trim(u8, html, &std.ascii.whitespace);
+    if (normalized.len == 0) {
+        normalized = "<html></html>";
+    }
+
+    var parser = Parser.init(arena.allocator(), doc.asNode(), frame, .{});
+    parser.parse(normalized);
+    if (parser.terminated) {
+        return error.ExecutionTerminated;
+    }
+    if (parser.err) |pe| {
+        return pe.err;
+    }
+    return doc;
+}
+
 pub fn xmlDocument(frame: *Frame, xml: []const u8) !?*Document.XMLDocument {
     const arena = try frame.getArena(.medium, "parse.xmlDocument");
     defer arena.release();

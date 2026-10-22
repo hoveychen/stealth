@@ -45,47 +45,12 @@ pub fn parseFromString(
 
     switch (target_mime) {
         .@"text/html" => {
-            const arena = try frame.getArena(.medium, "DOMParser.parseFromString");
-            defer arena.release();
-
-            // DOMParser builds a detached Document. Borrow the same fragment
-            // parse-mode that `Frame.parse` uses so frame-side hooks
-            // triggered from `Build.created` / `nodeIsReady` (external
-            // stylesheet fetches, script execution, mutation-observer fan-out,
-            // default-script injection) treat the parsed nodes as detached and
-            // skip side effects on the live document. The frame's
-            // `_parse_mode` is restored on exit.
-            const previous_parse_mode = frame._parse_mode;
-            frame._parse_mode = .fragment;
-            defer frame._parse_mode = previous_parse_mode;
-
-            // No browsing context, so no custom element registry.
-            const previous_creation = frame._custom_element_creation;
-            frame._custom_element_creation = .undefined;
-            defer frame._custom_element_creation = previous_creation;
-
-            // Create a new HTMLDocument
-            const doc = try frame._factory.document(HTMLDocument{
-                ._proto = undefined,
-            });
-            doc.asDocument()._url = frame.url;
-
-            var normalized = std.mem.trim(u8, html, &std.ascii.whitespace);
-            if (normalized.len == 0) {
-                normalized = "<html></html>";
-            }
-
-            // Parse HTML into the document
-            var parser = Parser.init(arena.allocator(), doc.asNode(), frame, .{});
-            parser.parse(normalized);
-            if (parser.terminated) {
-                return error.ExecutionTerminated;
-            }
-
-            if (parser.err) |pe| {
-                return pe.err;
-            }
-
+            // A detached document: Frame.parse.htmlDocument parses it in
+            // fragment mode, so the frame-side hooks triggered from
+            // `Build.created` / `nodeIsReady` (external stylesheet fetches,
+            // script execution, mutation-observer fan-out, default-script
+            // injection) skip side effects on the live document.
+            const doc = try Frame.parse.htmlDocument(frame, html, frame.url);
             return doc.asDocument();
         },
         else => {
