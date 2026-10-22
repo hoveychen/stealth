@@ -1717,12 +1717,18 @@ pub fn setDesignMode(self: *Document, value: []const u8) void {
 // which throws "Cannot read properties of undefined (reading 'call')" against a
 // data property. Values are the ones that were there: this engine's document is
 // always visible, and never prerendering.
-pub fn getHidden(_: *const Document) bool {
-    return false;
+//
+// Always visible, that is, when there is a frame to be visible in. A document
+// with none -- DOMParser of either kind, createHTMLDocument, createDocument,
+// `new Document()`, a template's contents, an XHR response -- is hidden on
+// Chrome 151, webkit-prefixed reads included
+// (probes/expr-detached-visibility.js).
+pub fn getHidden(self: *const Document) bool {
+    return self._frame == null;
 }
 
-pub fn getVisibilityState(_: *const Document) []const u8 {
-    return "visible";
+pub fn getVisibilityState(self: *const Document) []const u8 {
+    return if (self._frame == null) "hidden" else "visible";
 }
 
 pub fn getPrerendering(_: *const Document) bool {

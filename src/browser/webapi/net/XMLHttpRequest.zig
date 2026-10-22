@@ -610,14 +610,18 @@ pub fn getResponse(self: *XMLHttpRequest, exec: *const Execution) !?Response {
                 .frame => |frame| {
                     const final: Mime = self._override_mime orelse self._response_mime orelse .{ .content_type = .text_xml };
                     if (final.isXML()) {
-                        const document = (try Frame.parse.xmlDocument(frame, data)) orelse return null;
-                        break :blk .{ .document = document.asDocument() };
+                        break :blk .{ .document = (try self.xmlResponseDocument(frame)) orelse return null };
                     }
                     if (!final.isHTML()) {
                         return null;
                     }
-                    const document = try exec._factory.node(Node.Document{ ._proto = undefined, ._type = .generic });
-                    try Frame.parse.htmlAsChildren(frame, document.asNode(), data);
+                    // An HTMLDocument at the response's address, its <base>
+                    // honoured and its scripts inert -- and still
+                    // `interactive`: Chrome 151 never finishes loading a
+                    // document XHR parsed for it (probes/expr-xhr-document.js).
+                    const url = try frame.arena.dupeZ(u8, self.responseDocumentUrl());
+                    const document = (try Frame.parse.htmlDocument(frame, data, url)).asDocument();
+                    document._ready_state = .interactive;
                     break :blk .{ .document = document };
                 },
                 .worker => return error.NotSupportedInWorker,
@@ -667,13 +671,31 @@ pub fn getResponseXML(self: *XMLHttpRequest, exec: *const Execution) !?*Node.Doc
 
     switch (exec.js.global) {
         .frame => |frame| {
-            const xml_document = (try Frame.parse.xmlDocument(frame, self._response_data.items)) orelse return null;
-            const document = xml_document.asDocument();
+            const document = (try self.xmlResponseDocument(frame)) orelse return null;
             self._response_xml = document;
             return document;
         },
         .worker => return error.NotSupportedInWorker,
     }
+}
+
+// The address a response document claims as its URL, documentURI and base:
+// the response's own, after redirects -- not the page's that asked for it.
+fn responseDocumentUrl(self: *const XMLHttpRequest) []const u8 {
+    return if (self._response_url.len > 0) self._response_url else self._url;
+}
+
+fn xmlResponseDocument(self: *const XMLHttpRequest, frame: *Frame) !?*Node.Document {
+    const xml_document = (try Frame.parse.xmlDocument(frame, self._response_data.items)) orelse return null;
+    const document = xml_document.asDocument();
+    document._url = try frame.arena.dupeZ(u8, self.responseDocumentUrl());
+    // contentType is the essence the response was taken as -- text/xml,
+    // image/svg+xml, application/xml as sent -- the way Chrome 151 reports it.
+    if (self._override_mime_raw orelse self._response_mime_raw) |raw| {
+        const essence = std.mem.trim(u8, raw[0 .. std.mem.indexOfScalar(u8, raw, ';') orelse raw.len], &std.ascii.whitespace);
+        document._content_type = try std.ascii.allocLowerString(frame.arena, essence);
+    }
+    return document;
 }
 
 fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {

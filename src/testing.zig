@@ -1244,6 +1244,22 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/xhr/html")) {
+        return req.respond("<!doctype html><html><head><title>T</title><base href=\"https://evil.example/d/\"></head><body><a href=\"rel\">x</a><script>parent.__xhr_html_ran = 1</script></body></html>", .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/xhr/svg")) {
+        return req.respond("<svg xmlns=\"http://www.w3.org/2000/svg\"><title>S</title></svg>", .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "image/svg+xml" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/xhr/json")) {
         return req.respond("{\"over\":\"9000!!!\",\"updated_at\":1765867200000}", .{
             .extra_headers = &.{
