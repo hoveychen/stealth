@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<!--
+  A <template>'s content does not belong to the page. It belongs to an inert
+  document the page's document keeps for its templates: no browsing context, so
+  nothing in it loads or runs, its URL is about:blank and a relative URL in it
+  resolves to nothing. Every expectation here is a headed Chrome reading
+  (tools/fingerprint/probes/expr-template-inert-doc.js).
+-->
+
+<script id=owner_is_an_inert_document>
+  {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = '<p id=a>x</p><a href="rel/x">l</a>';
+    const d = tpl.content.ownerDocument;
+
+    testing.expectEqual(false, d === document);
+    testing.expectEqual('HTMLDocument', d.constructor.name);
+    testing.expectEqual('about:blank', d.URL);
+    testing.expectEqual('about:blank', d.documentURI);
+    testing.expectEqual('about:blank', d.baseURI);
+    testing.expectEqual('complete', d.readyState);
+    testing.expectEqual('hidden', d.visibilityState);
+    testing.expectEqual(true, d.hidden);
+    testing.expectEqual('text/html', d.contentType);
+    testing.expectEqual('UTF-8', d.characterSet);
+    testing.expectEqual(null, d.defaultView);
+    testing.expectEqual(null, d.location);
+    testing.expectEqual(false, d.hasFocus());
+    testing.expectEqual(null, d.documentElement);
+    testing.expectEqual(0, d.childNodes.length);
+    testing.expectEqual(null, d.getElementById('a'));
+    testing.expectEqual(false, d.implementation === document.implementation);
+
+    // the template element itself stays the page's
+    testing.expectEqual(document, tpl.ownerDocument);
+    testing.expectEqual(d, tpl.content.firstChild.ownerDocument);
+    testing.expectEqual(false, tpl.content.firstChild.isConnected);
+
+    // no base URL to resolve against: the attribute comes back as written
+    testing.expectEqual('rel/x', tpl.content.querySelector('a').href);
+  }
+</script>
+
+<script id=one_per_document>
+  {
+    const d = document.createElement('template').content.ownerDocument;
+    testing.expectEqual(d, document.createElement('template').content.ownerDocument);
+
+    const div = document.createElement('div');
+    div.innerHTML = '<template><b>y</b></template>';
+    testing.expectEqual(d, div.firstChild.content.ownerDocument);
+
+    // an inert document's own templates use it
+    testing.expectEqual(d, d.createElement('template').content.ownerDocument);
+
+    // every other document has its own
+    const hd = document.implementation.createHTMLDocument('');
+    const hi = hd.createElement('template').content.ownerDocument;
+    testing.expectEqual(false, hi === hd);
+    testing.expectEqual(false, hi === d);
+    testing.expectEqual('HTMLDocument', hi.constructor.name);
+    testing.expectEqual(hi, hd.createElement('template').content.ownerDocument);
+
+    const dp = new DOMParser().parseFromString('<template><i>z</i></template>', 'text/html');
+    const di = dp.querySelector('template').content.ownerDocument;
+    testing.expectEqual(false, di === dp);
+    testing.expectEqual(false, di === d);
+
+    const xd = document.implementation.createDocument(null, 'r');
+    const xi = xd.createElementNS('http://www.w3.org/1999/xhtml', 'template').content.ownerDocument;
+    testing.expectEqual(false, xi === xd);
+    testing.expectEqual('Document', xi.constructor.name);
+    testing.expectEqual('application/xml', xi.contentType);
+    testing.expectEqual('about:blank', xi.URL);
+  }
+</script>
+
+<script id=nodes_keep_or_change_their_document>
+  {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = '<p>x</p><script>1<\/script><a href="rel/x">l</a>';
+    const d = tpl.content.ownerDocument;
+
+    // removed from the content, still the inert document's
+    const removed = tpl.content.querySelector('script');
+    removed.remove();
+    testing.expectEqual(d, removed.ownerDocument);
+
+    testing.expectEqual(d, tpl.content.cloneNode(true).ownerDocument);
+    testing.expectEqual(document, document.importNode(tpl.content, true).ownerDocument);
+
+    const clone = tpl.cloneNode(true);
+    testing.expectEqual(d, clone.content.ownerDocument);
+    testing.expectEqual(2, clone.content.childNodes.length);
+
+    // moved into the page, adopted by it
+    const a = tpl.content.querySelector('a');
+    document.documentElement.appendChild(a);
+    testing.expectEqual(document, a.ownerDocument);
+    testing.expectEqual(true, a.href.endsWith('/rel/x'));
+    a.remove();
+
+    testing.expectEqual(document, document.adoptNode(tpl.content.querySelector('p')).ownerDocument);
+  }
+</script>
+
+<script id=adopted_template_takes_its_content_along>
+  {
+    const d = document.createElement('template').content.ownerDocument;
+    const dp = new DOMParser().parseFromString('<template><i>z</i></template>', 'text/html');
+    const t = dp.querySelector('template');
+    const old = t.content.ownerDocument;
+
+    document.documentElement.appendChild(t);
+    testing.expectEqual(d, t.content.ownerDocument);
+    testing.expectEqual(false, t.content.ownerDocument === old);
+    testing.expectEqual(d, t.content.firstChild.ownerDocument);
+    t.remove();
+  }
+</script>
+
+<script id=inert_content_does_not_run>
+  {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = '<script>window.__tpl_ran = 1<\/script>';
+    document.documentElement.appendChild(tpl);
+    testing.expectEqual(undefined, window.__tpl_ran);
+    tpl.remove();
+
+    const img = tpl.content.ownerDocument.createElement('img');
+    img.src = '/never.png';
+    testing.expectEqual('/never.png', img.src);
+  }
+</script>
+
+<script id=copies_and_removals_keep_documents>
+  {
+    const hd = document.implementation.createHTMLDocument('');
+    testing.expectEqual(hd, hd.createElement('p').cloneNode(true).ownerDocument);
+    testing.expectEqual(hd, hd.importNode(document.createElement('p'), true).ownerDocument);
+
+    const dp = new DOMParser().parseFromString('<b>x</b>', 'text/html');
+    const b = dp.body.firstElementChild;
+    b.remove();
+    testing.expectEqual(dp, b.ownerDocument);
+  }
+</script>

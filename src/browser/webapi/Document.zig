@@ -103,6 +103,11 @@ _style_sheets: ?*StyleSheetList = null,
 // The cascade's own list; see cascadeStyleSheets.
 _cascade_sheets: ?*StyleSheetList = null,
 _implementation: ?*DOMImplementation = null,
+// The inert document this document's <template> contents belong to, made on
+// first use (see templateContentsOwner).
+_template_contents_owner: ?*Document = null,
+// Set on the inert documents themselves: their templates use them in turn.
+_is_template_contents_owner: bool = false,
 _fonts: ?*FontFaceSet = null,
 _write_insertion_point: ?*Node = null,
 _script_created_parser: ?Parser.Streaming = null,
@@ -254,6 +259,32 @@ pub fn getCharset(self: *const Document) []const u8 {
     }
     const doc_frame = self._frame orelse return "UTF-8";
     return doc_frame.charset;
+}
+
+// The document a <template>'s content belongs to -- the HTML spec's
+// "appropriate template contents owner document". One per document, with no
+// browsing context: nothing in it loads or runs, its URL is about:blank, and a
+// relative URL in it resolves to nothing. Measured on a headed Chrome
+// (probes/expr-template-inert-doc.js): an HTMLDocument for an HTML document
+// and a plain Document (application/xml) otherwise, a distinct one for every
+// document including DOMParser's and createHTMLDocument's, and an inert
+// document's own templates use the inert document.
+pub fn templateContentsOwner(self: *Document, frame: *Frame) !*Document {
+    if (self._is_template_contents_owner) {
+        return self;
+    }
+    if (self._template_contents_owner) |owner| {
+        return owner;
+    }
+    const owner = switch (self._type) {
+        .html => (try frame._factory.document(HTMLDocument{ ._proto = undefined })).asDocument(),
+        else => try frame._factory.node(Document{ ._proto = undefined, ._type = .generic }),
+    };
+    owner._url = "about:blank";
+    owner._charset = "UTF-8";
+    owner._is_template_contents_owner = true;
+    self._template_contents_owner = owner;
+    return owner;
 }
 
 pub fn getContentType(self: *const Document) []const u8 {
@@ -1235,12 +1266,15 @@ pub fn adoptNode(self: *Document, node: *Node, frame: *Frame) !*Node {
     return node;
 }
 
-pub fn importNode(_: *const Document, node: *Node, deep_: ?bool, frame: *Frame) !*Node {
+pub fn importNode(self: *Document, node: *Node, deep_: ?bool, frame: *Frame) !*Node {
     if (node._type == .document) {
         return error.NotSupported;
     }
 
-    return node.cloneNode(deep_, frame);
+    // The copy belongs to the importing document, not the original's.
+    const cloned = try node.cloneNode(deep_, frame);
+    try frame.setNodeOwnerDocument(cloned, self);
+    return cloned;
 }
 
 pub fn append(self: *Document, nodes: []const Node.NodeOrText, frame: *Frame) !void {
