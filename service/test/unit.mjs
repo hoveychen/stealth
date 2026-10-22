@@ -1,5 +1,6 @@
 // Unit checks for the proxy pool, telling a dead proxy from a dead target,
-// and the session store (cookie merge, TTL, delete); no engine.
+// the session store (cookie merge, TTL, delete) and the request history
+// (daily files, retention, queries); no engine.
 //
 //   node service/test/unit.mjs
 
@@ -9,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import net from 'node:net';
 import { diagnoseProxyFailure, normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool, redact } from '../lib/proxies.mjs';
+import { History } from '../lib/history.mjs';
 import { SessionStore } from '../lib/sessions.mjs';
 import { startHttpProxy, startSocksProxy } from './proxy-server.mjs';
 
@@ -211,6 +213,114 @@ await check('SessionStore: delete removes the jar and its file; a crawl that loa
     assert.equal(await names(s, 'x'), 'c=3', 'a crawl that starts after the delete saves normally');
     assert.equal(s.stats().deleted, 1);
     fs.rmSync(dir, { recursive: true });
+});
+
+const DAY = 24 * 3600 * 1000;
+const hEntry = (time, fields = {}) => ({ time: new Date(time).toISOString(), url: 'https://a.example/', finalUrl: null, status: 200, code: null, session_id: null, ...fields });
+
+await check('History: one file per UTC day and replica, appended in batches, nothing written before the flush', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    const t = Date.parse('2026-10-20T23:59:59.500Z');
+    const h = new History({ dir, replica: 'r1', flushMs: 60_000, now: () => t });
+    await h.init();
+    h.record(hEntry(t, { url: 'https://a.example/1' }));
+    h.record(hEntry(t + 1000, { url: 'https://a.example/2' }));
+    assert.deepEqual(fs.readdirSync(dir), [], 'queued, not yet written');
+    await h.flush();
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['crawl-2026-10-20.r1.jsonl', 'crawl-2026-10-21.r1.jsonl']);
+    const other = new History({ dir, replica: 'r/2', now: () => t });
+    other.record(hEntry(t + 2000, { url: 'https://b.example/' }));
+    await other.flush();
+    assert.ok(fs.existsSync(path.join(dir, 'crawl-2026-10-21.r_2.jsonl')), 'replica name is made file-safe');
+    const lines = fs.readFileSync(path.join(dir, 'crawl-2026-10-21.r1.jsonl'), 'utf8').split('\n');
+    assert.equal(lines.length, 2);
+    assert.equal(JSON.parse(lines[0]).url, 'https://a.example/2');
+    assert.equal(h.stats().written, 2);
+    // Both replicas' files are read by a query from either.
+    const r = await h.query({ days: 3 });
+    assert.deepEqual(r.entries.map((e) => e.url), ['https://b.example/', 'https://a.example/2', 'https://a.example/1']);
+    fs.rmSync(dir, { recursive: true });
+});
+
+await check('History: a write that fails is counted and reported, and later writes still land', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    const t = Date.parse('2026-10-21T10:00:00Z');
+    const h = new History({ dir, replica: 'x', now: () => t });
+    await h.init();
+    fs.mkdirSync(path.join(dir, 'crawl-2026-10-21.x.jsonl')); // appendFile on a directory fails
+    const errors = [];
+    const orig = console.error;
+    console.error = (m) => errors.push(m);
+    try {
+        h.record(hEntry(t));
+        await h.flush();
+    } finally {
+        console.error = orig;
+    }
+    assert.equal(h.stats().writeErrors, 1);
+    assert.equal(errors.length, 1);
+    fs.rmdirSync(path.join(dir, 'crawl-2026-10-21.x.jsonl'));
+    h.record(hEntry(t));
+    await h.flush();
+    assert.equal(h.stats().written, 1);
+    fs.rmSync(dir, { recursive: true });
+});
+
+await check('History: sweep keeps the last retentionDays days (today included) of every replica and nothing else', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    for (const name of ['crawl-2026-10-13.a.jsonl', 'crawl-2026-10-14.b.jsonl', 'crawl-2026-10-15.b.jsonl', 'crawl-2026-10-21.a.jsonl', 'notes.txt']) fs.writeFileSync(path.join(dir, name), '');
+    const h = new History({ dir, retentionDays: 7, now: () => Date.parse('2026-10-21T08:00:00Z') });
+    assert.equal(await h.sweep(), 2);
+    assert.deepEqual(fs.readdirSync(dir).sort(), ['crawl-2026-10-15.b.jsonl', 'crawl-2026-10-21.a.jsonl', 'notes.txt'], '10-15 .. 10-21 is seven days');
+    const keepAll = new History({ dir, retentionDays: 0, now: () => Date.parse('2030-01-01T00:00:00Z') });
+    assert.equal(await keepAll.sweep(), 0);
+    fs.rmSync(dir, { recursive: true });
+});
+
+await check('History: query filters (url substring, status, code incl. ok, session_id, since/until), newest first, limit, days', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    const now = Date.parse('2026-10-21T12:00:00Z');
+    const h = new History({ dir, replica: 'q', now: () => now });
+    await h.init();
+    h.record(hEntry(now - 5 * DAY, { url: 'https://old.example/' }));
+    h.record(hEntry(now - DAY, { url: 'https://shop.example/a', session_id: 's1' }));
+    h.record(hEntry(now - 3000, { url: 'https://shop.example/b', status: 504, code: 'timeout' }));
+    h.record(hEntry(now - 2000, { url: 'https://x.example/', finalUrl: 'https://shop.example/landing', session_id: 's1' }));
+    h.record(hEntry(now - 1000, { url: 'https://y.example/', status: 502, code: 'navigation_failed' }));
+    await h.flush();
+    fs.appendFileSync(path.join(dir, 'crawl-2026-10-21.q.jsonl'), '{"half a line'); // read while being written
+    const urls = async (f) => (await h.query(f)).entries.map((e) => e.url);
+    assert.deepEqual(await urls({}), ['https://y.example/', 'https://x.example/', 'https://shop.example/b', 'https://shop.example/a'], 'default: last 3 days, newest first');
+    assert.deepEqual(await urls({ days: 10 }), ['https://y.example/', 'https://x.example/', 'https://shop.example/b', 'https://shop.example/a', 'https://old.example/']);
+    assert.deepEqual(await urls({ url: 'SHOP.example' }), ['https://x.example/', 'https://shop.example/b', 'https://shop.example/a'], 'url matches url or finalUrl, case-insensitively');
+    assert.deepEqual(await urls({ status: [502, 504] }), ['https://y.example/', 'https://shop.example/b']);
+    assert.deepEqual(await urls({ code: ['ok'] }), ['https://x.example/', 'https://shop.example/a']);
+    assert.deepEqual(await urls({ code: ['timeout'] }), ['https://shop.example/b']);
+    assert.deepEqual(await urls({ session_id: 's1' }), ['https://x.example/', 'https://shop.example/a']);
+    assert.deepEqual(await urls({ since: now - 2500 }), ['https://y.example/', 'https://x.example/']);
+    assert.deepEqual(await urls({ since: now - 10 * DAY, until: now - 2 * DAY }), ['https://old.example/']);
+    assert.deepEqual(await urls({ limit: 2 }), ['https://y.example/', 'https://x.example/']);
+    const r = await h.query({});
+    assert.equal(r.scanned.unreadable, 1);
+    fs.rmSync(dir, { recursive: true });
+});
+
+await check('History: limit keeps the newest matches of a file longer than the limit', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-history-'));
+    const now = Date.parse('2026-10-21T12:00:00Z');
+    const h = new History({ dir, replica: 'l', now: () => now });
+    for (let i = 0; i < 25; i++) h.record(hEntry(now - 25_000 + i * 1000, { url: `https://a.example/${i}` }));
+    await h.flush();
+    assert.deepEqual((await h.query({ limit: 3 })).entries.map((e) => e.url), ['https://a.example/24', 'https://a.example/23', 'https://a.example/22']);
+    fs.rmSync(dir, { recursive: true });
+});
+
+await check('History: disabled without a directory', async () => {
+    const h = new History({});
+    h.record(hEntry(Date.now()));
+    assert.equal(h.enabled, false);
+    assert.equal(h.stats().queued, 0);
+    assert.equal(await h.sweep(), 0);
 });
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

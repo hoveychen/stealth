@@ -199,9 +199,9 @@ COPY service/package.json service/server.mjs /app/
 COPY service/lib /app/lib
 COPY --chmod=0755 service/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Session cookie jars (session_id) are written here; mount a volume on /data
-# to keep them across container re-creation.
-RUN mkdir -p /data/sessions
+# Session cookie jars (session_id) and the request history are written here;
+# mount a volume on /data to keep them across container re-creation.
+RUN mkdir -p /data/sessions /data/history
 
 # Defaults for entrypoint.sh and the service; override with `docker run -e`.
 # Each pool slot is one CDP connection, i.e. one worker thread and browser in
@@ -217,7 +217,8 @@ ENV LIGHTPANDA_DISABLE_TELEMETRY=true \
     LP_LOG_LEVEL=info \
     LP_RESTART_DELAY=1 \
     LP_MALLOC=jemalloc \
-    SESSION_DIR=/data/sessions
+    SESSION_DIR=/data/sessions \
+    HISTORY_DIR=/data/history
 
 EXPOSE 8080/tcp
 

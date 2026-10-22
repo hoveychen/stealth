@@ -79,7 +79,12 @@ const HTML_EXPR = 'document.documentElement ? document.documentElement.outerHTML
 // proxyRetries, proxyProbe }. With `proxy: "pool"`, a crawl that fails
 // because of its proxy is run again on the next pool proxy, up to
 // `proxyRetries` more times and within the same deadline, on the same slot.
-export async function crawl(pool, req, { proxies, sessions, partialGraceMs, proxyRetries = 0, proxyProbe = null }) {
+//
+// `info` is filled in for the request history, whether the crawl succeeds or
+// throws: queueMs, proxy (the last one used, password redacted, or null),
+// proxiesTried (pool proxies), finalUrl and pageStatus (the main document's
+// final URL and HTTP status, when it got that far).
+export async function crawl(pool, req, { proxies, sessions, partialGraceMs, proxyRetries = 0, proxyProbe = null }, info = {}) {
     const t0 = Date.now();
     const deadline = t0 + req.timeout;
     const tried = new Set();
@@ -94,6 +99,8 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
         if (!poolProxy) throw new CdpError('no_proxy_available', `all ${proxies.size} pool proxies are ejected after repeated failures; see GET /health`);
     }
     let proxyUrl = poolProxy?.url ?? (req.proxy.mode === 'url' ? req.proxy.url : null);
+    info.proxy = proxyUrl && redact(proxyUrl);
+    info.proxiesTried = tried.size;
     const startCookies = req.sessionId ? await sessions.load(req.sessionId) : null;
     // Filled in as the crawl goes: the CDP session id, the cookies to save
     // and, after a timeout, whatever snapshot could still be taken. One per
@@ -104,6 +111,7 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
     try {
         slot = await pool.acquire(deadline);
         const queueMs = Date.now() - t0;
+        info.queueMs = queueMs;
         for (let attempt = 1; ; attempt++) {
             page = { proxyUrl, startCookies, cookies: null, partial: null };
             keep = false;
@@ -124,6 +132,8 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
                 }
                 poolProxy = next;
                 proxyUrl = next.url;
+                info.proxy = redact(proxyUrl);
+                info.proxiesTried = tried.size;
                 if (!keep) await pool.reset(slot, deadline);
             }
         }
@@ -138,6 +148,8 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
         }
         throw err;
     } finally {
+        info.finalUrl = page?.finalUrl ?? null;
+        info.pageStatus = page?.pageStatus ?? null;
         if (slot) pool.release(slot, { discard: !keep });
         if (req.sessionId && cookies) {
             await sessions.save(req.sessionId, startCookies, cookies).catch((e) => console.error(`session ${req.sessionId}: could not save cookies: ${e.message}`));
@@ -260,6 +272,7 @@ async function navigateAndCollect(conn, req, page, send, left) {
         wake();
     });
     const unsubscribeClose = conn.onClose(() => wake());
+    let loaderId;
     try {
         await send('Page.enable', {}, sessionId);
         await send('Network.enable', {}, sessionId);
@@ -269,7 +282,7 @@ async function navigateAndCollect(conn, req, page, send, left) {
         const tNav = Date.now();
         const nav = await send('Page.navigate', { url: req.url }, sessionId);
         if (nav.errorText) throw navigationFailed(req.url, nav.errorText);
-        const { loaderId } = nav;
+        loaderId = nav.loaderId;
         const lifecycle = WAIT_UNTIL[req.waitUntil];
 
         // Wait for the lifecycle event of this navigation, or its failure.
@@ -294,6 +307,8 @@ async function navigateAndCollect(conn, req, page, send, left) {
         }
         const navigateMs = Date.now() - tNav;
         const doc = events.findLast((m) => m.method === 'Network.responseReceived' && m.params.requestId === loaderId)?.params.response;
+        page.finalUrl = doc?.url ?? null;
+        page.pageStatus = doc?.status ?? null;
         // Through a proxy, an http:// URL with missing or wrong credentials
         // loads the proxy's 407 page instead of the target.
         if (page.proxyUrl && doc?.status === 407) {
@@ -324,10 +339,11 @@ async function navigateAndCollect(conn, req, page, send, left) {
         }
         if (req.formats.includes('meta')) {
             const hops = events.filter((m) => m.method === 'Network.requestWillBeSent' && m.params.requestId === loaderId).map((m) => m.params.request.url);
-            const page = (await evaluate('({ url: location.href, title: document.title })')).value ?? {};
+            const loc = (await evaluate('({ url: location.href, title: document.title })')).value ?? {};
+            if (loc.url) page.finalUrl = loc.url;
             out.meta = {
-                url: page.url ?? doc?.url ?? null,
-                title: page.title ?? null,
+                url: loc.url ?? doc?.url ?? null,
+                title: loc.title ?? null,
                 status: doc?.status ?? null,
                 statusText: doc?.statusText ?? null,
                 headers: doc?.headers ?? {},
@@ -340,6 +356,13 @@ async function navigateAndCollect(conn, req, page, send, left) {
     } finally {
         unsubscribe();
         unsubscribeClose();
+        // A crawl that timed out waiting for its lifecycle event may still
+        // have had the document's response; the history wants its URL.
+        if (page.finalUrl === undefined && loaderId) {
+            const doc = events.findLast((m) => m.method === 'Network.responseReceived' && m.params.requestId === loaderId)?.params.response;
+            page.finalUrl = doc?.url ?? null;
+            page.pageStatus = doc?.status ?? null;
+        }
     }
 }
 

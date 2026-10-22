@@ -28,6 +28,7 @@ x-crawl-env: &crawl-env
   # PROXY_POOL_RETRIES: 2       # pool requests move on to another proxy this many times
   # PROXY_PROBE: "10.0.0.9:443" # a host:port every proxy can reach: tells a dead site from a dead proxy
   # SESSION_TTL_MS: 604800000   # drop sessions idle for 7 days (0: never)
+  # HISTORY_RETENTION_DAYS: 7  # days of request history kept in /data/history (0: forever)
   # LP_CDP_MAX_CONNECTIONS: 12  # default 2*POOL_SIZE+4
   # LP_HTTP_MAX_CONCURRENT: 255 # engine-wide page loads in flight (engine default 40)
   LP_LOG_LEVEL: info
@@ -47,7 +48,7 @@ services:
     ports:
       - "${CRAWL_PORT:-8080}:8080"   # host port; the engine's CDP port is not published
     volumes:
-      - crawl-data:/data             # session cookie jars (SESSION_DIR=/data/sessions)
+      - crawl-data:/data             # session cookie jars and request history (/data/sessions, /data/history)
       # - ./proxies.txt:/etc/lp-crawl/proxies.txt:ro
     environment: *crawl-env
 

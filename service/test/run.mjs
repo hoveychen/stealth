@@ -13,14 +13,17 @@
 //   LP_ENGINE_KILL="docker exec lp-crawl sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
 //   LP_ENGINE_CMDLINE="docker exec lp-crawl sh -c 'cat /proc/\$(cat /tmp/lightpanda.pid)/cmdline'" \
 //   LP_SESSION_FILES="docker exec lp-crawl ls /data/sessions" \
+//   LP_HISTORY_SH="docker exec -w /data/history lp-crawl sh -c" \
 //   node service/test/run.mjs
 //
 // LP_ENGINE_KILL kills the engine; the container's entrypoint restarts it
 // after LP_RESTART_DELAY seconds, which must be at least 4 so the "engine
 // down" check sees it down. LP_SERVICE_RESTART restarts the service (the
 // session check needs cookies to survive it). LP_ENGINE_CMDLINE prints the
-// engine's command line, LP_SESSION_FILES the names in SESSION_DIR. The
-// session checks expect SESSION_TTL_MS=6000 and SESSION_SWEEP_MS=1000.
+// engine's command line, LP_SESSION_FILES the names in SESSION_DIR, and
+// LP_HISTORY_SH runs a shell snippet (its one argument) in HISTORY_DIR. The
+// session checks expect SESSION_TTL_MS=6000 and SESSION_SWEEP_MS=1000; the
+// history checks a HISTORY_RETENTION_DAYS of at least 1.
 //
 // The proxy checks start their proxies on TEST_PROXY_HOST, ports
 // TEST_PROXY_BASE .. TEST_PROXY_BASE+5, and expect the service's pool to be
@@ -46,7 +49,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const EXTERNAL = process.env.LP_SERVICE_URL;
 const LP_BIN = process.env.LP_BIN || path.resolve(here, '../../zig-out/bin/lightpanda');
 if (EXTERNAL) {
-    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES']) {
+    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES', 'LP_HISTORY_SH']) {
         if (!process.env[v]) {
             console.error(`LP_SERVICE_URL needs ${v} (see the header of this file)`);
             process.exit(2);
@@ -120,7 +123,8 @@ const px = {
 const proxyLogs = () => Object.values(px).flatMap((p) => p.log ?? []);
 const POOL = [`http://${PH}:${px.poolA.port}`, `http://pool:secret@${PH}:${px.poolB.port}`, `http://${PH}:${px.deadPort}`];
 
-let SVC, POOL_SIZE, restartService, sessionFiles;
+let SVC, POOL_SIZE, restartService, sessionFiles, historySh;
+const shQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 if (EXTERNAL) {
     SVC = EXTERNAL.replace(/\/$/, '');
     await waitHttp(`${SVC}/health`);
@@ -131,12 +135,15 @@ if (EXTERNAL) {
         await waitHttp(`${SVC}/health`, 300);
     };
     sessionFiles = async () => (await promisify(exec)(process.env.LP_SESSION_FILES)).stdout.split('\n').filter(Boolean);
+    historySh = async (snippet) => (await promisify(exec)(`${process.env.LP_HISTORY_SH} ${shQuote(snippet)}`)).stdout;
 } else {
     POOL_SIZE = 3;
     startEngine();
     await waitHttp(`http://127.0.0.1:${lpPort}/json/version`);
     const svcPort = await freePort();
     const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-crawl-sessions-'));
+    const historyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-crawl-history-'));
+    historySh = async (snippet) => (await promisify(exec)(snippet, { cwd: historyDir })).stdout;
     let svc;
     const startService = () => {
         svc = spawn(process.execPath, [path.resolve(here, '../server.mjs')], {
@@ -154,6 +161,7 @@ if (EXTERNAL) {
                 SESSION_DIR: sessionDir,
                 SESSION_TTL_MS: '6000',
                 SESSION_SWEEP_MS: '1000',
+                HISTORY_DIR: historyDir,
             },
             stdio: ['ignore', 'ignore', 'inherit'],
         });
@@ -449,9 +457,60 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
     const after = await Promise.all(Array.from({ length: POOL_SIZE * 2 }, (_, i) => crawl({ url: `${F}/index.html?after-${page}=${i}`, formats: ['meta'], timeout: 15000 })));
     check(`spin (${name}): every slot serves again afterwards`, after.every((r) => r.status === 200), after.map((r) => `${r.status}/${r.ms}ms`).join(','));
 }
+// 16. Request history: every crawl above is on disk with its outcome and
+// sizes but not its content, proxy passwords redacted; GET /history filters
+// it; files past the retention period go at startup; it survives a restart.
+{
+    const q = async (qs) => {
+        const r = await fetch(`${SVC}/history?${qs}`);
+        return { status: r.status, body: await r.json() };
+    };
+    const all = (await q('limit=1000&days=1')).body;
+    const es = all.entries ?? [];
+    check('history: enabled, entries newest first', all.enabled === true && es.length >= 50 && es.every((e, i) => i === 0 || es[i - 1].time >= e.time), `enabled ${all.enabled}, ${es.length} entries, scanned ${JSON.stringify(all.scanned)}`);
+    const full = es.find((e) => e.url === `${F}/index.html` && e.formats?.length === 4);
+    check('history: a full crawl has final url, page status, timing, formats and sizes, no content', full && full.status === 200 && full.code === null && full.finalUrl === `${F}/index.html` && full.pageStatus === 200 && full.ms > 0 && full.queueMs >= 0 && full.htmlBytes > 100 && full.markdownBytes > 10 && full.partial === null && full.proxyMode === 'direct' && full.proxy === null && !('html' in full) && !('markdown' in full), JSON.stringify(full));
+    const redirect = es.find((e) => e.url === `${F}/redirect`);
+    check('history: redirect -> finalUrl is the target', redirect?.finalUrl === `${F}/index.html`, JSON.stringify(redirect));
+    const partial = es.find((e) => e.url === `${F}/slow-load`);
+    check('history: a timeout records the code, the document it had, and the partial result it carried', partial?.status === 504 && partial.code === 'timeout' && partial.finalUrl === `${F}/slow-load` && partial.pageStatus === 200 && partial.partial?.source === 'dom' && partial.partial.htmlBytes > 0 && partial.partial.markdownBytes > 0 && /timeout/.test(partial.message), JSON.stringify(partial));
+    const raw = es.find((e) => e.url === `${F}/stall`);
+    check('history: raw-body partial recorded as such', raw?.partial?.source === 'raw-body', JSON.stringify(raw?.partial));
+    const pooled = es.filter((e) => e.proxyMode === 'pool' && e.proxy?.includes('pool:***@'));
+    const retried = es.find((e) => e.proxyMode === 'pool' && e.status === 200 && e.proxiesTried === 2);
+    const fileText = await historySh('cat crawl-*.jsonl');
+    check('history: pool proxy recorded with the password redacted, nowhere in the files', pooled.length > 0 && retried && !fileText.includes(':secret@') && !fileText.includes(':wrong@') && fileText.includes('user:***@'), `pooled ${pooled.length}, retried ${JSON.stringify(retried)}, ':secret@' in files ${fileText.includes(':secret@')}`);
+    const bad = es.find((e) => e.url === 'ftp://x');
+    check('history: a bad request is recorded with bad_request', bad?.status === 400 && bad.code === 'bad_request', JSON.stringify(bad));
+    const sessionIds = [...new Set(es.map((e) => e.session_id).filter(Boolean))];
+    const sid = sessionIds[0];
+    const bySid = (await q(`session_id=${sid}&limit=1000&days=1`)).body.entries;
+    check('history filter: session_id', sid && bySid.length === es.filter((e) => e.session_id === sid).length && bySid.every((e) => e.session_id === sid), `${sid}: ${bySid?.length}`);
+    const s504 = (await q('status=504&limit=1000&days=1')).body.entries;
+    const okOnly = (await q('code=ok&limit=1000&days=1')).body.entries;
+    const errs = (await q('code=proxy_auth_failed,navigation_failed&limit=1000&days=1')).body.entries;
+    check('history filter: status and code (ok, and a comma list)', s504.length > 0 && s504.every((e) => e.status === 504) && okOnly.length > 0 && okOnly.every((e) => e.status === 200) && errs.length > 0 && errs.every((e) => ['proxy_auth_failed', 'navigation_failed'].includes(e.code)) && new Set(errs.map((e) => e.code)).size === 2, `504 ${s504.length}, ok ${okOnly.length}, errs ${errs.length}`);
+    const byUrl = (await q(`url=${encodeURIComponent('/SLOW-load')}&days=1`)).body.entries;
+    const two = (await q('limit=2&days=1')).body.entries;
+    const mid = es[Math.floor(es.length / 2)].time;
+    const since = (await q(`since=${encodeURIComponent(mid)}&limit=1000`)).body.entries;
+    const until = (await q(`since=0&until=${Date.parse(mid)}&limit=1000`)).body.entries;
+    check('history filter: url substring, limit, since/until', byUrl.length >= 1 && byUrl.every((e) => e.url.includes('/slow-load')) && two.length === 2 && two[0].time === es[0].time && since.every((e) => e.time >= mid) && until.every((e) => e.time <= mid) && since.length + until.length >= es.length, `url ${byUrl.length}, limit ${two.length}, since ${since.length} until ${until.length} of ${es.length}`);
+    const badQ = await Promise.all(['limit=0', 'limit=abc', 'status=20x', 'since=yesterday'].map(q));
+    check('history: bad query -> 400', badQ.every((r) => r.status === 400 && r.body.error?.code === 'bad_request'), badQ.map((r) => r.status).join(','));
+    const h0 = await health();
+    check('history: /health reports it, no write errors', h0.history?.enabled === true && h0.history.writeErrors === 0 && h0.history.dropped === 0 && h0.history.written > 0 && h0.history.queued === 0, JSON.stringify(h0.history));
+
+    await historySh('echo "{}" > crawl-2000-01-01.planted.jsonl');
+    const planted = (await historySh('ls')).includes('crawl-2000-01-01.planted.jsonl');
+    await restartService();
+    const files = (await historySh('ls')).split('\n').filter(Boolean);
+    const after = (await q('limit=1000&days=1')).body.entries;
+    check('history: files past HISTORY_RETENTION_DAYS are removed at startup, the rest kept', planted && !files.includes('crawl-2000-01-01.planted.jsonl') && files.length >= 1 && after.length >= es.length, `planted ${planted}, files now ${JSON.stringify(files)}, entries ${es.length} -> ${after.length}`);
+}
 {
     const h = await health();
-    console.log(`      health at the end: ${JSON.stringify(h.pool)} sessions=${JSON.stringify(h.sessions)}`);
+    console.log(`      health at the end: ${JSON.stringify(h.pool)} sessions=${JSON.stringify(h.sessions)} history=${JSON.stringify(h.history)}`);
 }
 
 fixture.server.closeAllConnections();

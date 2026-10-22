@@ -1,6 +1,6 @@
 #!/bin/sh
 # End-to-end test against the container: starts IMAGE with a test proxy pool
-# and a session volume, runs test/run.mjs on this host (fixture pages and test
+# and a data volume (sessions, history), runs test/run.mjs on this host (fixture pages and test
 # proxies listen on the Docker bridge gateway), then removes the container and
 # its volume. Run on the Docker host, from anywhere:
 #
@@ -46,6 +46,7 @@ TEST_PROXY_HOST="$GW" TEST_PROXY_BASE="$BASE" \
 LP_ENGINE_KILL="docker exec $NAME sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
 LP_ENGINE_CMDLINE="docker exec $NAME sh -c 'cat /proc/\$(cat /tmp/lightpanda.pid)/cmdline'" \
 LP_SESSION_FILES="docker exec $NAME ls /data/sessions" \
+LP_HISTORY_SH="docker exec -w /data/history $NAME sh -c" \
 LP_SERVICE_RESTART="NAME=$NAME PORT=$PORT TEST_PROXY_BASE=$BASE '$HERE/docker-test.sh' '$IMAGE' recreate" \
 node "$HERE/run.mjs" || status=$?
 [ "$status" = 0 ] || docker logs --tail 40 "$NAME" >&2
