@@ -34,11 +34,12 @@ case "${2:-}" in
   # Used by run.mjs as LP_SERVICE_RESTART: a new container on the same volume.
   recreate) docker rm -f "$NAME" >/dev/null; start; exit 0 ;;
   # Used by run.mjs as LP_SERVICE_STOP: docker stop (SIGTERM, SIGKILL after
-  # 10 s), timed, then a new container on the same volume.
+  # 10 s), timed, its exit code, then a new container on the same volume.
   stop)
     t0=$(date +%s%N)
     docker stop "$NAME" >/dev/null
     echo "stop_ms=$(( ($(date +%s%N) - t0) / 1000000 ))"
+    echo "exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$NAME")"
     docker logs "$NAME" 2>/dev/null | tail -n 200
     docker rm "$NAME" >/dev/null
     start

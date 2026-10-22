@@ -1,7 +1,8 @@
 // Unit checks for the proxy pool, telling a dead proxy from a dead target,
 // the session store (cookie merge, TTL, delete) and the request history
-// (daily files, retention, queries) and the MCP gateway (against fake engine
-// MCP servers); no engine.
+// (daily files, retention, queries), the MCP gateway (against fake engine
+// MCP servers), and the parts of stopping that need no engine (the slot
+// pool's drain, ending the engine's process group; the latter on Linux).
 //
 //   node service/test/unit.mjs
 
@@ -14,6 +15,9 @@ import { diagnoseProxyFailure, normalizeProxyUrl, parseHostPort, parseProxyList,
 import http from 'node:http';
 import { History } from '../lib/history.mjs';
 import { Backend, HIDDEN_TOOLS, McpGateway } from '../lib/mcp.mjs';
+import { groupAlive, stopEngineGroup } from '../lib/engine.mjs';
+import { Pool } from '../lib/pool.mjs';
+import { spawn } from 'node:child_process';
 import { McpClient } from './mcp-client.mjs';
 import { SessionStore } from '../lib/sessions.mjs';
 import { startHttpProxy, startSocksProxy } from './proxy-server.mjs';
@@ -785,6 +789,59 @@ await check('MCP gateway: shutdown gives up after its time limit', async () => {
     } finally {
         f.close();
     }
+});
+
+await check('Pool.drain: queued requests fail at once with shutting_down, leased slots are left alone, later leases fail too', async () => {
+    const pool = new Pool({ cdpUrl: 'ws://127.0.0.1:1/', size: 1, queueMax: 10 });
+    const deadline = Date.now() + 60000;
+    const slot = await pool.lease(deadline);
+    const waiting = [pool.lease(deadline), pool.lease(deadline)].map((p) => p.then(() => 'leased', (e) => e));
+    assert.equal(pool.stats().queued, 2);
+    const t0 = Date.now();
+    assert.equal(pool.drain('stopping, was queued'), 2);
+    for (const e of await Promise.all(waiting)) assert.deepEqual([e.code, e.message], ['shutting_down', 'stopping, was queued']);
+    assert.ok(Date.now() - t0 < 100);
+    assert.deepEqual([pool.stats().busy, pool.stats().queued], [1, 0]);
+    await assert.rejects(pool.lease(deadline), (e) => e.code === 'shutting_down');
+    pool.release(slot);
+    assert.equal(pool.stats().busy, 0);
+});
+
+// A process group of its own, as entrypoint.sh's setsid gives the engine:
+// a shell (the restart loop) with a child (the engine).
+const linux = fs.existsSync('/proc/self/stat');
+async function startGroup(script) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-engine-'));
+    const child = spawn('sh', ['-c', script], { detached: true, stdio: 'ignore' });
+    fs.writeFileSync(path.join(dir, 'pgid'), String(child.pid));
+    // Until the child has run its own command (the trap, then sleep).
+    await new Promise((r) => setTimeout(r, 200));
+    return { file: path.join(dir, 'pgid'), pgid: child.pid, child };
+}
+
+await check('stopEngineGroup: no pgid file -> null (an engine the service did not start)', async () => {
+    assert.equal(await stopEngineGroup(path.join(os.tmpdir(), 'lp-no-such-pgid-file'), 100), null);
+});
+
+await check('stopEngineGroup: a group that exits on SIGTERM is ended without SIGKILL, child processes too', async () => {
+    if (!linux) return console.log('      (skipped: no /proc)');
+    const g = await startGroup('sleep 30 & wait');
+    assert.ok(groupAlive(g.pgid));
+    const r = await stopEngineGroup(g.file, 2000);
+    assert.equal(r.killed, false);
+    assert.ok(r.ms < 1000, `${r.ms} ms`);
+    assert.ok(!groupAlive(g.pgid));
+});
+
+await check('stopEngineGroup: a group that ignores SIGTERM gets SIGKILL after the limit', async () => {
+    if (!linux) return console.log('      (skipped: no /proc)');
+    const g = await startGroup('trap "" TERM; sleep 30');
+    const t0 = Date.now();
+    const r = await stopEngineGroup(g.file, 300);
+    assert.equal(r.killed, true);
+    assert.ok(Date.now() - t0 >= 300 && Date.now() - t0 < 1000, `${Date.now() - t0} ms`);
+    await new Promise((res) => setTimeout(res, 200));
+    assert.ok(!groupAlive(g.pgid));
 });
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');

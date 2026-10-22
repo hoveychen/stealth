@@ -7,6 +7,7 @@ import os from 'node:os';
 import { Pool } from './lib/pool.mjs';
 import { crawl, normalizeRequest, RequestError } from './lib/crawl.mjs';
 import { History, MAX_LIMIT } from './lib/history.mjs';
+import { stopEngineGroup } from './lib/engine.mjs';
 import { McpGateway, spawnBackends } from './lib/mcp.mjs';
 import { normalizeProxyUrl, parseHostPort, parseProxyList, ProxyPool, redact } from './lib/proxies.mjs';
 import { SESSION_ID, SessionStore } from './lib/sessions.mjs';
@@ -67,9 +68,20 @@ const config = {
     // leaves room for an agent that thinks for minutes between calls.
     mcpIdleMs: nonNegInt('MCP_SESSION_IDLE_MS', 30 * 60 * 1000),
     mcpCallTimeoutMs: int('MCP_CALL_TIMEOUT_MS', 120000),
-    // Time the MCP sessions get to write their cookies back when the service
-    // stops; with the history's 2 s it stays inside docker stop's 10 s.
+    // Stopping (SIGTERM, SIGINT), see "Stopping" in README.md. The crawls in
+    // flight get SHUTDOWN_DRAIN_MS to finish, those still running then
+    // SHUTDOWN_PARTIAL_MS to hand over a partial result; at the same time
+    // the MCP sessions get SHUTDOWN_SAVE_MS to write their cookies back.
+    // Then the engines get SHUTDOWN_ENGINE_MS to exit, the history
+    // SHUTDOWN_HISTORY_MS to reach the disk. The defaults add up to 8.5 s,
+    // inside docker stop's 10 s.
+    shutdownDrainMs: nonNegInt('SHUTDOWN_DRAIN_MS', 5000),
+    shutdownPartialMs: nonNegInt('SHUTDOWN_PARTIAL_MS', 1000),
     shutdownSaveMs: int('SHUTDOWN_SAVE_MS', 5000),
+    shutdownEngineMs: int('SHUTDOWN_ENGINE_MS', 1000),
+    shutdownHistoryMs: int('SHUTDOWN_HISTORY_MS', 1000),
+    // Written by entrypoint.sh: the process group of the engine /crawl uses.
+    enginePgidFile: env('LP_ENGINE_PGID_FILE', '') || null,
     mcpProxy: null,
 };
 if (env('PROXY_PROBE', '')) {
@@ -127,6 +139,11 @@ const sweepHistory = () =>
 await sweepHistory();
 if (history.enabled && config.historyRetentionDays) setInterval(sweepHistory, 3600 * 1000).unref();
 
+// Set when the service starts stopping ({ signal, since, phase }), and the
+// /crawl requests in flight (see shutdown below).
+let stopping = null;
+const inflight = new Set();
+
 const pool = new Pool({ cdpUrl: config.cdpUrl, size: config.poolSize, queueMax: config.queueMax });
 
 let mcp = null, mcpEngines = null;
@@ -161,6 +178,7 @@ const ADMIN_PAGE = fs.readFileSync(new URL('./admin.html', import.meta.url));
 
 const STATUS = {
     queue_full: 503,
+    shutting_down: 503,
     engine_unavailable: 503,
     no_proxy_available: 503,
     engine_disconnected: 502,
@@ -174,9 +192,11 @@ const STATUS = {
 // Encoded once: Buffer.byteLength and then res.end(text) would go over a
 // large html response twice; on a 34 KB page with a character above U+00FF
 // the second pass is ~25 us, which pays for the history's byte counts.
+// While stopping, every answer closes its connection, so a client's
+// keep-alive socket doesn't come back to a service about to go.
 function reply(res, status, body) {
     const buf = Buffer.from(JSON.stringify(body));
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length });
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length, ...(stopping ? { connection: 'close' } : {}) });
     res.end(buf);
 }
 
@@ -219,16 +239,38 @@ async function handleCrawl(req, res) {
     }
     const info = {};
     const request = { session_id: params.sessionId ?? null, formats: params.formats, proxyMode: params.proxy.mode };
+    if (stopping) {
+        const message = 'the service is stopping; send the request to another instance';
+        reply(res, 503, { error: { code: 'shutting_down', message } });
+        return logCrawl({ url: params.url, status: 503, code: 'shutting_down', message, ms: Date.now() - t0, ...request });
+    }
+    // In flight until answered; the shutdown waits for it, abandons it, or
+    // as a last resort answers for it (giveUp).
+    const job = { ctl: new AbortController(), settled: false };
+    job.giveUp = (message) => {
+        job.settled = true;
+        if (!res.headersSent) reply(res, 503, { error: { code: 'shutting_down', message } });
+        logCrawl({ url: params.url, status: 503, code: 'shutting_down', message, ms: Date.now() - t0, ...request, ...info });
+    };
+    let finished;
+    job.done = new Promise((r) => (finished = r));
+    inflight.add(job);
     try {
-        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe }, info);
+        const out = await crawl(pool, params, { proxies, sessions, partialGraceMs: config.partialGraceMs, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, signal: job.ctl.signal, abortGraceMs: config.shutdownPartialMs }, info);
+        if (job.settled) return;
         reply(res, 200, { url: params.url, ...out });
         logCrawl({ url: params.url, status: 200, code: null, message: null, ms: Date.now() - t0, ...request, ...info, htmlBytes: bytes(out.html), markdownBytes: bytes(out.markdown), partial: null });
     } catch (e) {
+        if (job.settled) return;
         const code = e.code in STATUS ? e.code : 'internal';
         const status = STATUS[code] ?? 500;
         reply(res, status, { error: { code, message: e.message }, ...(e.partial ? { partial: e.partial } : {}) });
         const partial = e.partial ? { source: e.partial.source, htmlBytes: bytes(e.partial.html), markdownBytes: bytes(e.partial.markdown) } : null;
         logCrawl({ url: params.url, status, code, message: e.message, ms: Date.now() - t0, ...request, ...info, htmlBytes: null, markdownBytes: null, partial });
+    } finally {
+        job.settled = true;
+        inflight.delete(job);
+        finished();
     }
 }
 
@@ -387,7 +429,8 @@ const server = http.createServer((req, res) => {
         return reply(res, 200, { total: mcp.sessions.size, sessions: mcp.list() });
     }
     if (req.method === 'GET' && path === '/health') {
-        return reply(res, 200, { ok: true, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats(), mcp: mcp?.stats() ?? { enabled: false } });
+        // 503 while stopping, so a load balancer takes this instance out.
+        return reply(res, stopping ? 503 : 200, { ok: !stopping, stopping: stopping ? { ...stopping, inFlight: inflight.size } : false, pool: pool.stats(), proxies: proxies?.stats() ?? null, sessions: sessions.stats(), history: history.stats(), mcp: mcp?.stats() ?? { enabled: false } });
     }
     if (req.method === 'GET' && path === '/history') return handleHistory(req, res);
     if (req.method === 'GET' && path === '/sessions') {
@@ -412,24 +455,73 @@ server.listen(config.port, config.host, 1024, () => {
     log({ msg: 'listening', host: config.host, port: config.port, cdpUrl: config.cdpUrl, poolSize: config.poolSize, proxies: proxies?.size ?? 0, proxyPoolDefault: config.proxyPoolDefault, proxyRetries: config.proxyRetries, proxyProbe: config.proxyProbe, sessionDir: config.sessionDir, sessionTtlMs: config.sessionTtlMs, historyDir: config.historyDir, historyRetentionDays: config.historyRetentionDays, historyReplica: history.replica, mcpProcs: config.mcpProcs, mcpProxy: config.mcpProxy && redact(config.mcpProxy) });
 });
 
-// `docker stop` gives 10 s before SIGKILL: up to SHUTDOWN_SAVE_MS for the
-// MCP sessions' last cookie write-back, then up to 2 s for the history.
-let stopping = false;
-for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, async () => {
-        if (stopping) return;
-        stopping = true;
-        server.close();
-        pool.close();
-        if (mcp) {
-            const t0 = Date.now();
-            const r = await mcp.shutdown(config.shutdownSaveMs);
-            if (r.sessions) log({ msg: 'mcp cookies saved on shutdown', signal: sig, ...r, ms: Date.now() - t0 });
-        }
-        mcpEngines?.stop();
-        // The last second of history is still queued; give it a moment.
-        const exit = () => process.exit(0);
-        setTimeout(exit, 2000).unref();
-        history.close().then(exit, exit);
-    });
+// Stopping (SIGTERM from `docker stop`, SIGINT), within docker stop's 10 s
+// with the default limits:
+//
+// 1. From the signal on, /health answers 503 (stopping), a new /crawl or
+//    /mcp request 503 shutting_down, and requests still queued for a slot
+//    fail at once with shutting_down: they have not started, so another
+//    instance can take them now rather than after the drain.
+// 2. The crawls in flight get SHUTDOWN_DRAIN_MS to finish; those still
+//    running are abandoned -- 503 shutting_down with whatever partial result
+//    the page hands over within SHUTDOWN_PARTIAL_MS. Meanwhile the MCP
+//    sessions bound to a session_id write their cookies back (up to
+//    SHUTDOWN_SAVE_MS).
+// 3. The engines get SIGTERM, and SIGKILL after SHUTDOWN_ENGINE_MS: the one
+//    /crawl uses (its own process group, see entrypoint.sh) and the MCP ones.
+// 4. Up to SHUTDOWN_HISTORY_MS for the history's last lines, then exit 0.
+//
+// Every request refused or abandoned along the way has its history line.
+const within = (p, ms) => {
+    let timer;
+    return Promise.race([p.then(() => true), new Promise((r) => (timer = setTimeout(() => r(false), ms)))]).finally(() => clearTimeout(timer));
+};
+
+async function drainCrawls() {
+    const t0 = Date.now();
+    const inFlight = inflight.size;
+    if (await within(Promise.all([...inflight].map((j) => j.done)), config.shutdownDrainMs)) return { inFlight, abandoned: 0, ms: Date.now() - t0 };
+    const left = [...inflight];
+    const message = `the service is stopping: the request was still running after SHUTDOWN_DRAIN_MS (${config.shutdownDrainMs} ms) and was abandoned`;
+    for (const j of left) j.ctl.abort(message);
+    // The abandoned ones take their partial result (SHUTDOWN_PARTIAL_MS); one
+    // that is still not done after that is answered for here.
+    await within(Promise.all(left.map((j) => j.done)), config.shutdownPartialMs + 500);
+    for (const j of left) if (!j.settled) j.giveUp(message);
+    return { inFlight, abandoned: left.length, ms: Date.now() - t0 };
+}
+
+async function shutdown(sig) {
+    if (stopping) return;
+    const t0 = Date.now();
+    stopping = { signal: sig, since: new Date(t0).toISOString(), phase: 'draining' };
+    const queued = pool.drain('the service is stopping; the request was still queued for a browser slot');
+    log({ msg: 'stopping', signal: sig, inFlight: inflight.size, queuedRefused: queued, drainMs: config.shutdownDrainMs, saveMs: config.shutdownSaveMs });
+    const saveMcp = async () => {
+        if (!mcp) return null;
+        const t = Date.now();
+        const r = await mcp.shutdown(config.shutdownSaveMs);
+        if (r.sessions) log({ msg: 'mcp cookies saved on shutdown', signal: sig, ...r, ms: Date.now() - t });
+        return r;
+    };
+    const [crawls] = await Promise.all([drainCrawls(), saveMcp()]);
+    stopping.phase = 'stopping engines';
+    const tEngines = Date.now();
+    const [engine, mcpKilled] = await Promise.all([
+        config.enginePgidFile ? stopEngineGroup(config.enginePgidFile, config.shutdownEngineMs) : null,
+        mcpEngines ? mcpEngines.stop(config.shutdownEngineMs) : 0,
+    ]);
+    pool.close();
+    stopping.phase = 'writing history';
+    log({ msg: 'stopped', signal: sig, queuedRefused: queued, crawls, engine: engine && { killed: engine.killed, ms: engine.ms }, mcpEnginesKilled: mcpKilled, enginesMs: Date.now() - tEngines, ms: Date.now() - t0 });
+    // The last second of history is still queued; give it a moment.
+    const exit = () => process.exit(0);
+    setTimeout(exit, config.shutdownHistoryMs).unref();
+    history.close().then(exit, exit);
+}
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => shutdown(sig));
+
+{
+    const worst = Math.max(config.shutdownDrainMs + config.shutdownPartialMs + 500, config.shutdownSaveMs) + config.shutdownEngineMs + config.shutdownHistoryMs;
+    if (worst > 9500) log({ msg: 'warning: stopping may take longer than docker stop\'s default 10 s; give the container a longer stop_grace_period (docker stop -t)', worstCaseMs: worst });
 }

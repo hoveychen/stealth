@@ -15,7 +15,7 @@ CDP 连接（每条连接在引擎里有自己的工作线程和浏览器），�
 [错误码](#错误码) · [超时与部分结果](#超时与部分结果) · [代理与代理池](#代理与代理池) ·
 [Session](#session) · [Agent 接入（MCP）](#agent-接入mcp) · [翻页](#翻页) ·
 [请求历史](#请求历史) · [管理页](#管理页) · [健康检查](#健康检查-get-health) ·
-[扩容建议](#扩容建议) · [测试](#测试)
+[停机](#停机) · [扩容建议](#扩容建议) · [测试](#测试)
 
 ## 部署
 
@@ -38,7 +38,8 @@ curl -s localhost:8080/crawl -d '{"url":"https://example.com/","formats":["markd
 - 容器里 `tini` 是 1 号进程，`entrypoint.sh` 启动两样东西：
   - `lightpanda serve`，只监听容器内的 `127.0.0.1:9222`，CDP 端口不对外。引擎退出后
     隔 `LP_RESTART_DELAY` 秒自动重启；正在跑的请求返回 `engine_disconnected`，排队中
-    的请求会等它回来。
+    的请求会等它回来。引擎和这个重启循环用 `setsid` 放在自己的进程组里，`docker stop`
+    的 SIGTERM 只到本服务；服务等在飞的抓取跑完后自己关引擎，见[停机](#停机)。
   - 本服务，监听 `0.0.0.0:8080`。服务退出则容器退出，由重启策略拉起。服务再启动
     `MCP_PROCS` 个 `lightpanda mcp` 进程（默认 2 个，只监听容器内的 `127.0.0.1:9300` 起），
     供 `/mcp` 使用，挂掉的自动重启。
@@ -106,7 +107,11 @@ CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 \
 | `MCP_MAX_SESSIONS` | `32` | MCP 会话上限，满了 `initialize` 返回 503 |
 | `MCP_SESSION_IDLE_MS` | `1800000`（30 分钟） | 会话多久没有调用就关闭，`0` 永不 |
 | `MCP_CALL_TIMEOUT_MS` | `120000` | 单个 MCP 请求等引擎回答的上限，超过返回 504 |
-| `SHUTDOWN_SAVE_MS` | `5000` | 服务停止（SIGTERM/SIGINT）时，留给开着的绑定 `session_id` 的 MCP 会话写回 cookie 的时间上限 |
+| `SHUTDOWN_DRAIN_MS` | `5000` | 服务停止（SIGTERM/SIGINT）时，等在飞的 `/crawl` 跑完的上限；到时还没跑完的被放弃，见[停机](#停机) |
+| `SHUTDOWN_PARTIAL_MS` | `1000` | 被放弃的抓取留给页面交出部分结果的时间 |
+| `SHUTDOWN_SAVE_MS` | `5000` | 服务停止时，留给开着的绑定 `session_id` 的 MCP 会话写回 cookie 的时间上限（和上面的排空同时进行） |
+| `SHUTDOWN_ENGINE_MS` | `1000` | 排空之后，引擎收到 SIGTERM 到被 SIGKILL 之间的等待 |
+| `SHUTDOWN_HISTORY_MS` | `1000` | 最后留给历史落盘的时间 |
 | `MCP_PROXY` | | MCP 浏览走的代理 URL（所有会话共用一个），格式同 `proxy` 字段 |
 | `MCP_BASE_PORT` | `9300` | MCP 进程在容器内监听的第一个端口（依次加 1） |
 | `LP_BIN` | `/bin/lightpanda` | MCP 进程用的引擎二进制 |
@@ -194,7 +199,7 @@ if r.ok:
     final_url = data["meta"]["url"]
 else:
     code = data["error"]["code"]          # 见错误码表
-    retryable = code in ("queue_full", "engine_unavailable", "engine_disconnected", "proxy_failed", "timeout")
+    retryable = code in ("queue_full", "engine_unavailable", "engine_disconnected", "proxy_failed", "timeout", "shutting_down")
 ```
 
 批量抓取时，并发数和 `POOL_SIZE` 相当即可；超过的部分只会排队，排满 `QUEUE_MAX`
@@ -281,6 +286,7 @@ else:
 | 502 | `proxy_auth_failed` | 代理拒绝了账号密码（或要密码但没给） | 检查代理账号 |
 | 503 | `no_proxy_available` | `proxy: "pool"`，但池里所有代理都被剔除了 | 稍后重试，看 `/health` |
 | 503 | `queue_full` | 已有 `QUEUE_MAX` 个请求在排队 | 降并发或扩容后重试 |
+| 503 | `shutting_down` | 服务正在停机：停机期间新发的、还在排队的、或跑过 `SHUTDOWN_DRAIN_MS` 还没完成而被放弃的（这种和超时一样可能带 `partial`），见[停机](#停机) | 换一个实例重试 |
 | 503 | `engine_unavailable` | 截止前连不上引擎 | 可重试 |
 | 504 | `timeout` | 超时（排队、加载或执行脚本中）；可能带 `partial` | 见下节 |
 | 500 | `internal` | 服务内部错误 | 看日志 |
@@ -501,7 +507,7 @@ claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id
   页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。
 - **服务停止**：收到 SIGTERM/SIGINT（`docker stop`、`docker compose down`）时，服务先拒绝新的 `/mcp` 请求
   （503），等每个绑定会话手上的调用结束，再给它们写出最后一次、落盘，然后才退出；整个写出最多等
-  `SHUTDOWN_SAVE_MS`（默认 5 秒），加上历史落盘最多 2 秒，在 `docker stop` 默认的 10 秒宽限之内。日志里有一行
+  `SHUTDOWN_SAVE_MS`（默认 5 秒），和 `/crawl` 的排空同时进行，整个停机在 `docker stop` 默认的 10 秒宽限之内（见[停机](#停机)）。日志里有一行
   `mcp cookies saved on shutdown`（会话数、写出数、是否超时、耗时）。实测（bt，`docker stop`）：最后一次调用后页面脚本设的 cookie，停容器再起新容器后 `/crawl` 能看到，
   `docker stop` 用时约 0.6 秒、写出 5–6 毫秒、退出码 0；上一版镜像同样操作后这个 cookie 丢失。镜像里 PID 1 是 tini，
   Node 是它的子进程、收得到转发的 SIGTERM；MCP 引擎进程放在自己的进程组里，不会和 Node 同时被这个信号结束。被 `kill -9` 或宽限超时被强杀时
@@ -760,6 +766,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 ```json
 {
   "ok": true,
+  "stopping": false,
   "pool": { "size": 4, "busy": 1, "connected": 3, "queued": 0, "reconnects": 0 },
   "proxies": { "size": 2, "active": 1, "maxFails": 3, "retryAfterMs": 60000, "proxies": [
     { "proxy": "http://user:***@10.0.0.1:3128", "state": "active", "uses": 41, "ok": 40, "failed": 1, "consecutiveFails": 0, "lastError": "..." }
@@ -772,6 +779,9 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 }
 ```
 
+- **停机中**返回 **503**，`"ok": false`，`stopping` 是
+  `{ "signal": "SIGTERM", "since": "…", "phase": "draining", "inFlight": 2 }`（`phase` 依次是 `draining` →
+  `stopping engines` → `writing history`）。负载均衡按状态码做健康检查即可立刻摘掉这个实例。
 - `pool.busy` 长期等于 `size` 且 `queued` 在涨：并发不够，扩容。
 - `pool.reconnects` 在涨：超时或引擎重启后的重连，偶尔有正常。
 - `proxies` 没配代理池时是 `null`；`state: "ejected"` 的代理带 `retryInMs`。
@@ -781,6 +791,46 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
   `session_*` / `save` 调用数；`cookieSaves` / `cookieSaveErrors` 是绑定 `session_id` 的会话写回 cookie 的
   次数和失败数，`cookiePulls` / `cookiePullErrors` 是把别人写进 session 的 cookie 拉进浏览器的次数和失败数
   （失败只记数和打日志，不影响调用）。`MCP_PROCS=0` 时是 `{"enabled": false}`。
+
+## 停机
+
+收到 SIGTERM 或 SIGINT（`docker stop`、`docker compose down`、Ctrl-C）后：
+
+1. **立刻**：`/health` 返回 503（带 `stopping`）；新的 `/crawl` 返回 503 `shutting_down`，新的 `/mcp` 请求返回
+   503；之后的每个响应都带 `Connection: close`。**还在排队等槽位的请求也立刻返回 503 `shutting_down`**：
+   它们还没开始，调用方现在就能转到别的实例，不必陪着等完排空再被拒。
+2. **排空，最多 `SHUTDOWN_DRAIN_MS`（5 秒）**：在飞的 `/crawl` 继续跑。到时还没跑完的**被放弃**：页面再有
+   `SHUTDOWN_PARTIAL_MS`（1 秒）交出已有内容，响应是 503 `shutting_down`，带 `partial`，格式和超时时一样
+   （见[超时与部分结果](#超时与部分结果)），session 的 cookie 照常保存。与此同时，绑定 `session_id` 的
+   MCP 会话写回 cookie（最多 `SHUTDOWN_SAVE_MS`，5 秒）。
+3. **关引擎，最多 `SHUTDOWN_ENGINE_MS`（1 秒）**：给 `serve` 引擎的进程组和 MCP 引擎发 SIGTERM，到时还在的发 SIGKILL。
+4. **历史落盘，最多 `SHUTDOWN_HISTORY_MS`（1 秒）**，然后以退出码 0 退出。
+
+每个被拒绝或被放弃的请求在历史里都有一行：`code` 为 `shutting_down`，`message` 写明原因（停机期间新发的 /
+还在排队 / 跑过 `SHUTDOWN_DRAIN_MS` 被放弃），被放弃的还记了部分结果的大小。日志在收到信号时有一行 `stopping`，
+退出前有一行 `stopped`（从队列拒掉几个、在飞几个、放弃几个、引擎是否被强杀、各段耗时）。
+
+默认值下最坏情况是 5 + 1（+0.5 余量）+ 1 + 1 = 8.5 秒，在 `docker stop` 默认的 10 秒宽限之内；没有在飞请求时
+停机不到 1 秒。**要让更长的抓取跑完**，把 `SHUTDOWN_DRAIN_MS` 和宽限期一起调大，宽限期要大于
+`max(SHUTDOWN_DRAIN_MS + SHUTDOWN_PARTIAL_MS + 500, SHUTDOWN_SAVE_MS) + SHUTDOWN_ENGINE_MS + SHUTDOWN_HISTORY_MS`
+再留一两秒。例如要等 30 秒的抓取：
+
+```yaml
+services:
+  crawl:
+    stop_grace_period: 35s
+    environment:
+      SHUTDOWN_DRAIN_MS: 30000
+```
+
+不用 compose 时是 `docker stop -t 35` 或 `docker run --stop-timeout 35`。各段之和超过 9.5 秒时服务启动时会打一行
+warning。超过宽限期 Docker 会 SIGKILL，那时还在飞的请求既拿不到响应、也不会有历史记录。
+
+实测（bt，`lp-crawl:drain`）：DRAIN_RESULTS_ZH
+
+为什么要把引擎放进自己的进程组：镜像里 PID 1 是 `tini -g`，它把 `docker stop` 的 SIGTERM 发给子进程所在的整个进程组。
+以前 `serve` 引擎也在这个组里，和服务同时被结束，在飞的抓取全部失败（上一版镜像约 0.6 秒内服务就退出了，
+客户端连响应都拿不到）。
 
 ## 扩容建议
 
@@ -859,6 +909,8 @@ cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405�
 会话 404 且能新建、DELETE；`session_id`：`/crawl` 登录的 HttpOnly cookie 带进 MCP、MCP 里登录后会话未结束
 `/crawl` 就已登录、绑不同 session 互不串、不绑的没有 cookie、DELETE 写回最后一次调用之后的 cookie、历史按
 session_id 同时查到两种行；MCP 开着时 `/crawl` 登录和登出下一步就生效、两个 MCP 会话绑同一个 session 互相看到
-登录和登出、`docker stop` 时写回最后一次调用之后的 cookie）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 105 项
+登录和登出、`docker stop` 时写回最后一次调用之后的 cookie）；停机（`docker stop` 时 `/crawl` 在飞：3 秒的请求拿到
+完整结果、超过上限的被放弃并带回部分结果、排队的和新发的立刻 503、`/health` 503、历史里每个都有一行、同时开着的
+MCP 会话照样写回 cookie、10 秒内退出码 0、引擎在自己的进程组）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 105 项
 全部通过。单元测试另有 MCP 网关的路由、会话、过期、历史、cookie 带入/写回/合并/拉入/冲突和停服务写回
 （假引擎，不需要 Docker）。

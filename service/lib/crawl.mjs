@@ -76,7 +76,10 @@ function contextParams(proxyUrl) {
 const HTML_EXPR = 'document.documentElement ? document.documentElement.outerHTML : ""';
 
 // deps: { proxies: ProxyPool | null, sessions: SessionStore, partialGraceMs,
-// proxyRetries, proxyProbe }. With `proxy: "pool"`, a crawl that fails
+// proxyRetries, proxyProbe, signal, abortGraceMs }. `signal` (an AbortSignal)
+// abandons the crawl when the service stops before it is done: it ends as a
+// timeout does -- the page gets `abortGraceMs` to hand over a partial result
+// -- but with code shutting_down and the signal's reason as the message. With `proxy: "pool"`, a crawl that fails
 // because of its proxy is run again on the next pool proxy, up to
 // `proxyRetries` more times and within the same deadline, on the same slot.
 //
@@ -84,7 +87,7 @@ const HTML_EXPR = 'document.documentElement ? document.documentElement.outerHTML
 // throws: queueMs, proxy (the last one used, password redacted, or null),
 // proxiesTried (pool proxies), finalUrl and pageStatus (the main document's
 // final URL and HTTP status, when it got that far).
-export async function crawl(pool, req, { proxies, sessions, partialGraceMs, proxyRetries = 0, proxyProbe = null }, info = {}) {
+export async function crawl(pool, req, { proxies, sessions, partialGraceMs, proxyRetries = 0, proxyProbe = null, signal = null, abortGraceMs = partialGraceMs }, info = {}) {
     const t0 = Date.now();
     const deadline = t0 + req.timeout;
     const tried = new Set();
@@ -116,7 +119,7 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
             page = { proxyUrl, startCookies, cookies: null, partial: null };
             keep = false;
             try {
-                const out = await runInContext(slot.conn, req, page, deadline, partialGraceMs, (ok) => (keep = ok));
+                const out = await runInContext(slot.conn, req, page, deadline, { graceMs: partialGraceMs, signal, abortGraceMs }, (ok) => (keep = ok));
                 cookies = page.cookies ?? cookies;
                 if (out.meta) out.meta.timing = { queueMs, ...out.meta.timing, totalMs: Date.now() - t0 };
                 if (poolProxy) proxies.succeeded(poolProxy);
@@ -139,8 +142,8 @@ export async function crawl(pool, req, { proxies, sessions, partialGraceMs, prox
         }
     } catch (e) {
         let err = e;
-        if (err.code === 'timeout') {
-            err = new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout (${e.message})`);
+        if (err.code === 'timeout' || err.code === 'shutting_down') {
+            if (err.code === 'timeout') err = new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout (${e.message})`);
             const partial = {};
             if (req.formats.includes('html')) partial.html = page?.partial?.html ?? null;
             if (req.formats.includes('markdown')) partial.markdown = page?.partial?.markdown ?? null;
@@ -187,33 +190,34 @@ async function explainFailure(e, req, proxyUrl, deadline, probe) {
 
 // `setReusable(true)` is called only once the context has been disposed
 // cleanly, which is what makes the connection safe to hand to the next request.
-async function runInContext(conn, req, page, deadline, graceMs, setReusable) {
+async function runInContext(conn, req, page, deadline, { graceMs, signal, abortGraceMs }, setReusable) {
     const left = () => {
+        if (signal?.aborted) throw abandoned(signal);
         const ms = deadline - Date.now();
         if (ms <= 0) throw new CdpError('timeout', `request exceeded its ${req.timeout}ms timeout`);
         return ms;
     };
-    const send = (method, params, sessionId) => conn.send(method, params, sessionId, left());
+    const send = (method, params, sessionId) => abortable(conn.send(method, params, sessionId, left()), signal);
 
     const { browserContextId } = await send('Target.createBrowserContext', contextParams(page.proxyUrl));
     page.browserContextId = browserContextId;
     let result, failure;
     try {
-        result = await navigateAndCollect(conn, req, page, send, left);
+        result = await navigateAndCollect(conn, req, page, send, left, signal);
     } catch (e) {
         failure = e;
     }
-    if (failure?.code === 'timeout') {
-        await snapshotAfterTimeout(conn, req, page, graceMs);
+    if (failure?.code === 'timeout' || failure?.code === 'shutting_down') {
+        await snapshotAfterTimeout(conn, req, page, failure.code === 'timeout' ? graceMs : abortGraceMs);
     } else if (failure && failure.code !== 'engine_disconnected' && req.sessionId && page.sessionId) {
         // A failed navigation can still have set cookies (a redirect hop).
         try {
             page.cookies = (await conn.sendOnce('Network.getAllCookies', {}, page.sessionId, 1000)).cookies ?? null;
         } catch {}
     }
-    // A timed-out or disconnected page may be wedged in script; don't wait on
-    // it, drop the connection instead.
-    if (!failure || !['timeout', 'engine_disconnected'].includes(failure.code)) {
+    // A timed-out, abandoned or disconnected page may be wedged in script;
+    // don't wait on it, drop the connection instead.
+    if (!failure || !['timeout', 'shutting_down', 'engine_disconnected'].includes(failure.code)) {
         try {
             await conn.send('Target.disposeBrowserContext', { browserContextId }, undefined, Math.min(5000, Math.max(1000, deadline - Date.now())));
             setReusable(true);
@@ -259,7 +263,7 @@ function domIsEmpty(html, markdown) {
     return !(html ?? '').replace(/<[^>]*>/g, '').trim() && !(markdown ?? '').trim();
 }
 
-async function navigateAndCollect(conn, req, page, send, left) {
+async function navigateAndCollect(conn, req, page, send, left, signal) {
     const { targetId } = await send('Target.createTarget', { url: 'about:blank', browserContextId: page.browserContextId });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     page.sessionId = sessionId;
@@ -272,6 +276,8 @@ async function navigateAndCollect(conn, req, page, send, left) {
         wake();
     });
     const unsubscribeClose = conn.onClose(() => wake());
+    const onAbort = () => wake();
+    signal?.addEventListener('abort', onAbort);
     let loaderId;
     try {
         await send('Page.enable', {}, sessionId);
@@ -356,6 +362,7 @@ async function navigateAndCollect(conn, req, page, send, left) {
     } finally {
         unsubscribe();
         unsubscribeClose();
+        signal?.removeEventListener('abort', onAbort);
         // A crawl that timed out waiting for its lifecycle event may still
         // have had the document's response; the history wants its URL.
         if (page.finalUrl === undefined && loaderId) {
@@ -364,6 +371,34 @@ async function navigateAndCollect(conn, req, page, send, left) {
             page.pageStatus = doc?.status ?? null;
         }
     }
+}
+
+function abandoned(signal) {
+    return new CdpError('shutting_down', typeof signal.reason === 'string' ? signal.reason : 'the service is stopping');
+}
+
+// `p`, or a shutting_down error as soon as `signal` aborts (p is left to
+// settle on its own).
+function abortable(p, signal) {
+    if (!signal) return p;
+    if (signal.aborted) {
+        p.catch(() => {});
+        return Promise.reject(abandoned(signal));
+    }
+    return new Promise((resolve, reject) => {
+        const onAbort = () => reject(abandoned(signal));
+        signal.addEventListener('abort', onAbort, { once: true });
+        p.then(
+            (v) => {
+                signal.removeEventListener('abort', onAbort);
+                resolve(v);
+            },
+            (e) => {
+                signal.removeEventListener('abort', onAbort);
+                reject(e);
+            },
+        );
+    });
 }
 
 function navigationFailed(url, errorText) {

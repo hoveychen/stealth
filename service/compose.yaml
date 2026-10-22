@@ -31,6 +31,14 @@ x-crawl-env: &crawl-env
   # HISTORY_RETENTION_DAYS: 7  # days of request history kept in /data/history (0: forever)
   # LP_CDP_MAX_CONNECTIONS: 12  # default 2*POOL_SIZE+4
   # LP_HTTP_MAX_CONCURRENT: 255 # engine-wide page loads in flight (engine default 40)
+  # Stopping (README.md, "Stopping"): crawls in flight get SHUTDOWN_DRAIN_MS to
+  # finish; the defaults add up to 8.5 s, inside docker stop's 10 s. Raise the
+  # drain together with stop_grace_period below.
+  # SHUTDOWN_DRAIN_MS: 5000
+  # SHUTDOWN_PARTIAL_MS: 1000   # an abandoned crawl's time to hand over a partial result
+  # SHUTDOWN_SAVE_MS: 5000      # MCP sessions' cookie write-back, alongside the drain
+  # SHUTDOWN_ENGINE_MS: 1000
+  # SHUTDOWN_HISTORY_MS: 1000
   LP_LOG_LEVEL: info
 
 services:
@@ -40,6 +48,10 @@ services:
       context: ..
       dockerfile: service/Dockerfile
     restart: unless-stopped
+    # Above max(SHUTDOWN_DRAIN_MS + SHUTDOWN_PARTIAL_MS + 500, SHUTDOWN_SAVE_MS)
+    # + SHUTDOWN_ENGINE_MS + SHUTDOWN_HISTORY_MS, plus a second: e.g. 35s with
+    # SHUTDOWN_DRAIN_MS 30000. Docker's default is 10s.
+    stop_grace_period: ${CRAWL_STOP_GRACE:-10s}
     # The default bridge instead of a compose-made network: one container needs
     # no network of its own, and creating one fails on a daemon whose address
     # pools are used up ("all predefined address pools have been fully subnetted").
@@ -60,6 +72,7 @@ services:
     image: ${CRAWL_IMAGE:-lp-crawl}
     profiles: [multi]
     restart: unless-stopped
+    stop_grace_period: ${CRAWL_STOP_GRACE:-10s}
     network_mode: bridge
     cpuset: ${CRAWL_CPUSET:-}
     ports:
