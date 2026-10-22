@@ -147,3 +147,32 @@
     testing.expectEqual(dp, b.ownerDocument);
   }
 </script>
+
+<script id=frameless_documents_mode_and_capabilities>
+  {
+    // A document with no browsing context offers neither fullscreen nor
+    // picture-in-picture, and the mode of one made by script is fixed at
+    // no-quirks: the inert document has no doctype and still reads
+    // CSS1Compat, as does a createHTMLDocument document after its doctype is
+    // removed. Only parsing decides quirks (probes/expr-frameless-doc-flags.js).
+    const inert = document.createElement('template').content.ownerDocument;
+    const bare = document.implementation.createHTMLDocument('t');
+    bare.doctype.remove();
+    const docs = {
+      inert,
+      createHTML: document.implementation.createHTMLDocument('t'),
+      bare,
+      createDoc: document.implementation.createDocument(null, 'r'),
+      domparser: new DOMParser().parseFromString('<!doctype html><p>x', 'text/html'),
+      domparserXML: new DOMParser().parseFromString('<r/>', 'application/xml'),
+      newDocument: new Document(),
+    };
+    for (const [name, d] of Object.entries(docs)) {
+      testing.expectEqual(name + ':CSS1Compat:false:false', [name, d.compatMode, d.fullscreenEnabled, d.pictureInPictureEnabled].join(':'));
+    }
+    const quirks = new DOMParser().parseFromString('<p>x', 'text/html');
+    testing.expectEqual('BackCompat:false', quirks.compatMode + ':' + quirks.webkitFullscreenEnabled);
+
+    testing.expectEqual('CSS1Compat:true:true', [document.compatMode, document.fullscreenEnabled, document.pictureInPictureEnabled].join(':'));
+  }
+</script>

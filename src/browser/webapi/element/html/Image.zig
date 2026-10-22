@@ -69,7 +69,13 @@ pub fn getSrc(self: *const Image, frame: *Frame) ![]const u8 {
 /// Chrome reports the candidate it chose, not the `src` it fell back from --
 /// so a page that reads `currentSrc` after setting a srcset sees the same URL
 /// the request went to. See `selectedSource`.
+///
+/// Nothing is chosen in a document with no browsing context, where no request
+/// is ever made: Chrome answers "" there (probes/expr-frameless-img.js).
 pub fn getCurrentSrc(self: *const Image, frame: *Frame) ![]const u8 {
+    if (self.asConstElement().asConstNode().ownerDocument(frame)) |owner| {
+        if (owner._frame == null) return "";
+    }
     const chosen = @constCast(self).selectedSource(frame) orelse return "";
     if (chosen.len == 0) return "";
     return self.asConstElement().asConstNode().resolveURLReflect(chosen, frame, .{});
@@ -274,6 +280,15 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
 
     self._generation +%= 1;
     self._complete = true;
+
+    // An image in a document with no browsing context -- createHTMLDocument,
+    // DOMParser, a template's inert document -- is never fetched and fires
+    // neither load nor error; it stays `complete`. Adoption into a document
+    // that has one is what starts its request (see Frame.adoptNodeTree).
+    // Measured on headed Chrome, probes/expr-frameless-doc-flags.js.
+    if (self.asNode().ownerDocument(frame)) |owner| {
+        if (owner._frame == null) return;
+    }
 
     // The candidate wins over the `src`, and asking for BOTH would be a
     // request-count difference rather than a URL one -- the loudest kind. See

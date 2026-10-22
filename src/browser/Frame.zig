@@ -5010,6 +5010,17 @@ pub fn adoptNodeTree(self: *Frame, node: *Node, old_owner: *Document, new_owner:
     if (node.is(Element)) |el| {
         Element.Html.Custom.enqueueAdoptedCallbackOnElement(el, old_owner, new_owner, self);
 
+        // An image that sat in a document with no browsing context never
+        // asked for its src; arriving in one that has a browsing context is
+        // when it does, connected or not (Chrome, probes/expr-frameless-img.js).
+        if (old_owner._frame == null) {
+            if (new_owner._frame) |new_frame| {
+                if (el.is(Element.Html.Image)) |img| {
+                    try img.imageAddedCallback(new_frame);
+                }
+            }
+        }
+
         if (el.is(Element.Html.Template)) |template| {
             if (template.ownedContent()) |content| {
                 try self.adoptNodeTree(content, try old_owner.templateContentsOwner(self), try new_owner.templateContentsOwner(self));
