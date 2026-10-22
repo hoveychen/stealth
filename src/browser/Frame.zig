@@ -699,6 +699,9 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
     const document = (try factory.document(Node.Document.HTMLDocument{
         ._proto = undefined,
     })).asDocument();
+    // The one document that loads: interactive and complete come as its parse
+    // gets there. A document script builds is complete from the start.
+    document._ready_state = .loading;
 
     const arena = page.frame_arena;
 

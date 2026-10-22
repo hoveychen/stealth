@@ -69,10 +69,6 @@ pub fn parseFromString(
                 ._proto = undefined,
             });
             doc.asDocument()._url = frame.url;
-            // Parsed in one go, so done before anyone can look: Chrome 151
-            // reads `complete` straight off parseFromString
-            // (probes/expr-docopen-detached.js, the op=write cases).
-            doc.asDocument()._ready_state = .complete;
 
             var normalized = std.mem.trim(u8, html, &std.ascii.whitespace);
             if (normalized.len == 0) {
