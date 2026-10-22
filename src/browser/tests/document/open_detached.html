@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  document.open/write/close on a document with no browsing context --
+  createHTMLDocument or DOMParser. It has no frame of its own, so the frame
+  whose script calls must not stand in for one. Chrome 151, headed, warm
+  profile (probes/expr-docopen-detached.js), the same eight ways round --
+  while the host page parses and after it loaded, explicit open() and the
+  implicit open of a bare write():
+
+    - the markup is written in full, both times; the document reads `loading`
+      from open until close, then `complete`;
+    - a <base> in it moves its own baseURI and nothing else;
+    - its <script> does not run;
+    - its URL stays what it was (about:blank, or DOMParser's creator URL);
+    - the host keeps every listener, its readyState, its single load event,
+      its URL and title.
+
+  We used to run all of this on the calling frame: while the page parsed,
+  open() saw the frame parsing and did nothing, so write() wrote nothing; after
+  load it stripped the page's window listeners and put the page back into a
+  parse that close() ended by firing load on it a second time.
+-->
+<script id=while_host_parses>
+{
+  let winPings = 0, docPings = 0;
+  window.addEventListener('ping', () => { winPings++; });
+  document.addEventListener('ping', () => { docPings++; });
+
+  const d = document.implementation.createHTMLDocument('t');
+  const opened = d.open();
+  const afterOpen = d.readyState;
+  d.write('<html><head><base href="https://evil.example/d/"><title>W</title></head><body><p id=w>hi</p>' +
+    '<scr' + 'ipt>window.__detached_ran = true</scr' + 'ipt></body></html>');
+  d.close();
+
+  testing.expectEqual(d, opened);
+  testing.expectEqual('loading', afterOpen);
+  testing.expectEqual('complete', d.readyState);
+  testing.expectEqual('hi', d.getElementById('w').textContent);
+  testing.expectEqual('W', d.title);
+  testing.expectEqual('https://evil.example/d/', d.baseURI);
+  testing.expectEqual('about:blank', d.URL);
+  testing.expectEqual(undefined, window.__detached_ran);
+
+  testing.expectEqual('loading', document.readyState);
+  testing.expectEqual(testing.BASE_URL + 'document/open_detached.html', document.baseURI);
+
+  window.dispatchEvent(new Event('ping'));
+  document.dispatchEvent(new Event('ping'));
+  testing.expectEqual('1 1', winPings + ' ' + docPings);
+}
+</script>
+
+<script id=domparser_bare_write_while_host_parses>
+{
+  const d = new DOMParser().parseFromString('<p id=old>old</p>', 'text/html');
+  testing.expectEqual('complete', d.readyState);
+  let hits = 0;
+  d.addEventListener('ping', () => { hits++; });
+  d.write('<p id=w>hi</p>');
+  testing.expectEqual('loading', d.readyState);
+  d.close();
+  d.dispatchEvent(new Event('ping'));
+
+  testing.expectEqual('complete', d.readyState);
+  testing.expectEqual(null, d.getElementById('old'));
+  testing.expectEqual('hi', d.getElementById('w').textContent);
+  testing.expectEqual(document.URL, d.URL);
+  // the implicit open() removed the document's own listener, as Chrome's does
+  testing.expectEqual(0, hits);
+  testing.expectEqual('loading', document.readyState);
+}
+</script>
+
+<script>
+  window.__loads = 0;
+  window.addEventListener('load', () => { window.__loads++; });
+</script>
+
+<script id=after_host_loaded type=module>
+{
+  const state = await testing.async();
+
+  window.addEventListener('load', () => setTimeout(() => {
+    let winPings = 0, docPings = 0;
+    window.addEventListener('ping', () => { winPings++; });
+    document.addEventListener('ping', () => { docPings++; });
+    const url = document.URL;
+
+    const d = document.implementation.createHTMLDocument('t');
+    d.open();
+    d.write('<html><head><base href="https://evil.example/d/"></head><body><p id=w>hi</p>' +
+      '<scr' + 'ipt>window.__detached_ran = true</scr' + 'ipt></body></html>');
+    const midWrite = document.readyState;
+    d.close();
+
+    window.dispatchEvent(new Event('ping'));
+    document.dispatchEvent(new Event('ping'));
+    const r = {
+      midWrite, url, winPings, docPings,
+      hostReady: document.readyState, hostURL: document.URL,
+      written: d.getElementById('w').textContent, baseURI: d.baseURI, ready: d.readyState,
+    };
+    // a second load event, had close() fired one at the host, is a task away
+    setTimeout(() => state.resolve(r), 20);
+  }, 0));
+
+  await state.done((r) => {
+    testing.expectEqual('complete', r.midWrite);
+    testing.expectEqual('complete', r.hostReady);
+    testing.expectEqual(r.url, r.hostURL);
+    testing.expectEqual('1 1', r.winPings + ' ' + r.docPings);
+    testing.expectEqual('hi', r.written);
+    testing.expectEqual('https://evil.example/d/', r.baseURI);
+    testing.expectEqual('complete', r.ready);
+    testing.expectEqual(undefined, window.__detached_ran);
+    testing.expectEqual(1, window.__loads);
+  });
+}
+</script>
