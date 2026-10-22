@@ -157,8 +157,8 @@ const fmtTime = (iso) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 const fmtBytes = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(2)} MB`);
-const fmtMs = (ms) => (ms == null ? '' : ms < 1000 ? `${ms} ms` : ms < 120000 ? `${(ms / 1000).toFixed(1)} 秒` : `${Math.round(ms / 60000)} 分钟`);
-const kv = (table, rows) => table.replaceChildren(...rows.map(([k, v, cls]) => el('tr', {}, el('th', {}, k), el('td', { class: cls || 'num' }, v ?? '—'))));
+const fmtMs = (ms) => (ms == null ? '' : ms < 1000 ? `${ms} ms` : ms < 120000 ? `${+(ms / 1000).toFixed(1)} 秒` : ms < 7200000 ? `${+(ms / 60000).toFixed(1)} 分钟` : ms < 172800000 ? `${+(ms / 3600000).toFixed(1)} 小时` : `${+(ms / 86400000).toFixed(1)} 天`);
+const kv = (table, rows) => table.replaceChildren(...rows.map(([k, v, cls]) => el('tr', {}, el('th', {}, k), el('td', { class: cls ?? 'num' }, v ?? '—'))));
 async function getJson(url, opts) {
   const r = await fetch(url, opts);
   const body = await r.json().catch(() => ({}));
@@ -177,10 +177,11 @@ function showTab() {
   for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.dataset.tab === name);
   for (const s of document.querySelectorAll('main > section')) s.classList.toggle('on', s.id === name);
   tabs[name]();
+  if (name !== 'status') refreshStatus();
 }
 addEventListener('hashchange', showTab);
 
-// ---- status
+// ---- status (also keeps the header current on every tab)
 async function refreshStatus() {
   let h;
   try {
@@ -226,7 +227,7 @@ async function refreshStatus() {
   }
 }
 setInterval(() => {
-  if (!document.hidden && $('#status').classList.contains('on')) refreshStatus();
+  if (!document.hidden) refreshStatus();
 }, 3000);
 
 // ---- history
