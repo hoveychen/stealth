@@ -25,7 +25,6 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const JS = @import("../js/js.zig");
-const URL = @import("../URL.zig");
 const Frame = @import("../Frame.zig");
 const Parser = @import("../parser/Parser.zig");
 
@@ -399,25 +398,17 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                         attribute_iterator,
                         .{},
                     ),
-                    asUint("base") => {
-                        const n = try createHtmlElementT(
-                            frame,
-                            Element.Html.Base,
-                            namespace,
-                            attribute_iterator,
-                            .{},
-                        );
-
-                        // If frames's base url is not already set, fill it with
-                        // the base tag.
-                        if (frame.base_url == null) {
-                            if (n.as(Element).getAttributeInterned("href")) |href| {
-                                frame.base_url = try URL.resolve(frame.arena, frame.url, href, .{});
-                            }
-                        }
-
-                        return n;
-                    },
+                    // Not the frame's base URL yet: that waits for the element
+                    // to be in the frame's document (Frame.nodeIsReady). This
+                    // one may be headed for a DOMParser document, a detached
+                    // innerHTML or a <template>, none of which move it.
+                    asUint("base") => return createHtmlElementT(
+                        frame,
+                        Element.Html.Base,
+                        namespace,
+                        attribute_iterator,
+                        .{},
+                    ),
                     // A dedicated HTMLMenuElement, not upstream's Generic with a
                     // `.menu` tag: Chrome has the interface and its constructor.
                     asUint("menu") => return createHtmlElementT(

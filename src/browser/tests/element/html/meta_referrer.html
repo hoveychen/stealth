@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+<div id=host></div>
+
+<!--
+  <meta name=referrer> sets the policy of the document it is in, on insertion
+  and on a name/content change while there; taking it out undoes nothing.
+  Parsed into a detached document or subtree it sets nothing. Each step read
+  back as the Referer of a same-origin fetch, on a headed Chrome first.
+-->
+<script id=meta_referrer type=module>
+  {
+    const state = await testing.async();
+    const referer = async () => (await (await fetch('/echo_referer')).text())
+      .replace('<html><body>referer=', '').replace('</body></html>', '');
+    const META = '<meta name="referrer" content="no-referrer">';
+    const got = {};
+
+    got.before = await referer();
+
+    new DOMParser().parseFromString(`<head>${META}</head>`, 'text/html');
+    document.createElement('div').innerHTML = META;
+    document.createElement('template').innerHTML = META;
+    document.implementation.createHTMLDocument('').head.innerHTML = META;
+    const range = document.createRange();
+    range.selectNode($('#host'));
+    range.createContextualFragment(META);
+    got.detached = await referer();
+
+    const m = document.createElement('meta');
+    m.name = 'referrer';
+    m.content = 'no-referrer';
+    got.created = await referer();
+    document.body.appendChild(m);
+    got.inserted = await referer();
+
+    m.content = 'unsafe-url';
+    got.content = await referer();
+
+    m.remove();
+    got.removed = await referer();
+
+    const m2 = document.createElement('meta');
+    document.head.appendChild(m2);
+    m2.content = 'origin';
+    got.nameless = await referer();
+    m2.name = 'referrer';
+    got.named = await referer();
+
+    state.resolve();
+    await state.done(() => {
+      const page = location.href;
+      testing.expectEqual(page, got.before);
+      testing.expectEqual(page, got.detached);
+      testing.expectEqual(page, got.created);
+      testing.expectEqual('NONE', got.inserted);
+      testing.expectEqual(page, got.content);
+      testing.expectEqual(page, got.removed);
+      testing.expectEqual(page, got.nameless);
+      testing.expectEqual(location.origin + '/', got.named);
+    });
+  }
+</script>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+<div id=host></div>
+
+<!--
+  A <base> only sets the base URL of the document it is in. Every reading below
+  is Chrome's, taken on a headed Chrome with a page that had no <base> of its
+  own: parsing one into a detached document or subtree leaves document.baseURI
+  and the page's relative URLs where they were.
+-->
+<script id=detached_parses>
+  {
+    const page = location.href;
+    const rel = new URL('x/y', page).href;
+    const relA = () => { const a = document.createElement('a'); a.href = 'x/y'; return a.href; };
+    const expectPage = () => {
+      testing.expectEqual(page, document.baseURI);
+      testing.expectEqual(rel, relA());
+    };
+    const HTML = '<head><base href="https://evil.example/d/"></head><body><a href="rel">x</a></body>';
+    const FRAG = '<base href="https://evil.example/d/"><a href="rel">x</a>';
+
+    const parsed = new DOMParser().parseFromString(HTML, 'text/html');
+    expectPage();
+    // ...and the parsed document's own <base> is in force for its own nodes.
+    testing.expectEqual('https://evil.example/d/', parsed.baseURI);
+    testing.expectEqual('https://evil.example/d/rel', parsed.querySelector('a').href);
+    testing.expectEqual(page, parsed.URL);
+
+    const div = document.createElement('div');
+    div.innerHTML = FRAG;
+    expectPage();
+    testing.expectEqual(new URL('rel', page).href, div.querySelector('a').href);
+
+    const t = document.createElement('template');
+    t.innerHTML = FRAG;
+    expectPage();
+    document.head.appendChild(t);
+    expectPage();
+    t.remove();
+
+    const range = document.createRange();
+    range.selectNode($('#host'));
+    range.createContextualFragment(FRAG);
+    expectPage();
+
+    const created = document.implementation.createHTMLDocument('');
+    created.head.innerHTML = '<base href="https://evil.example/d/">';
+    created.body.innerHTML = '<a href="rel">x</a>';
+    expectPage();
+    testing.expectEqual('https://evil.example/d/', created.baseURI);
+    testing.expectEqual('https://evil.example/d/rel', created.querySelector('a').href);
+
+    // No <base> and an about:blank URL: nothing to resolve against, so the
+    // attribute comes back as written.
+    const bare = document.implementation.createHTMLDocument('');
+    bare.body.innerHTML = '<a href="rel">x</a>';
+    testing.expectEqual('about:blank', bare.baseURI);
+    testing.expectEqual('rel', bare.querySelector('a').href);
+  }
+</script>
+
+<script id=live_document>
+  {
+    const page = location.href;
+    const base = () => document.baseURI;
+
+    // Detached, then appended to <body>: a <base> counts wherever in the
+    // document it is.
+    const b1 = document.createElement('base');
+    b1.href = 'https://one.example/a/';
+    testing.expectEqual(page, base());
+    document.body.appendChild(b1);
+    testing.expectEqual('https://one.example/a/', base());
+
+    // The first in tree order wins.
+    const b2 = document.createElement('base');
+    b2.setAttribute('href', 'https://two.example/b/');
+    document.head.prepend(b2);
+    testing.expectEqual('https://two.example/b/', base());
+
+    b2.setAttribute('href', 'https://three.example/c/');
+    testing.expectEqual('https://three.example/c/', base());
+
+    b2.removeAttribute('href');
+    testing.expectEqual('https://one.example/a/', base());
+
+    b1.remove();
+    testing.expectEqual(page, base());
+
+    b2.href = 'https://four.example/';
+    testing.expectEqual('https://four.example/', base());
+
+    b2.remove();
+    testing.expectEqual(page, base());
+
+    // innerHTML into the document does apply, and clearing it takes it away.
+    $('#host').innerHTML = '<base href="https://five.example/">';
+    testing.expectEqual('https://five.example/', base());
+    $('#host').innerHTML = '';
+    testing.expectEqual(page, base());
+
+    // Carried off into another document, it stops deciding this one.
+    const b3 = document.createElement('base');
+    b3.href = 'https://six.example/';
+    document.head.appendChild(b3);
+    testing.expectEqual('https://six.example/', base());
+    const other = new DOMParser().parseFromString('<p>', 'text/html');
+    other.head.appendChild(b3);
+    testing.expectEqual(page, base());
+    testing.expectEqual('https://six.example/', other.baseURI);
+  }
+</script>

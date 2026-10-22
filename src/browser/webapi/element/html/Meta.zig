@@ -28,6 +28,7 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 
 const HtmlElement = @import("../Html.zig");
+const Base = @import("Base.zig");
 
 const String = lp.String;
 const Meta = @This();
@@ -85,6 +86,23 @@ pub fn getScheme(self: *Meta) []const u8 {
 
 pub fn setScheme(self: *Meta, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("scheme"), .wrap(value), frame);
+}
+
+/// <meta name=referrer> sets the referrer policy of the document it is in,
+/// when it gets there and whenever its name or content changes while there
+/// (HTML §meta referrer). One in a DOMParser document, a detached innerHTML
+/// or a <template> sets nothing; taking one out does not undo it. All four
+/// measured on Chrome: a Referer read back after each step.
+pub fn processReferrer(self: *Meta, frame: *Frame) void {
+    const el = self.asElement();
+    const name = el.getName() orelse return;
+    if (!std.ascii.eqlIgnoreCase(name, "referrer")) {
+        return;
+    }
+    const content = el.getAttributeInterned("content") orelse return;
+    const rp = referrer.parseMeta(content) orelse return;
+    const owner = Base.activeDocumentFrame(self.asNode(), frame) orelse return;
+    owner.referrer_policy = rp;
 }
 
 pub fn processRefresh(self: *Meta, frame: *Frame) !void {
@@ -162,19 +180,9 @@ fn immediateRefreshTarget(content: []const u8) ?[]const u8 {
 pub const Build = struct {
     pub fn created(node: *Node, frame: *Frame) !void {
         const self = node.as(Meta);
-        const el = self.asElement();
 
-        // <meta name=referrer> sets the document's referrer policy.
-        if (el.getName()) |name| {
-            if (std.ascii.eqlIgnoreCase(name, "referrer")) {
-                if (el.getAttributeInterned("content")) |content| {
-                    if (referrer.parseMeta(content)) |rp| {
-                        frame.referrer_policy = rp;
-                    }
-                }
-            }
-        }
-
+        // <meta name=referrer> waits for Frame.nodeIsReady: a created element
+        // isn't in any document yet.
         if (frame._parse_mode == .fragment) {
             // innerHTML and DOMParser: these nodes are detached, they'll go
             // through nodeIsReady if they're ever inserted.
@@ -184,10 +192,14 @@ pub const Build = struct {
     }
 
     pub fn attributeChange(element: *Element, name: String, _: String, frame: *Frame) !void {
+        const meta = element.as(Meta);
+        if (name.eql(comptime .wrap("name")) or name.eql(comptime .wrap("content"))) {
+            meta.processReferrer(frame);
+        }
         if (!name.eql(comptime .wrap("http-equiv")) and !name.eql(comptime .wrap("content"))) {
             return;
         }
-        return element.as(Meta).processRefresh(element.asNode().ownerFrame(frame));
+        return meta.processRefresh(element.asNode().ownerFrame(frame));
     }
 };
 
@@ -208,6 +220,10 @@ pub const JsApi = struct {
 };
 
 const testing = @import("../../../../testing.zig");
+test "WebApi: HTML.Meta referrer" {
+    try testing.htmlRunner("element/html/meta_referrer.html", .{});
+}
+
 test "WebApi: Meta immediate refresh target" {
     try testing.expectString("/target", immediateRefreshTarget("0; /target").?);
     try testing.expectString("/target", immediateRefreshTarget("0,/target").?);

@@ -222,19 +222,9 @@ fn getPartialBody(cmd: anytype) !void {
 
     var md: ?[]const u8 = null;
     if (params.markdown orelse false) {
-        // Two elements write to the frame when they are created, detached
-        // document or not: the first <base href> sets the frame's base URL and
-        // <meta name=referrer> its referrer policy. Settled now, from a copy,
-        // they would be in force before the real parse reaches them -- a
-        // script above the <base> would resolve against it, a request made
-        // before the <meta> would carry its Referer -- so they are put back.
-        const base_url = frame.base_url;
-        const referrer_policy = frame.referrer_policy;
-        defer {
-            frame.base_url = base_url;
-            frame.referrer_policy = referrer_policy;
-        }
-
+        // A copy: its <base href> and <meta name=referrer> stay in the parsed
+        // document and never reach the frame, so the real parse finds them
+        // where it would have.
         const parser: DOMParser = .{ ._frame = frame };
         const doc = try parser.parseFromString(body, "text/html");
 
