@@ -359,7 +359,7 @@ function fakeEngine() {
                 return res.end();
             }
             const msg = JSON.parse(Buffer.concat(chunks).toString());
-            if (!sessions.has(sid)) sessions.set(sid, { url: null });
+            if (!sessions.has(sid)) sessions.set(sid, { url: null, cookies: [] });
             const s = sessions.get(sid);
             const ok = (result) => {
                 res.writeHead(200, { 'content-type': 'application/json', 'mcp-session-id': sid });
@@ -373,7 +373,24 @@ function fakeEngine() {
             if (msg.method === 'initialize') return ok({ protocolVersion: '2025-06-18', serverInfo: { name: 'fake' } });
             if (msg.method === 'tools/list') return ok({ tools: ['goto', 'click', 'getUrl', ...HIDDEN_TOOLS].map((name) => ({ name })) });
             const { name, arguments: args = {} } = msg.params;
+            // The cookie jar, in the engine's cookies_export format.
+            const addCookie = (c) => {
+                s.cookies = s.cookies.filter((x) => `${x.name} ${x.domain} ${x.path}` !== `${c.name} ${c.domain} ${c.path ?? '/'}`);
+                s.cookies.push({ path: '/', expires: null, secure: false, httpOnly: false, sameSite: null, ...c });
+            };
+            if (name === 'cookies_import') {
+                for (const c of args.cookies) addCookie({ ...c, sameSite: c.sameSite?.toLowerCase() ?? null });
+                return text(`imported ${args.cookies.length} of ${args.cookies.length} cookie(s)`);
+            }
+            if (name === 'cookies_export') return text(JSON.stringify(s.cookies));
             if (name === 'goto') {
+                // ?set=name=value[;httponly]: the page sets a cookie.
+                const set = new URL(args.url).searchParams.get('set');
+                if (set) {
+                    const [nv, flag] = set.split(';');
+                    const [cn, cv] = nv.split('=');
+                    addCookie({ name: cn, value: cv, domain: 'site.example', httpOnly: flag === 'httponly', sameSite: 'lax' });
+                }
                 s.url = args.url;
                 return setTimeout(() => text('Navigated successfully.'), args.delay ?? 0);
             }
@@ -389,12 +406,16 @@ function fakeEngine() {
     return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, sessions, seen, url: `http://127.0.0.1:${server.address().port}/mcp` })));
 }
 
+const f_engineSession = (engines, id) => engines.find((e) => e.sessions.has(id))?.sessions.get(id);
+const toolCalls = (f, name) => f.engines.flatMap((e) => e.seen).filter((r) => r.body.includes(`"name":"${name}"`));
+
 async function gatewayFixture(opts = {}) {
     const engines = [await fakeEngine(), await fakeEngine()];
     const backends = engines.map((e, i) => new Backend(e.url, { name: `mcp${i}` }));
     const records = [];
     let now = 1_000_000;
-    const gw = new McpGateway({ backends, record: (e) => records.push(e), now: () => now, ...opts });
+    const jars = new SessionStore();
+    const gw = new McpGateway({ backends, cookieJars: jars, record: (e) => records.push(e), now: () => now, ...opts });
     const front = http.createServer((req, res) => {
         const chunks = [];
         req.on('data', (c) => chunks.push(c));
@@ -403,7 +424,8 @@ async function gatewayFixture(opts = {}) {
     await new Promise((r) => front.listen(0, '127.0.0.1', r));
     const url = `http://127.0.0.1:${front.address().port}/mcp`;
     return {
-        engines, backends, gw, records, url,
+        engines, backends, gw, records, url, jars,
+        engineSession: (id) => f_engineSession(engines, id),
         advance: (ms) => (now += ms),
         close() {
             front.close();
@@ -522,6 +544,94 @@ await check('MCP gateway: initialize moves on from a dead process; MCP_MAX_SESSI
         assert.equal(f.gw.sessions.get(a.sessionId).backend.name, 'mcp1');
         await b.initialize();
         await assert.rejects(c.initialize(), /HTTP 503.*MCP_MAX_SESSIONS/);
+    } finally {
+        f.close();
+    }
+});
+
+await check('SessionStore: checkpoint merges, returns the next base, and leaves an unchanged or deleted jar alone', async () => {
+    const st = new SessionStore();
+    const c = (name, value) => ({ name, value, domain: 'a.example', path: '/', httpOnly: false, secure: false });
+    let base = await st.load('cp');
+    base = await st.checkpoint('cp', base, [c('x', '1')]);
+    assert.deepEqual(base.map((k) => k.value), ['1']);
+    assert.equal(st.saves, 1);
+    assert.equal(await st.checkpoint('cp', base, [c('x', '1')]), base, 'unchanged: same base back');
+    assert.equal(st.saves, 1, 'unchanged: no save');
+    // Another writer changes y; this holder's next checkpoint (x changed) keeps it.
+    await st.save('cp', await st.load('cp'), [c('x', '1'), c('y', 'other')]);
+    base = await st.checkpoint('cp', base, [c('x', '2')]);
+    assert.deepEqual((await st.load('cp')).map((k) => `${k.name}=${k.value}`).sort(), ['x=2', 'y=other']);
+    await st.delete('cp');
+    await st.checkpoint('cp', base, [c('x', '3')]);
+    assert.deepEqual(await st.load('cp'), [], 'a deleted jar is not brought back');
+});
+
+await check('MCP gateway: ?session_id= loads the jar (HttpOnly too) into the browser and writes back before each answer', async () => {
+    const f = await gatewayFixture();
+    try {
+        const jarBase = await f.jars.load('acct');
+        await f.jars.save('acct', jarBase, [{ name: 'auth', value: 'tok', domain: 'site.example', path: '/', httpOnly: true, secure: false, sameSite: 'Strict', expires: -1 }]);
+        const c = new McpClient(`${f.url}?session_id=acct`);
+        await c.initialize();
+        const es = f.engineSession(c.sessionId);
+        assert.deepEqual(es.cookies.map((k) => [k.name, k.value, k.httpOnly, k.sameSite]), [['auth', 'tok', true, 'strict']]);
+        // The page logs in (an HttpOnly cookie); the jar has it once goto answered.
+        await c.tool('goto', { url: 'http://site.example/login?set=sid=42;httponly' });
+        const after = await f.jars.load('acct');
+        assert.deepEqual(after.map((k) => [k.name, k.value, k.httpOnly, k.sameSite ?? null]).sort(), [['auth', 'tok', true, 'Strict'], ['sid', '42', true, 'Lax']]);
+        // A /crawl changes auth meanwhile; the MCP session's next write-back
+        // (it did not touch auth) leaves that change alone.
+        await f.jars.save('acct', after, [...after.filter((k) => k.name !== 'auth'), { ...after.find((k) => k.name === 'auth'), value: 'fresh' }]);
+        await c.tool('goto', { url: 'http://site.example/page?set=seen=1' });
+        assert.deepEqual((await f.jars.load('acct')).map((k) => `${k.name}=${k.value}`).sort(), ['auth=fresh', 'seen=1', 'sid=42']);
+        // The binding shows in the session list and on every history line.
+        await new Promise((r) => setTimeout(r, 50)); // the getUrl after a navigating tool
+        assert.equal(f.gw.list()[0].session_id, 'acct');
+        assert.ok(f.records.length >= 3 && f.records.every((r) => r.session_id === 'acct'));
+        assert.match(f.records[0].message, /session_id acct: 1 cookie\(s\) loaded/);
+        // The gateway's cookie tools are not the agent's.
+        const names = (await c.request('tools/list')).tools.map((t) => t.name);
+        assert.ok(!names.includes('cookies_import') && !names.includes('cookies_export'));
+        await assert.rejects(c.tool('cookies_export'), /not available on this server/);
+        assert.equal(f.gw.stats().cookieSaves, 2);
+        assert.equal(f.gw.stats().cookieSaveErrors, 0);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: DELETE and the idle sweep write back what changed since the last call', async () => {
+    const f = await gatewayFixture({ idleMs: 60_000 });
+    try {
+        const a = new McpClient(`${f.url}?session_id=ja`), b = new McpClient(`${f.url}?session_id=jb`);
+        await a.initialize();
+        await b.initialize();
+        // A page script sets a cookie between calls (no tool call follows).
+        f.engineSession(a.sessionId).cookies.push({ name: 'late', value: 'a', domain: 'site.example', path: '/', expires: null, secure: false, httpOnly: false, sameSite: null });
+        f.engineSession(b.sessionId).cookies.push({ name: 'late', value: 'b', domain: 'site.example', path: '/', expires: null, secure: false, httpOnly: false, sameSite: null });
+        assert.equal(await a.close(), 204);
+        assert.deepEqual((await f.jars.load('ja')).map((k) => `${k.name}=${k.value}`), ['late=a']);
+        f.advance(70_000);
+        assert.equal(await f.gw.sweep(), 1);
+        assert.deepEqual((await f.jars.load('jb')).map((k) => `${k.name}=${k.value}`), ['late=b'], 'its own jar, not ja');
+        assert.deepEqual((await f.jars.load('ja')).map((k) => `${k.name}=${k.value}`), ['late=a']);
+    } finally {
+        f.close();
+    }
+});
+
+await check('MCP gateway: without session_id no cookie calls reach the engine; a bad session_id is refused', async () => {
+    const f = await gatewayFixture();
+    try {
+        const c = new McpClient(f.url);
+        await c.initialize();
+        await c.tool('goto', { url: 'http://site.example/?set=k=v' });
+        assert.equal(await c.close(), 204);
+        assert.equal(toolCalls(f, 'cookies_import').length + toolCalls(f, 'cookies_export').length, 0);
+        assert.ok(f.records.every((r) => r.session_id == null));
+        assert.equal(f.jars.jars.size, 0);
+        await assert.rejects(new McpClient(`${f.url}?session_id=no/slash`).initialize(), /HTTP 400.*session_id/);
     } finally {
         f.close();
     }

@@ -17,6 +17,14 @@
 // - Every tools/call becomes a history line (kind "mcp").
 // - Idle sessions are closed after MCP_SESSION_IDLE_MS, so agents that never
 //   send DELETE don't keep browsers alive forever.
+// - `/mcp?session_id=X` on initialize binds the MCP session to /crawl's
+//   cookie jar X (lib/sessions.mjs): the jar's cookies, HttpOnly ones too, go
+//   into the new browser (the engine's cookies_import), and the browser's
+//   cookies go back into the jar (cookies_export, merged by the jar's rules)
+//   after every tool call, before its answer goes out -- so a /crawl sent
+//   after a login click already finds the login -- and once more when the
+//   session ends (DELETE or idle). A process that dies takes with it only
+//   what changed since the last call.
 //
 // The engine processes are started here (not in entrypoint.sh) so that a
 // process that dies is noticed at once: its sessions are gone with it, and
@@ -27,13 +35,18 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import { SESSION_ID } from './sessions.mjs';
 
 // Tools an agent of a shared service must not have (see above).
-export const HIDDEN_TOOLS = new Set(['session_new', 'session_list', 'session_close', 'save']);
+// cookies_import / cookies_export are the gateway's own, for session_id.
+export const HIDDEN_TOOLS = new Set(['session_new', 'session_list', 'session_close', 'save', 'cookies_import', 'cookies_export']);
 // Tools after which the page may be on another URL: the gateway asks the
 // engine for it (getUrl, a few ms) so the history shows where clicks led.
 const NAVIGATING_TOOLS = new Set(['goto', 'click', 'press']);
 const MCP_SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
+// The engine's export writes sameSite as the jar's own lower-case tag; the
+// jar keeps CDP's spelling, which is what /crawl's getAllCookies gives it.
+const SAME_SITE = { strict: 'Strict', lax: 'Lax', none: 'None' };
 
 const rpcError = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
@@ -156,17 +169,20 @@ export function spawnBackends({ bin = '/bin/lightpanda', count, basePort, proxy 
 export class McpGateway {
     // backends: [Backend]. record(entry): one history entry per tools/call
     // (and per session start/end). proxy: the redacted proxy the engines use,
-    // or null.
-    constructor({ backends, maxSessions = 32, idleMs = 30 * 60 * 1000, callTimeoutMs = 120000, proxy = null, record = () => {}, now = Date.now }) {
+    // or null. cookieJars: the SessionStore that session_id names, or null.
+    constructor({ backends, maxSessions = 32, idleMs = 30 * 60 * 1000, callTimeoutMs = 120000, proxy = null, cookieJars = null, record = () => {}, now = Date.now }) {
         this.backends = backends;
         this.maxSessions = maxSessions;
         this.idleMs = idleMs;
         this.callTimeoutMs = callTimeoutMs;
         this.proxy = proxy;
+        this.cookieJars = cookieJars;
         this.record = record;
         this.now = now;
-        this.sessions = new Map(); // id -> { id, backend, created, lastUsed, calls, url, busy }
-        this.counts = { started: 0, closed: 0, expired: 0, lost: 0, calls: 0, toolErrors: 0, refused: 0 };
+        // id -> { id, backend, created, lastUsed, calls, url, busy, sessionId,
+        // jarBase (the jar's cookies as of this session's last write-back) }
+        this.sessions = new Map();
+        this.counts = { started: 0, closed: 0, expired: 0, lost: 0, calls: 0, toolErrors: 0, refused: 0, cookieSaves: 0, cookieSaveErrors: 0 };
     }
 
     // The process behind `backend` went away, and its sessions with it.
@@ -175,7 +191,8 @@ export class McpGateway {
             if (s.backend !== backend) continue;
             this.sessions.delete(s.id);
             this.counts.lost++;
-            this.recordEvent(s, 'session_lost', 'engine_restarted', 'the engine process serving this session exited');
+            const kept = s.sessionId ? `; session_id ${s.sessionId} has the cookies as of its last call` : '';
+            this.recordEvent(s, 'session_lost', 'engine_restarted', `the engine process serving this session exited${kept}`);
         }
     }
 
@@ -187,6 +204,7 @@ export class McpGateway {
         for (const s of stale) {
             this.sessions.delete(s.id);
             this.counts.expired++;
+            await this.saveCookies(s);
             await s.backend.request('DELETE', { 'mcp-session-id': s.id }, null, 10000).catch(() => {});
             this.recordEvent(s, 'session_end', null, `idle for more than ${this.idleMs} ms`);
         }
@@ -212,7 +230,7 @@ export class McpGateway {
         const now = this.now();
         return [...this.sessions.values()]
             .sort((a, b) => b.lastUsed - a.lastUsed)
-            .map((s) => ({ id: s.id, process: s.backend.name, created: new Date(s.created).toISOString(), lastUsed: new Date(s.lastUsed).toISOString(), idleMs: now - s.lastUsed, calls: s.calls, url: s.url, busy: s.busy }));
+            .map((s) => ({ id: s.id, session_id: s.sessionId, process: s.backend.name, created: new Date(s.created).toISOString(), lastUsed: new Date(s.lastUsed).toISOString(), idleMs: now - s.lastUsed, calls: s.calls, url: s.url, busy: s.busy }));
     }
 
     // Handles one request to /mcp. `body` is the raw request body (POST).
@@ -232,7 +250,12 @@ export class McpGateway {
         }
         if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return send(res, 400, rpcError(null, -32600, 'expected one JSON-RPC message (no batches)'));
 
-        if (msg.method === 'initialize') return this.handleInitialize(res, msg, sid);
+        if (msg.method === 'initialize') {
+            const jarId = new URL(req.url, 'http://x').searchParams.get('session_id') || null;
+            if (jarId && !SESSION_ID.test(jarId)) return send(res, 400, rpcError(msg.id, -32600, 'session_id must be 1-128 characters of A-Z a-z 0-9 . _ -'));
+            if (jarId && !this.cookieJars) return send(res, 400, rpcError(msg.id, -32600, 'session_id is not available on this server'));
+            return this.handleInitialize(res, msg, sid, jarId);
+        }
         if (!sid) return send(res, 400, rpcError(msg.id, -32000, 'Mcp-Session-Id header required: send initialize first and pass back the session id it returns'));
         const s = this.sessions.get(sid);
         if (!s) return send(res, 404, rpcError(msg.id, -32001, `no MCP session ${sid} (closed, idle for too long, or its engine restarted); initialize a new one`));
@@ -264,7 +287,9 @@ export class McpGateway {
         return this.handleToolCall(res, s, msg, body);
     }
 
-    async handleInitialize(res, msg, requested) {
+    // jarId: the session_id to bind a new session to, or null. A live session
+    // keeps the binding it was started with.
+    async handleInitialize(res, msg, requested, jarId) {
         if (requested && this.sessions.has(requested)) {
             // Re-initializing a live session: forward, keep it.
             const s = this.sessions.get(requested);
@@ -283,16 +308,25 @@ export class McpGateway {
             if (!backend) return send(res, 503, rpcError(msg.id, -32000, `cannot start an MCP session: ${last}`));
             tried.add(backend);
             const id = requested ?? `mcp-${crypto.randomBytes(12).toString('hex')}`;
-            const s = { id, backend, created: this.now(), lastUsed: this.now(), calls: 0, url: null, busy: 0, tail: Promise.resolve() };
+            const s = { id, backend, created: this.now(), lastUsed: this.now(), calls: 0, url: null, busy: 0, tail: Promise.resolve(), sessionId: jarId, jarBase: null };
             const r = await this.forward(s, JSON.stringify(msg));
             if (!r.ok) {
                 last = r.message;
                 continue;
             }
+            let note = null;
+            if (r.status === 200 && jarId) {
+                const loaded = await this.loadCookies(s);
+                if (loaded.error) {
+                    await backend.request('DELETE', { 'mcp-session-id': id }, null, 10000).catch(() => {});
+                    return send(res, 502, rpcError(msg.id, -32603, `cannot load the cookies of session_id ${jarId} into the browser: ${loaded.error}`));
+                }
+                note = `session_id ${jarId}: ${loaded.count} cookie(s) loaded`;
+            }
             if (r.status === 200) {
                 this.sessions.set(id, s);
                 this.counts.started++;
-                this.recordEvent(s, 'session_start', null, null);
+                this.recordEvent(s, 'session_start', null, note);
             }
             return sendRaw(res, r.status, r.body, id);
         }
@@ -310,6 +344,9 @@ export class McpGateway {
         if (!s) return send(res, 404, rpcError(null, -32001, `no MCP session ${sid ?? '(no Mcp-Session-Id header)'}`));
         this.sessions.delete(s.id);
         this.counts.closed++;
+        // After the call in flight, if any: its write-back, then the last one.
+        await s.tail;
+        await this.saveCookies(s);
         await s.backend.request('DELETE', { 'mcp-session-id': s.id }, null, 10000).catch(() => {});
         this.recordEvent(s, 'session_end', null, 'closed by the client');
         res.writeHead(204);
@@ -326,6 +363,9 @@ export class McpGateway {
         s.busy++;
         this.counts.calls++;
         const r = await this.forward(s, body);
+        // Before the answer: the agent may hand over to /crawl as soon as it
+        // has it.
+        if (r.ok) await this.saveCookies(s);
         let entry;
         if (!r.ok) {
             entry = { status: r.status, code: r.code, message: r.message };
@@ -370,6 +410,52 @@ export class McpGateway {
         this.recordCall(s, { tool, url: argUrl ?? urlBefore, finalUrl: s.url, ms, ...entry, args: summarizeArgs(tool, args) });
     }
 
+    // Puts the bound jar's cookies into the session's browser. -> { count } or
+    // { error }.
+    async loadCookies(s) {
+        let cookies;
+        try {
+            cookies = await this.cookieJars.load(s.sessionId);
+        } catch (e) {
+            return { error: e.message };
+        }
+        s.jarBase = cookies;
+        if (!cookies.length) return { count: 0 };
+        const r = await this.callTool(s, 'cookies_import', { cookies });
+        return r.error ? r : { count: cookies.length };
+    }
+
+    // Merges the browser's cookies into the bound jar (sessions.mjs's rules,
+    // against what this session last wrote). Failures are counted and
+    // logged, never the agent's problem.
+    async saveCookies(s) {
+        if (!s.sessionId || !s.jarBase) return;
+        const r = await this.callTool(s, 'cookies_export', {});
+        try {
+            if (r.error) throw new Error(r.error);
+            const cookies = JSON.parse(r.text).map((c) => ({ ...c, sameSite: SAME_SITE[c.sameSite] ?? c.sameSite }));
+            s.jarBase = await this.cookieJars.checkpoint(s.sessionId, s.jarBase, cookies);
+            this.counts.cookieSaves++;
+        } catch (e) {
+            this.counts.cookieSaveErrors++;
+            console.error(`mcp ${s.id}: could not save cookies to session ${s.sessionId}: ${e.message}`);
+        }
+    }
+
+    // One of the gateway's own engine tool calls. -> { text } or { error }.
+    async callTool(s, name, args) {
+        const r = await this.forward(s, JSON.stringify({ jsonrpc: '2.0', id: `gw-${name}`, method: 'tools/call', params: { name, arguments: args } }));
+        if (!r.ok) return { error: r.message };
+        try {
+            const p = JSON.parse(r.body);
+            if (p.error) return { error: p.error.message };
+            const text = (p.result?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+            return p.result?.isError ? { error: text } : { text };
+        } catch {
+            return { error: `HTTP ${r.status} from the engine` };
+        }
+    }
+
     // -> { ok: true, status, body } or { ok: false, status, code, message }.
     async forward(s, body) {
         const headers = { 'content-type': 'application/json', accept: 'application/json', 'mcp-session-id': s.id };
@@ -395,13 +481,14 @@ export class McpGateway {
             ms: f.ms,
             mcp_session: s.id,
             mcp_process: s.backend.name,
+            session_id: s.sessionId,
             args: f.args ?? null,
             resultBytes: f.resultBytes ?? null,
         });
     }
 
     recordEvent(s, tool, code, message) {
-        this.record({ kind: 'mcp', tool, url: s.url, finalUrl: s.url, status: 200, code, message, ms: this.now() - s.created, mcp_session: s.id, mcp_process: s.backend.name, args: null, resultBytes: null });
+        this.record({ kind: 'mcp', tool, url: s.url, finalUrl: s.url, status: 200, code, message, ms: this.now() - s.created, mcp_session: s.id, mcp_process: s.backend.name, session_id: s.sessionId, args: null, resultBytes: null });
     }
 }
 

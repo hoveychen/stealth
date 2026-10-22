@@ -141,6 +141,23 @@ export class SessionStore {
         if (this.dir) await this.persist(id);
     }
 
+    // save() for a holder that writes back more than once (an MCP session
+    // bound to this id): `final` is merged against `base`, and the cookies
+    // it holds now are returned as the base of its next checkpoint. When
+    // nothing changed since `base`, the jar is only touched.
+    async checkpoint(id, base, final) {
+        const epoch = this.bases.get(base) ?? (this.epochs.get(id) ?? 0);
+        const next = final.map(storable);
+        const now = new Map(next.map((c) => [key(c), c]));
+        if (now.size === base.length && base.every((c) => now.has(key(c)) && same(now.get(key(c)), c))) {
+            if (epoch === (this.epochs.get(id) ?? 0) && this.jars.has(id)) this.touch(id, this.jars.get(id));
+            return base;
+        }
+        await this.save(id, base, final);
+        this.bases.set(next, epoch);
+        return next;
+    }
+
     // Writes are chained per session so an older snapshot never lands after a
     // newer one; each write takes the jar as it is when its turn comes, and a
     // jar dropped in the meantime is not written back.

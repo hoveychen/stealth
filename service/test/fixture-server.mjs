@@ -74,6 +74,23 @@ export function startFixtureServer(host = '127.0.0.1', urlHost = host) {
                 for (const name of url.searchParams.getAll('del')) cookies.push(`${name}=; Path=/; Max-Age=0`);
                 return html(200, `<!doctype html><html><head><title>set</title></head><body>set</body></html>`, { 'set-cookie': cookies });
             }
+            case '/login-form':
+                return html(200, `<!doctype html><html><head><title>login</title></head><body><form method="post" action="/login"><input id="user" name="user"><button id="go" type="submit">Log in</button></form></body></html>`);
+            case '/login': {
+                // ?user= (GET) or a posted form: an HttpOnly session cookie,
+                // the way a site's login sets it.
+                const done = (user) => html(200, `<!doctype html><html><head><title>logged in</title></head><body>welcome ${user}</body></html>`, { 'set-cookie': `auth=user-${user}; Path=/; HttpOnly; Max-Age=3600` });
+                if (req.method !== 'POST') return done(url.searchParams.get('user') ?? 'anon');
+                const chunks = [];
+                req.on('data', (c) => chunks.push(c));
+                req.on('end', () => done(new URLSearchParams(Buffer.concat(chunks).toString()).get('user') ?? 'anon'));
+                return;
+            }
+            case '/account': {
+                // Who the auth cookie says this is, as the title.
+                const auth = /(?:^|;\s*)auth=user-([^;]*)/.exec(req.headers.cookie ?? '');
+                return html(200, `<!doctype html><html><head><title>account: ${auth ? auth[1] : 'guest'}</title></head><body>${auth ? `signed in as ${auth[1]}` : 'not signed in'}</body></html>`);
+            }
             case '/echo-cookies':
                 // The Cookie header this request arrived with, as the title.
                 return html(200, `<!doctype html><html><head><title>${req.headers.cookie ?? ''}</title></head><body>cookies</body></html>`);

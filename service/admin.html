@@ -224,9 +224,9 @@ async function refreshStatus() {
   if (m?.enabled) {
     const ms = await getJson('/mcp/sessions').then((r) => r.body.sessions ?? [], () => []);
     $('#st-mcp-sessions').replaceChildren(ms.length ? el('table', {},
-      el('thead', {}, el('tr', {}, ['会话', '进程', '开始', '最后调用', '调用数', '当前页面'].map((t, i) => el('th', { class: i === 4 ? 'num' : null }, t)))),
+      el('thead', {}, el('tr', {}, ['会话', 'session_id', '进程', '开始', '最后调用', '调用数', '当前页面'].map((t, i) => el('th', { class: i === 5 ? 'num' : null }, t)))),
       el('tbody', {}, ms.map((x) => el('tr', { class: 'hit', title: '看这个会话的历史', onclick: () => { $('#hf').reset(); $('#hf').session_id.value = x.id; location.hash = 'history'; } },
-        el('td', { class: 'mono' }, x.id), el('td', { class: 'mono' }, x.process), el('td', { class: 'mono' }, fmtTime(x.created)),
+        el('td', { class: 'mono' }, x.id), el('td', { class: 'mono', title: 'cookie 与这个 /crawl session 互通' }, x.session_id ?? ''), el('td', { class: 'mono' }, x.process), el('td', { class: 'mono' }, fmtTime(x.created)),
         el('td', { class: 'mono' }, `${fmtTime(x.lastUsed)}${x.busy ? '（调用中）' : ''}`), el('td', { class: 'num' }, x.calls), el('td', { class: 'mono url' }, x.url ?? ''))))) :
       el('p', { class: 'muted' }, '当前没有 MCP 会话。'));
   } else {
@@ -292,7 +292,7 @@ async function loadHistory() {
       el('td', { class: 'num' }, e.pageStatus ?? ''),
       el('td', { class: 'num', title: e.queueMs != null ? `排队 ${e.queueMs} ms` : '' }, e.ms),
       el('td', { class: 'mono url' }, e.proxy ?? (e.proxyMode === 'pool' ? 'pool' : ''), e.proxiesTried > 1 ? el('div', { class: 'muted' }, `试了 ${e.proxiesTried} 个`) : null),
-      el('td', { class: 'mono' }, e.session_id ?? e.mcp_session ?? ''),
+      el('td', { class: 'mono' }, e.kind === 'mcp' ? [e.mcp_session ?? '', e.session_id ? el('div', { class: 'muted', title: '绑定的 session_id' }, `↔ ${e.session_id}`) : null] : (e.session_id ?? '')),
       el('td', { class: 'mono' }, e.kind === 'mcp' ? `mcp ${e.tool ?? ''}${e.args?.selector ? ` ${e.args.selector}` : ''}` : (e.formats ?? []).join(' ')),
       el('td', { class: 'num' }, sizes.map((s) => el('div', {}, s))),
     );
