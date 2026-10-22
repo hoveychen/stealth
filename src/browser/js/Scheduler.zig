@@ -29,7 +29,13 @@ const SEQ_MASK = (@as(u64, 1) << SEQ_BITS) - 1;
 
 const Scheduler = @This();
 
-_sequence: u64,
+// One counter for every scheduler, so a key orders tasks across realms and
+// not just within one. A browser runs the frames of a page on one event loop:
+// a task the frame queued goes before a timer its parent set afterwards,
+// however long the parent then kept the thread. Env.runMacrotasks reads each
+// realm's next key to decide which realm goes first.
+var sequence: std.atomic.Value(u64) = .init(0);
+
 allocator: Allocator,
 
 // Tasks queued to be run at a specific time
@@ -53,7 +59,6 @@ blocking: u32,
 
 pub fn init(allocator: Allocator) Scheduler {
     return .{
-        ._sequence = 0,
         .allocator = allocator,
         .generation = 0,
         .blocking = 0,
@@ -118,31 +123,7 @@ pub fn run(self: *Scheduler) !void {
     const start = lp.datetime.milliTimestamp(.boot);
     var now = start;
 
-    while (self.popReady(now)) |task_| {
-        var task = task_;
-        if (comptime lp.IS_DEBUG) {
-            log.debug(.scheduler, "scheduler.runTask", .{ .name = task.name });
-        }
-
-        self.generation +%= 1;
-
-        const repeat_in_ms = task.callback(task.ctx) catch |err| {
-            log.warn(.scheduler, "task.callback", .{ .name = task.name, .err = err });
-            continue;
-        };
-
-        if (repeat_in_ms) |ms| {
-            // Task cannot be repeated immediately, and they should know that
-            if (comptime lp.IS_DEBUG) {
-                std.debug.assert(ms != 0);
-            }
-            // A task that endlessly reschedules itself would keep the page
-            // alive forever, so repeats never block completion.
-            task.blocks_done = false;
-            task.key = self.nextKey(now + ms);
-            try self.timed.push(self.allocator, task);
-        }
-
+    while (try self.runNext(now)) {
         now = lp.datetime.milliTimestamp(.boot);
         if (now - start > 500) {
             return;
@@ -150,9 +131,33 @@ pub fn run(self: *Scheduler) !void {
     }
 }
 
-pub fn hasReadyTasks(self: *Scheduler) bool {
-    const ms = self.msToNext() orelse return false;
-    return ms == 0;
+// Runs the one task run() would start with, if one is due at `now`, and says
+// whether it did.
+pub fn runNext(self: *Scheduler, now: u64) !bool {
+    var task = self.popReady(now) orelse return false;
+    if (comptime lp.IS_DEBUG) {
+        log.debug(.scheduler, "scheduler.runTask", .{ .name = task.name });
+    }
+
+    self.generation +%= 1;
+
+    const repeat_in_ms = task.callback(task.ctx) catch |err| {
+        log.warn(.scheduler, "task.callback", .{ .name = task.name, .err = err });
+        return true;
+    };
+
+    if (repeat_in_ms) |ms| {
+        // Task cannot be repeated immediately, and they should know that
+        if (comptime lp.IS_DEBUG) {
+            std.debug.assert(ms != 0);
+        }
+        // A task that endlessly reschedules itself would keep the page
+        // alive forever, so repeats never block completion.
+        task.blocks_done = false;
+        task.key = self.nextKey(now + ms);
+        try self.timed.push(self.allocator, task);
+    }
+    return true;
 }
 
 pub fn blocksCompletion(self: *const Scheduler) bool {
@@ -169,12 +174,27 @@ pub fn msToNext(self: *Scheduler) ?u64 {
     return if (run_at <= now) 0 else run_at - now;
 }
 
-fn nextKey(self: *Scheduler, run_at: u64) u64 {
+// The key of the task run() would start with, or null when nothing is due. A
+// front task is a yield, and goes ahead of whatever another realm has queued.
+pub fn nextReadyKey(self: *Scheduler) ?u64 {
+    if (self.front.peek() != null) {
+        return 0;
+    }
+    var key: ?u64 = if (self.immediate.peek()) |task| task.key else null;
+    if (self.timed.peek()) |task| {
+        if (task.runAt() <= lp.datetime.milliTimestamp(.boot) and (key == null or task.key < key.?)) {
+            key = task.key;
+        }
+    }
+    return key;
+}
+
+fn nextKey(_: *Scheduler, run_at: u64) u64 {
     if (comptime lp.IS_DEBUG) {
         std.debug.assert(run_at >> (64 - SEQ_BITS) == 0);
     }
-    self._sequence +%= 1;
-    return (run_at << SEQ_BITS) | (self._sequence & SEQ_MASK);
+    const seq = sequence.fetchAdd(1, .monotonic) +% 1;
+    return (run_at << SEQ_BITS) | (seq & SEQ_MASK);
 }
 
 fn popReady(self: *Scheduler, now: u64) ?Task {
@@ -327,6 +347,24 @@ test "Scheduler: due timed tasks run before newer immediates" {
     try s.add(&t2, TestTask.run, 0, .{});
     try s.run();
     try testing.expectEqualSlices(u8, &.{ 1, 2 }, ran.items);
+}
+
+test "Scheduler: keys order tasks across schedulers" {
+    var a = Scheduler.init(testing.arena_allocator);
+    var b = Scheduler.init(testing.arena_allocator);
+    var ran: std.ArrayList(u8) = .empty;
+    var t1: TestTask = .{ .id = 1, .ran = &ran };
+    var t2: TestTask = .{ .id = 2, .ran = &ran };
+    var t3: TestTask = .{ .id = 3, .ran = &ran };
+
+    try testing.expectEqual(null, a.nextReadyKey());
+    try b.add(&t1, TestTask.run, 0, .{});
+    try a.add(&t2, TestTask.run, 0, .{});
+    try testing.expect(b.nextReadyKey().? < a.nextReadyKey().?);
+
+    // a yield beats anything queued anywhere
+    try a.add(&t3, TestTask.run, 0, .{ .front = true });
+    try testing.expectEqual(0, a.nextReadyKey().?);
 }
 
 test "Scheduler: blocksCompletion" {
