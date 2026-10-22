@@ -30,7 +30,7 @@ or `docker compose -f service/compose.yaml up -d --build` (`CRAWL_PORT` picks
 the host port; see [Scaling](#scaling) for the multi-replica variant). The compose file puts the container on Docker's default
 `bridge` network (`network_mode: bridge`) rather than a network of its own, so
 it also starts on a daemon whose address pools are used up, and mounts the
-`crawl-data` volume on `/data` for session cookies.
+`crawl-data` volume on `/data` for session cookies and the request history.
 
 The build compiles the engine (ReleaseFast) and needs ~12 GB of RAM; a cold
 build downloads Rust, Zig, a prebuilt V8 (~130 MB from GitHub) and the
@@ -57,6 +57,7 @@ Image environment, on top of the service variables above:
 | `LP_RESTART_DELAY`             | `1`                | seconds before restarting a dead engine |
 | `LP_MALLOC`                    | `jemalloc`         | the engine's malloc, `jemalloc` or `glibc` (see [Memory](#memory)); the Node service always uses glibc. With jemalloc, `MALLOC_CONF` defaults to `background_thread:true` |
 | `SESSION_DIR`                  | `/data/sessions`   | where session cookie jars are kept; mount a volume on `/data` |
+| `HISTORY_DIR`                  | `/data/history`    | where the request history is kept (see [History](#request-history)) |
 | `LP_HOST` / `LP_PORT`          | `127.0.0.1` / `9222` | where the engine listens inside the container |
 | `LIGHTPANDA_DISABLE_TELEMETRY` | `true`             | telemetry is off whenever this variable exists, whatever its value; the engine logs `telemetry status disabled=true` at startup |
 
@@ -86,8 +87,12 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `SESSION_DIR`        | (none: memory only)     | directory for session cookie jars, one `<session_id>.json` each |
 | `SESSION_TTL_MS`     | `604800000` (7 days)    | a session not used for this long is dropped, file included; `0` keeps sessions forever |
 | `SESSION_SWEEP_MS`   | `600000`                | how often expired sessions are cleaned up (also once at startup) |
+| `HISTORY_DIR`        | (none: no history)      | directory for the request history, one file per UTC day and replica (see [Request history](#request-history)) |
+| `HISTORY_RETENTION_DAYS` | `7`                 | days of history kept, today included; older files are deleted at startup and hourly. `0` keeps everything |
+| `HISTORY_REPLICA`    | the hostname (in a container: its id) | this process's part of the history file names, so replicas sharing a volume never write the same file |
 
-There is no authentication.
+There is no authentication; the service, its admin page included, is meant
+for an internal network.
 
 ## `POST /crawl`
 
@@ -317,6 +322,98 @@ last wins.
 
 Drops a session's cookie jar; see [Sessions](#sessions).
 
+## `GET /sessions`
+
+The sessions there are, most recently used first (`?limit=`, default 200):
+
+```json
+{ "total": 2, "sessions": [
+  { "id": "shop-login-1", "lastUsed": "2026-10-22T00:19:17.618Z", "expiresAt": "2026-10-29T00:19:17.618Z", "cookies": 4, "domains": ["shop.example"], "loaded": true }
+] }
+```
+
+Cookie values are never listed. `expiresAt` is `null` with `SESSION_TTL_MS=0`;
+`loaded` says whether the jar is held in memory (otherwise it is only on disk).
+
+## Request history
+
+With `HISTORY_DIR` set (the image sets `/data/history`), every `POST /crawl`
+— finished, failed, timed out, or rejected with 400 — adds one JSON line to
+`HISTORY_DIR/crawl-YYYY-MM-DD.<replica>.jsonl` (the UTC date). The same line
+goes to stdout. It records what happened, never the page itself:
+
+```json
+{"time":"2026-10-22T00:18:56.217Z","url":"http://172.17.0.1:41879/slow-load","finalUrl":"http://172.17.0.1:41879/slow-load","status":504,"code":"timeout","message":"request exceeded its 1500ms timeout (...)","pageStatus":200,"ms":1504,"queueMs":0,"proxyMode":"direct","proxy":null,"proxiesTried":0,"session_id":null,"formats":["html","markdown","meta"],"htmlBytes":null,"markdownBytes":null,"partial":{"source":"dom","htmlBytes":147,"markdownBytes":36},"replica":"6f0888d64ad7"}
+```
+
+| field | meaning |
+|---|---|
+| `time` | when the response went out |
+| `url`, `finalUrl` | the requested URL and the main document's final URL (after redirects; `location.href` when `meta` was asked for). Passwords in URLs are replaced by `***` |
+| `status`, `code`, `message` | this service's HTTP status, the error `code` (`null` on success) and its message |
+| `pageStatus` | the main document's HTTP status, when it arrived (also after a timeout) |
+| `ms`, `queueMs` | total time, and time spent waiting for a slot |
+| `proxyMode`, `proxy`, `proxiesTried` | `direct` / `pool` / `url`; the last proxy used, password replaced by `***`; how many pool proxies the request tried |
+| `session_id`, `formats` | as requested |
+| `htmlBytes`, `markdownBytes` | UTF-8 size of the returned `html` / `markdown`, `null` when not returned |
+| `partial` | after a timeout with `partial`: its `source` and the sizes of what it carried |
+| `replica` | which process wrote it |
+
+What it costs, through the service on small pages (`list.html`, the A/B
+runs of `bench/profile/ab.sh` against the image without history, same
+engine binary, 3 runs each): writing the files costs nothing measurable
+(16 slots: 723 / 716 / 750 pages a second with history, 718 / 726 / 731 with
+`HISTORY_DIR` unset); the fuller line itself (sizes, final URL, proxy) costs
+3–4% at 16 slots, where the one Node core is the limit (726 against 760),
+and up to 2% at 64 (1,078 against 1,103), after the response is encoded
+once instead of measured and then encoded.
+
+Lines are queued and appended once a second, so writing never holds up a
+response; a failed write is logged on stderr and counted in `/health`
+(`history.writeErrors`), and the request is not affected. Replicas that share
+a volume (compose's `crawl-multi`) each write their own files and every
+replica's `GET /history` reads all of them. Files of days older than
+`HISTORY_RETENTION_DAYS` are deleted at startup and every hour.
+
+A line is about 0.4 KB (376 bytes on average over 116,000 lines of a
+small-page benchmark; longer URLs and error messages make it longer), so the
+disk it takes follows the request rate: 10 requests a second is ~0.3 GB a
+day, a container kept at its small-page ceiling (~700 a second with 16
+slots) ~23 GB a day.
+
+### `GET /history`
+
+```
+GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00:00:00Z&limit=50
+```
+
+| parameter | meaning |
+|---|---|
+| `url` | substring of `url` or `finalUrl`, case-insensitive |
+| `status` | HTTP statuses of this service, comma-separated (`200,504`) |
+| `code` | error codes, comma-separated; `ok` matches successes |
+| `session_id` | exact |
+| `since`, `until` | ISO time or milliseconds since the epoch |
+| `days` | without `since`: how many days back to read, today included (default 3) |
+| `limit` | 1–1000, default 100 |
+
+Newest first: `{ "enabled": true, "entries": [...], "scanned": { "files", "lines", "unreadable" }, "from": "..." }`.
+The files of the days covered are read line by line, newest day first, until
+`limit` matches are found; a query over days of a busy container takes a
+while (it reads every line of those days), so narrow it with `since` / `days`.
+Without `HISTORY_DIR` the answer is `{ "enabled": false, "entries": [] }`.
+
+## Admin page
+
+`GET /` serves a page (Chinese; one static file, no external resources) with:
+
+- the live status, from `/health` every 3 s: slots busy / idle / queued,
+  reconnects, each pool proxy and whether it is ejected, sessions, history,
+- the request history with the filters above; a row opens the full line,
+- a form to try a crawl (formats, `js`, proxy, `session_id`, `timeout`,
+  `waitUntil`) showing the result and its `meta`,
+- the session list, with delete.
+
 ## `GET /health`
 
 ```json
@@ -330,13 +427,17 @@ Drops a session's cookie jar; see [Sessions](#sessions).
       { "proxy": "socks5://10.0.0.2:1080", "state": "ejected", "retryInMs": 42000, "uses": 3, "ok": 0, "failed": 3, "consecutiveFails": 3, "lastError": "proxy socks5://10.0.0.2:1080 failed: CouldntConnect (https://...)" }
     ]
   },
-  "sessions": { "persisted": true, "dir": "/data/sessions", "ttlMs": 604800000, "stored": 30, "loaded": 12, "saves": 340, "writeErrors": 0, "expired": 4, "deleted": 1, "lastSweep": "2026-10-21T11:48:28.299Z" }
+  "sessions": { "persisted": true, "dir": "/data/sessions", "ttlMs": 604800000, "stored": 30, "loaded": 12, "saves": 340, "writeErrors": 0, "expired": 4, "deleted": 1, "lastSweep": "2026-10-21T11:48:28.299Z" },
+  "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "2026-10-22T00:16:11.890Z" }
 }
 ```
 
 `proxies` is `null` when no pool is configured. In `sessions`, `stored` is the
 number of sessions there are (on disk, or in memory without `SESSION_DIR`),
 `loaded` the ones held in memory, `expired` / `deleted` count since startup.
+In `history`, `written` counts lines since startup, `queued` the ones not yet
+on disk, `dropped` lines lost because the disk stayed unwritable (the queue
+is capped at 100,000), `removedFiles` files deleted for age.
 
 ## Scaling
 
@@ -384,6 +485,9 @@ HTTP load balancer in front of them:
 ```bash
 CRAWL_REPLICAS=4 CRAWL_PORTS=8081-8084 docker compose -f service/compose.yaml --profile multi up -d crawl-multi
 ```
+
+The replicas share the `crawl-data` volume; each writes its own history files
+(named after its container id), and any replica's `GET /history` shows them all.
 
 Sessions are per process: a replica keeps the jars it has loaded in memory, so
 send all requests of one `session_id` to the same replica (hash on it in the
@@ -493,7 +597,9 @@ and their credentials, the pool's rotation, retry on the next proxy and
 ejection, a dead site behind a good proxy (not charged to the proxy), session
 cookies (across requests, concurrent requests, a service restart, `DELETE`,
 and expiry after `SESSION_TTL_MS`), partial results after a timeout, killing
-and restarting the engine, and pages stuck in script. Against the container it
+and restarting the engine, pages stuck in script, the request history (fields,
+redacted proxies, filters, retention at startup, surviving a restart), the
+admin page (served, no external resources) and `GET /sessions`. Against the container it
 also checks the engine's command line for `--http-max-concurrent`.
 Use a ReleaseFast engine build; the Debug build in `zig-out` is about 3.5×
 slower.
@@ -511,5 +617,6 @@ removes the container and volume. The header of `run.mjs` lists what it needs
 when you set it up by hand.
 
 `node service/test/unit.mjs` checks the pool, the dead-proxy / dead-site
-diagnosis (against local test proxies) and the session store (cookie merge,
-TTL, delete) without an engine.
+diagnosis (against local test proxies), the session store (cookie merge,
+TTL, delete) and the history (daily files per replica, failed writes,
+retention, query filters) without an engine.

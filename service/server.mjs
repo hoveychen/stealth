@@ -49,8 +49,8 @@ const config = {
     historyDir: env('HISTORY_DIR', '') || null,
     // Days of request history kept, today included (0: keep everything). A
     // week covers "what happened yesterday / last week" and bounds the disk:
-    // a line is ~0.5 KB, so a container kept busy around the clock writes a
-    // few tens of GB a day (see README), and a week of that is already a lot.
+    // a line is ~0.4 KB, so a container kept busy around the clock writes
+    // ~20 GB a day (see README), and a week of that is already a lot.
     historyRetentionDays: nonNegInt('HISTORY_RETENTION_DAYS', 7),
     // Part of the file names, so replicas sharing a volume don't share files.
     // In a container the hostname is the container id.
@@ -119,10 +119,13 @@ const STATUS = {
     timeout: 504,
 };
 
+// Encoded once: Buffer.byteLength and then res.end(text) would go over a
+// large html response twice; on a 34 KB page with a character above U+00FF
+// the second pass is ~25 us, which pays for the history's byte counts.
 function reply(res, status, body) {
-    const text = JSON.stringify(body);
-    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(text) });
-    res.end(text);
+    const buf = Buffer.from(JSON.stringify(body));
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': buf.length });
+    res.end(buf);
 }
 
 function readBody(req) {
@@ -203,8 +206,9 @@ function logCrawl(f) {
         partial: f.partial ?? null,
         replica: history.replica,
     };
-    console.log(JSON.stringify(entry));
-    history.record(entry);
+    const line = JSON.stringify(entry);
+    console.log(line);
+    history.record(entry, line);
 }
 
 function log(fields) {

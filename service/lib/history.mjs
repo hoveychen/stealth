@@ -58,9 +58,10 @@ export class History {
         return path.join(this.dir, `crawl-${day}.${this.replica}.jsonl`);
     }
 
-    record(entry) {
+    // `line`: the entry already serialized, when the caller has it.
+    record(entry, line = null) {
         if (!this.dir) return;
-        this.queue.push([dayOf(Date.parse(entry.time) || this.now()), JSON.stringify(entry)]);
+        this.queue.push([dayOf(Date.parse(entry.time) || this.now()), line ?? JSON.stringify(entry)]);
         if (this.queue.length > MAX_QUEUED) this.dropped += this.queue.splice(0, this.queue.length - MAX_QUEUED).length;
         if (this.queue.length >= FLUSH_LINES) this.flush();
         else if (!this.timer) {
