@@ -641,7 +641,20 @@ warning at startup when the sum is above 9.5 s. Past the grace Docker sends
 SIGKILL, and whatever is still in flight is cut off without an answer or a
 history line.
 
-Measured on bt (`lp-crawl:drain`, `service/test/docker-test.sh`): DRAIN_RESULTS
+Measured on bt (`lp-crawl:drain`, `service/test/docker-test.sh`): with POOL_SIZE 3, three crawls in flight
+and one queued when `docker stop` started: the queued one got 503
+`shutting_down` 135 ms later; a 3 s page finished 2.5 s into the stop with
+its full answer (200); a new request and `/health` 0.7 s in got 503; two
+pages that never finish loading were abandoned at 5.14 s with their partial
+result (one with the DOM it had, 147 bytes of html); an MCP call in flight
+finished at 2.0 s and its session's cookies were written back; the engine
+exited on SIGTERM in 52 ms; `docker stop` took 5.57 s, exit code 0. With
+nothing in flight it took 0.6 s. With `SHUTDOWN_DRAIN_MS=12000` and
+`docker stop -t 15`, a 10 s page finished (200 at 10.1 s) and the stop took
+10.2 s, exit code 0. With the previous image (`lp-crawl:mcpsync`), the same
+3 s crawl and a never-finishing one sent 0.5 s before `docker stop` got no
+answer at all: their connections closed ~0.08 s after the signal, and the
+container was gone 0.59 s after it.
 
 Why the engine has its own process group: tini (PID 1, `-g`) forwards
 `docker stop`'s SIGTERM to its child's whole process group. Before, the
