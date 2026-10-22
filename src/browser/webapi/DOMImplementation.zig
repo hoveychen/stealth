@@ -51,6 +51,7 @@ pub fn createHTMLDocument(_: *const DOMImplementation, title: ?js.NullableString
     document._ready_state = .complete;
     document._url = "about:blank";
     document._charset = "UTF-8";
+    document._no_quirks_mode = true;
 
     {
         const doctype = try frame._factory.node(DocumentType{

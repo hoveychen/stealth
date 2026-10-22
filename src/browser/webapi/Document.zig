@@ -108,6 +108,12 @@ _implementation: ?*DOMImplementation = null,
 _template_contents_owner: ?*Document = null,
 // Set on the inert documents themselves: their templates use them in turn.
 _is_template_contents_owner: bool = false,
+// A document whose mode was fixed at no-quirks when it was made, rather than
+// left to the parser: createHTMLDocument's and the inert template-contents
+// owner. Chrome keeps it there whatever happens to the doctype -- an inert
+// document, which never has one, and a createHTMLDocument document with its
+// doctype removed both read "CSS1Compat" (probes/expr-frameless-doc-flags.js).
+_no_quirks_mode: bool = false,
 _fonts: ?*FontFaceSet = null,
 _write_insertion_point: ?*Node = null,
 _script_created_parser: ?Parser.Streaming = null,
@@ -201,7 +207,7 @@ pub fn setLocation(self: *Document, url: [:0]const u8) !void {
 
 // Approximation of quirks mode: an HTML document without a doctype is in quirks mode.
 pub fn isQuirksMode(self: *const Document) bool {
-    if (self._type != .html) {
+    if (self._type != .html or self._no_quirks_mode) {
         return false;
     }
     var it = self._proto.childrenIterator();
@@ -283,6 +289,7 @@ pub fn templateContentsOwner(self: *Document, frame: *Frame) !*Document {
     owner._url = "about:blank";
     owner._charset = "UTF-8";
     owner._is_template_contents_owner = true;
+    owner._no_quirks_mode = true;
     self._template_contents_owner = owner;
     return owner;
 }
@@ -1915,8 +1922,11 @@ pub fn execCommand(self: *const Document, name: []const u8) bool {
 //
 // Except in a frame the fullscreen feature did not reach: Chrome reports false
 // there (measured, Chrome 153 cross-origin iframe without allowfullscreen).
-pub fn getFullscreenEnabled(self: *const Document, frame: *Frame) bool {
-    const doc_frame = self._frame orelse frame;
+// And in a document with no browsing context at all -- createHTMLDocument,
+// createDocument, DOMParser, `new Document()`, a template's inert document --
+// both flags are false (probes/expr-frameless-doc-flags.js).
+pub fn getFullscreenEnabled(self: *const Document) bool {
+    const doc_frame = self._frame orelse return false;
     return permissions_policy.allows(doc_frame, "fullscreen");
 }
 
@@ -1937,8 +1947,8 @@ pub fn getFullscreenElement(_: *const Document) ?*Element {
 /// src/browser/tests/descriptor_kind.html).
 pub fn setLeniently(_: *Document, _: js.Value) void {}
 
-pub fn getPictureInPictureEnabled(_: *const Document) bool {
-    return true;
+pub fn getPictureInPictureEnabled(self: *const Document) bool {
+    return self._frame != null;
 }
 
 pub fn exitPointerLock(_: *const Document) void {}

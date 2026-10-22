@@ -262,3 +262,53 @@
   testing.expectEqual(true, img.complete);
 }
 </script>
+
+<script id="img-in-frameless-documents-is-not-fetched" type=module>
+  // An image in a document with no browsing context -- createHTMLDocument,
+  // DOMParser, a template's inert document -- is not fetched, connected or
+  // not, and reports neither load nor error. Adopting it into the page is
+  // what starts its request (headed Chrome, probes/expr-frameless-img.js).
+  const state = await testing.async();
+  const events = [];
+  const watch = (img, name) => {
+    img.addEventListener("load", () => events.push(name + ":load"));
+    img.addEventListener("error", () => events.push(name + ":error"));
+    return img;
+  };
+  const hd = document.implementation.createHTMLDocument("");
+  const created = watch(hd.createElement("img"), "created");
+  created.src = "/images/404.png";
+  const connected = watch(hd.createElement("img"), "connected");
+  hd.body.appendChild(connected);
+  connected.src = "/images/404.png";
+  const inert = document.createElement("template").content.ownerDocument;
+  watch(inert.createElement("img"), "inert").src = "/images/404.png";
+  const dp = new DOMParser().parseFromString("", "text/html");
+  watch(dp.createElement("img"), "domparser").src = "/images/404.png";
+  const adopted = watch(hd.createElement("img"), "adopted");
+  adopted.src = "/images/404.png";
+
+  // A page image's error is the barrier: the others were asked for first.
+  await new Promise(resolve => {
+    const barrier = document.createElement("img");
+    barrier.addEventListener("error", resolve);
+    barrier.src = "/images/404.png";
+  });
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const before = events.join(",");
+
+  document.adoptNode(adopted);
+  await new Promise(resolve => {
+    adopted.addEventListener("error", resolve);
+    setTimeout(resolve, 1000);
+  });
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual("", before);
+    testing.expectEqual("adopted:error", events.join(","));
+    testing.expectEqual(true, created.complete);
+    testing.expectEqual("", created.currentSrc);
+    testing.expectEqual(true, adopted.currentSrc.endsWith("/images/404.png"));
+  });
+</script>
