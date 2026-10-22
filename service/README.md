@@ -97,6 +97,7 @@ service (`docker run --rm lp-crawl lightpanda version`).
 | `MCP_MAX_SESSIONS`   | `32`                    | MCP sessions at once; `initialize` beyond it is a 503 |
 | `MCP_SESSION_IDLE_MS`| `1800000` (30 min)      | an MCP session with no call for this long is closed; `0` never |
 | `MCP_CALL_TIMEOUT_MS`| `120000`                | longest wait for the engine's answer to one MCP request (then 504) |
+| `SHUTDOWN_SAVE_MS`   | `5000`                  | on SIGTERM/SIGINT, longest wait for the open MCP sessions bound to a `session_id` to write their cookies back |
 | `MCP_PROXY`          |                         | one proxy URL for all MCP browsing (the engine's `--http-proxy`) |
 | `MCP_BASE_PORT`      | `9300`                  | first loopback port of the MCP processes (one each, consecutive) |
 | `LP_BIN`             | `/bin/lightpanda`       | the engine binary the MCP processes run |
@@ -399,17 +400,46 @@ How it is put together (`lib/mcp.mjs`):
   on the other (put the query in the client's URL:
   `claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id=shop-login-1'`).
   The jar's cookies, HttpOnly ones included, go into the new browser through
-  the engine's `cookies_import` MCP tool. The browser's cookies
-  (`cookies_export`) are merged back into the jar by the rules above, against
-  what this MCP session last wrote: after every tool call, before its answer
-  goes out — so a `/crawl` sent after the agent saw its login click succeed
-  already has the login — and once more when the session ends (`DELETE` or
-  idle), for what page scripts set after the last call. An unchanged jar is
-  not rewritten. Measured on bt with 21 cookies in the jar, the write-back
-  added 0.1–0.9 ms to the median call (200 calls each of `getUrl` and a
-  small-page `goto`). An engine process that dies loses only what changed since
-  the session's last call. The binding is fixed at `initialize`; cookies a
-  `/crawl` writes to the jar later do not reach a browser already open.
+  the engine's `cookies_import` MCP tool. From then on the two are kept in
+  sync both ways, the jar being the reference and the browser its copy:
+  - Out: the browser's cookies (`cookies_export`) are merged back into the
+    jar by the rules above, against what this MCP session last synced: after
+    every tool call, before its answer goes out — so a `/crawl` sent after the
+    agent saw its login click succeed already has the login — and once more
+    when the session ends (`DELETE`, idle, or the service stopping), for what
+    page scripts set after the last call. An unchanged jar is not rewritten.
+  - In: before every tool call, if anyone else (a `/crawl`, or another MCP
+    session bound to the same `session_id`) changed the jar since this
+    session last synced, the browser is brought to the jar: cookies added or
+    changed there are imported, and cookies the jar no longer has are
+    removed from the browser (imported already expired). A login made with
+    `/crawl` while the agent works is there at its next step, and so is a
+    logout. Whether the jar changed is one in-memory version comparison: with
+    no change there is no extra engine call.
+  - Conflicts: when both sides changed the same cookie (name, domain, path),
+    the change that reached the jar last wins, as between two crawls. The
+    browser's changes reach the jar at the end of each call, and changes a
+    page script made between calls at the start of the next one (the pull
+    writes them out first) — so a page script and a `/crawl` changing the same
+    cookie after the session's last call is won by the page script.
+  Measured on bt with 21 cookies in the jar (median of 200 calls,
+  two rounds): with the jar unchanged a call costs what it did with
+  write-back only (`getUrl` 1.62/2.55 → 1.67/2.24 ms, small-page `goto`
+  9.05/12.30 → 10.17/9.26 ms, within the machine's noise); with a `/crawl`
+  changing one cookie before every call, the pull adds 1.1–1.9 ms to
+  `getUrl` and 2.1–2.2 ms to `goto`. An engine process that dies loses only what changed since
+  the session's last call. The binding is fixed at `initialize`.
+- On SIGTERM/SIGINT (`docker stop`) the service refuses new `/mcp`
+  requests (503), lets every bound session finish its call in flight, writes
+  its cookies back one last time and persists them, then exits — at most
+  `SHUTDOWN_SAVE_MS` (5 s) for that plus up to 2 s for the history, inside
+  `docker stop`'s default 10 s. It logs `mcp cookies saved on shutdown`
+  (sessions, saved, timedOut, ms). The MCP engine processes run in a process
+  group of their own so that the signal tini forwards to the service's group
+  does not end them before that write-back.
+  Measured on bt: a cookie a page script set after the last call was in the
+  jar after `docker stop` and a new container (stop took ~0.6 s, the
+  write-back 5–6 ms, exit code 0); with the previous image it was lost.
   History lines of a bound session carry its `session_id`, so
   `GET /history?session_id=<id>` lists the jar's crawls and MCP calls
   together. Without `session_id` an MCP session starts from no cookies and
