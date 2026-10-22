@@ -1032,7 +1032,10 @@ pub const Script = struct {
 
         defer {
             local.runMacrotasks(); // also runs microtasks
-            _ = frame.js.scheduler.run() catch |err| {
+            // Only the frame's own tasks, and only those queued before any
+            // other realm's: a timer this script set must not jump an
+            // iframe's task queued ahead of it (see Env.runMacrotasks).
+            frame.js.env.runTurn(frame.js, lp.datetime.milliTimestamp(.boot)) catch |err| {
                 log.err(.frame, "scheduler", .{ .err = err });
             };
         }

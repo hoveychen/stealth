@@ -74,6 +74,35 @@
   }
 </script>
 
+<script id=runs_before_a_later_timer type=module>
+  {
+    const state = await testing.async();
+
+    // The frame's task was queued when the iframe went in, so it goes before a
+    // timer the parent sets afterwards -- even once the parent has held the
+    // thread past that timer's due time. Chrome, every run of
+    // probes/expr-jsurl-iframe-order.js: the frame first.
+    const order = [];
+    window.__jsurl_order = order;
+    const f = document.createElement('iframe');
+    f.src = "javascript:parent.__jsurl_order.push('frame')";
+    document.body.appendChild(f);
+
+    setTimeout(() => {
+      order.push('timer');
+      state.resolve(order.join(','));
+    }, 0);
+
+    const end = performance.now() + 20;
+    while (performance.now() < end);
+
+    await state.done((got) => {
+      testing.expectEqual('frame,timer', got);
+      f.remove();
+    });
+  }
+</script>
+
 <script id=undefined_leaves_the_document_alone type=module>
   {
     const f = document.createElement('iframe');

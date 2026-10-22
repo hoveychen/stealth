@@ -664,44 +664,83 @@ pub fn runMacrotasks(self: *Env) !void {
         return;
     }
 
-    // Re-read len/items each iteration: scheduler.run() can create a new context
-    // (e.g. an iframe), appending to (and reallocating) the list.
-    var i: usize = 0;
-    while (i < self.contexts.items.len) : (i += 1) {
-        const ctx = self.contexts.items[i];
-        if (comptime lp.IS_TEST == false) {
-            // I hate this comptime check as much as you do. But we have tests
-            // which rely on short execution before shutdown. In real world, it's
-            // underterministic whether a timer will or won't run before the
-            // frame shutsdown. But for tests, we need to run them to their end.
-            if (ctx.scheduler.hasReadyTasks() == false) {
-                continue;
-            }
-        }
+    // The realms share one queue, in effect: whichever has the oldest due task
+    // runs next. A browser runs a page's frames on one event loop, so an
+    // iframe's `javascript:` URL task, queued as the iframe was inserted, runs
+    // before a timer the parent set straight afterwards -- even when the parent
+    // then held the thread past the timer's due time (measured,
+    // probes/expr-jsurl-iframe-order.js). Draining one realm after another in
+    // creation order ran the parent's timer first, and so did draining the
+    // parent's own queue past the script that inserted the iframe.
+    //
+    // The list is rescanned for every pick: a task can create a context (e.g.
+    // an iframe), appending to (and reallocating) the list, or destroy one,
+    // swap-removing it.
+    const start = lp.datetime.milliTimestamp(.boot);
+    while (self.earliestReadyTask(null)) |next| {
+        const ctx = next.ctx;
 
         var hs: js.HandleScope = undefined;
         const entered = ctx.enter(&hs);
         defer entered.exit();
 
         // One turn of the loop for one realm is the closest this engine has to
-        // an animation frame: the queue is drained with nothing scheduled
-        // between the tasks, and whatever they did is over when it empties. A
+        // an animation frame: tasks run back to back with nothing scheduled
+        // between them, and whatever they did is over when the turn ends. A
         // turn that ran long is what Chrome files a `long-animation-frame` for
         // -- see Performance.taskFrameEnded, and the widget realm it exists
         // for.
         switch (ctx.global) {
             .frame => |frame| {
                 const opened = frame.performance().now();
-                try ctx.scheduler.run();
+                try self.runTurn(ctx, start);
                 frame.taskFrameEnded(opened);
             },
             // Chrome files no long animation frames in a worker: the entry
             // describes a rendering frame and a worker has none (measured,
             // `probe-shapes-worker` -- a Chrome worker does not even have the
             // interface object).
-            .worker => try ctx.scheduler.run(),
+            .worker => try self.runTurn(ctx, start),
+        }
+
+        if (lp.datetime.milliTimestamp(.boot) - start > 500) {
+            return;
         }
     }
+}
+
+// Runs `ctx`'s due tasks for as long as each is older than any other realm's,
+// and the pass that began at `start` has time left. `ctx` must be entered.
+pub fn runTurn(self: *Env, ctx: *Context, start: u64) !void {
+    while (ctx.scheduler.nextReadyKey()) |own| {
+        if (self.earliestReadyTask(ctx)) |other| {
+            if (other.key < own) {
+                return;
+            }
+        }
+        const now = lp.datetime.milliTimestamp(.boot);
+        if (now - start > 500) {
+            return;
+        }
+        _ = try ctx.scheduler.runNext(now);
+    }
+}
+
+const ReadyTask = struct { ctx: *Context, key: u64 };
+
+// The realm whose due task was queued first, leaving out `skip`.
+fn earliestReadyTask(self: *Env, skip: ?*Context) ?ReadyTask {
+    var earliest: ?ReadyTask = null;
+    for (self.contexts.items) |ctx| {
+        if (ctx == skip) {
+            continue;
+        }
+        const key = ctx.scheduler.nextReadyKey() orelse continue;
+        if (earliest == null or key < earliest.?.key) {
+            earliest = .{ .ctx = ctx, .key = key };
+        }
+    }
+    return earliest;
 }
 
 pub fn hasMacrotasks(self: *Env) bool {
