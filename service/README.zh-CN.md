@@ -382,6 +382,8 @@ else:
   只给 cookie 数和域名，**不给 cookie 的值**。`loaded` 表示是否在内存里（否则只在磁盘上）。
 - **多副本时 session 是各副本自己的**：副本会把用过的 session 留在内存里，所以负载均衡要按 `session_id`
   做哈希，让同一个 session 总是落到同一个副本。
+- **MCP 会话也能用同一个 session**：连 `/mcp?session_id=<id>`，agent 的浏览器从这个 session 的 cookie 出发，
+  它登录拿到的 cookie 也写回这里，规则同上。见 [与 /crawl 的 session 互通](#与-crawl-的-session-互通session_id)。
 
 ## Agent 接入（MCP）
 
@@ -456,9 +458,41 @@ curl -s -X DELETE localhost:8080/mcp -H "mcp-session-id: $S"
   DELETE**，会话就是靠这个回收的；自己写的客户端用完请 `DELETE`。
 - 某个 MCP 进程挂了会自动重启，它上面的会话丢失（之后返回 404，历史里记一行 `session_lost`），
   其他进程上的会话不受影响。
-- 当前会话列表：`GET /mcp/sessions`（id、所在进程、开始时间、最后调用、调用次数、当前页面），
-  管理页的状态标签里也有。
+- 当前会话列表：`GET /mcp/sessions`（id、绑定的 `session_id`、所在进程、开始时间、最后调用、调用次数、
+  当前页面），管理页的状态标签里也有。
 - 多副本部署时，同一个会话的请求必须落到同一个副本（负载均衡按 `mcp-session-id` 头做粘性）。
+
+### 与 /crawl 的 session 互通（`session_id`）
+
+MCP 会话默认从空 cookie 开始，和 `/crawl` 的 [session](#session) 不相干。在 URL 上带 `session_id`，这个 MCP 会话
+就和同名的 `/crawl` session 共用 cookie：用 `/crawl` 登录过的，agent 一打开页面就是已登录；agent 在浏览器里
+登录的，`/crawl` 带同一个 `session_id` 也是已登录。
+
+```json
+{ "mcpServers": { "crawl": { "type": "http", "url": "http://crawl.internal:8080/mcp?session_id=shop-login-1" } } }
+```
+
+```bash
+claude mcp add --transport http crawl 'http://crawl.internal:8080/mcp?session_id=shop-login-1'
+```
+
+- **在 `initialize` 时生效**：服务把这个 session 的全部 cookie（含 HttpOnly 的）放进新浏览器。之后请求上的
+  `session_id` 不再看，一个 MCP 会话从头到尾只绑一个 session。`session_id` 的格式同 `/crawl`（1–128 个
+  `A-Z a-z 0-9 . _ -`），不合法返回 400。
+- **写回时机：每个工具调用之后、把结果交给 agent 之前**，再加上会话结束时（`DELETE` 或闲置回收）各一次。
+  所以 agent 看到「点了登录」的结果时，cookie 已经在 session 里了，紧接着发的 `/crawl` 就能用上；会话
+  结束那一次补上最后一次调用之后页面脚本才设的 cookie。写回按 [Session](#session) 的合并规则：只写这个
+  会话自己改过的 cookie（和它上一次写回时比），别人（并行的 `/crawl` 或另一个 MCP 会话）这期间改的不会被
+  它盖掉。没有变化时不写盘。
+- **代价**：每次调用多一次引擎往返（导出 cookie）。实测 ___。
+- **进程挂了**：引擎进程挂掉时会话丢失，session 里留下的是最后一次调用之后的 cookie（只丢最后一次调用之后、
+  页面脚本自己设的那部分），历史里的 `session_lost` 行会写明。服务本身重启同理。
+- **单向的部分**：MCP 会话开始之后 `/crawl` 再写进 session 的 cookie，不会进到这个已经开着的浏览器；要用上就
+  新开一个 MCP 会话。
+- 两个 MCP 会话可以绑同一个 `session_id`（各自一个浏览器，写回按上面的规则合并），绑不同 `session_id` 的互不相干。
+- 看绑定：`GET /mcp/sessions` 和管理页的「MCP 会话」表有 `session_id` 一列；绑定会话的每一行历史都带
+  `session_id`，所以 `GET /history?session_id=shop-login-1` 会同时列出这个 session 的 `/crawl` 请求和
+  MCP 调用。`session_start` 那一行写着带入了几个 cookie。
 
 ### 代理
 
@@ -476,6 +510,7 @@ URL 里）。没有按会话或按调用选代理，也**不走代理池**：引
 
 - 引擎原有的 `session_new`、`session_list`、`session_close` 和 `save` 不提供：前三个能列出、加入、关闭
   别人的会话，`save` 会往容器里写文件。调用它们会得到 `isError` 的结果。新会话请用 `initialize`。
+  引擎的 `cookies_import` / `cookies_export` 是服务实现 `session_id` 用的，也不给 agent。
 - `getEnv` 和 `$LP_*` 占位符：MCP 进程不带任何 `LP_*` 环境变量启动，所以没有可用的凭据占位符。
 - `screenshot` 渲染的是引擎的文字布局，不是真实像素截图。
 - `search` 会去访问搜索引擎。
