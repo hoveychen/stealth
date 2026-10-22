@@ -1100,7 +1100,7 @@ test "MCP - save writes the script to disk" {
     try testing.expect(std.mem.indexOf(u8, out.written(), "saved 2 line") != null);
 
     const written = try std.Io.Dir.cwd().readFileAlloc(lp.io, path, testing.arena_allocator, .limited(4096));
-    try std.testing.expectEqualStrings("const page = new Page();\nawait page.goto(\"https://example.com\");\n", written);
+    try std.testing.expectString("const page = new Page();\nawait page.goto(\"https://example.com\");\n", written);
 }
 
 test "MCP - tree rejects stale backendNodeId instead of dumping whole document" {
@@ -1754,11 +1754,11 @@ test "MCP - cookies_export and cookies_import carry HttpOnly cookies between ses
     try testing.expectEqual(2, jar.cookies.items.len);
     for (jar.cookies.items) |c| {
         if (std.mem.eql(u8, c.name, "auth")) {
-            try testing.expectEqualStrings("s3cret", c.value);
+            try testing.expectString("s3cret", c.value);
             try testing.expect(c.http_only);
             try testing.expectEqual(.strict, c.same_site);
         } else {
-            try testing.expectEqualStrings("theme", c.name);
+            try testing.expectString("theme", c.name);
             try testing.expect(!c.http_only);
         }
     }

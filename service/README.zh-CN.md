@@ -679,6 +679,7 @@ MCP 的行和 `/crawl` 的行字段相同（不适用的为 `null`），另有 `
 | `code` / `message` | 成功为 `null`；`tool_error`（工具报错，`message` 是错误文字）、`timeout`（`goto` 没等到加载完）、`rpc_error`、`engine_error`（连不上 MCP 进程） |
 | `ms` | 这次调用的耗时；会话事件是会话已存在的时长 |
 | `mcp_session` / `mcp_process` | 会话 id；所在的 MCP 进程 |
+| `session_id` | 会话用 `/mcp?session_id=` 绑定的 `/crawl` session（每一行都带），没绑定为 `null` |
 | `args` | 调用参数的摘要：选择器、按键之类的短参数，长字符串截到 200 字符，`fill` 的值只记长度，不含 `url` |
 | `resultBytes` | 工具返回文字的字节数（不保存内容） |
 
@@ -706,7 +707,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 | `url` | `url` 或 `finalUrl` 包含的子串，不分大小写 |
 | `status` | 本服务的 HTTP 状态，逗号分隔（`200,504`） |
 | `code` | 错误码，逗号分隔；`ok` 表示成功 |
-| `session_id` | 精确匹配；也匹配 MCP 行的 `mcp_session` |
+| `session_id` | 精确匹配；也匹配 MCP 行的 `mcp_session`。绑定了这个 session 的 MCP 会话的行也会列出 |
 | `kind` | `crawl` 或 `mcp` |
 | `since` / `until` | ISO 时间或毫秒时间戳 |
 | `days` | 不给 `since` 时往前查几天（含今天），默认 3 |
@@ -727,7 +728,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 
 - **状态**：每 3 秒读一次 `/health`——连接池的槽位、忙、闲、已连接、排队、重连次数；代理池每个代理
   可用还是被剔除、使用/成功/失败次数和最近错误；session 和请求历史的统计；MCP 进程、会话数和调用
-  统计，以及当前 MCP 会话列表（点一行看这个会话的全部调用）。
+  统计，以及当前 MCP 会话列表（含绑定的 session_id；点一行看这个会话的全部调用）。
 - **请求历史**：按 URL、HTTP 状态、错误码、类型（crawl / mcp）、session_id（也匹配 MCP 会话）、时间范围、
   天数、条数筛选；MCP 的行在「输出 / 工具」列显示工具名和选择器；点一行看完整记录；可选每 10 秒自动刷新。
 - **试抓**：填一个 URL，选输出（html / markdown / meta / eval 加 JS）、代理（直连 / 代理池 / 指定 URL）、
@@ -749,7 +750,7 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
   "history": { "enabled": true, "dir": "/data/history", "replica": "6f0888d64ad7", "retentionDays": 7, "written": 38, "queued": 0, "writeErrors": 0, "dropped": 0, "lastError": null, "removedFiles": 0, "lastSweep": "..." },
   "mcp": { "enabled": true, "processes": [
     { "name": "mcp0", "pid": 47, "up": true, "sessions": 2, "inFlight": 0, "calls": 18, "restarts": 0 }
-  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0 }
+  ], "sessions": 4, "maxSessions": 32, "idleMs": 1800000, "proxy": null, "started": 4, "closed": 0, "expired": 0, "lost": 0, "calls": 25, "toolErrors": 0, "refused": 0, "cookieSaves": 9, "cookieSaveErrors": 0 }
 }
 ```
 
@@ -759,7 +760,8 @@ GET /history?url=shop.example&code=timeout,navigation_failed&since=2026-10-21T00
 - `sessions.stored` 是现有 session 数，`loaded` 是在内存里的；`expired`/`deleted` 是启动以来的计数。
 - `history.written` 是启动以来写入的行数，`queued` 是还没落盘的，`writeErrors`/`dropped` 不为 0 要查磁盘。
 - `mcp.processes[].up` 为 false 是进程正在重启；`lost` 是因进程挂掉丢失的会话数；`refused` 是被拒绝的
-  `session_*` / `save` 调用数。`MCP_PROCS=0` 时是 `{"enabled": false}`。
+  `session_*` / `save` 调用数；`cookieSaves` / `cookieSaveErrors` 是绑定 `session_id` 的会话写回 cookie 的
+  次数和失败数（失败只记数和打日志，不影响调用）。`MCP_PROCS=0` 时是 `{"enabled": false}`。
 
 ## 扩容建议
 
@@ -835,5 +837,7 @@ node service/test/unit.mjs                 # 不需要引擎的单元测试
 过期清理、重启后保留）、管理页可访问且无外部资源、session 列表；MCP（进程命令行带 `--no-webmcp` 且没有
 暴露机器人的参数、页面里没有 WebMCP 的三个名字、链接型和 ajax 型翻页点到底、两个并发会话互不等待互不串页、
 cookie 隔离、`MCP_PROXY` 带密码生效、会话工具被拒、400/404/405、会话列表、历史字段和筛选、杀掉 MCP 进程后
-会话 404 且能新建、DELETE）；`/crawl` 的两种翻页写法。2026-10-22 在 bt 上 94 项全部通过。单元测试另有 MCP
-网关的路由、会话、过期和历史（假引擎，不需要 Docker）。
+会话 404 且能新建、DELETE；`session_id`：`/crawl` 登录的 HttpOnly cookie 带进 MCP、MCP 里登录后会话未结束
+`/crawl` 就已登录、绑不同 session 互不串、不绑的没有 cookie、DELETE 写回最后一次调用之后的 cookie、历史按
+session_id 同时查到两种行）；`/crawl` 的两种翻页写法。__RESULT__ 单元测试另有 MCP
+网关的路由、会话、过期、历史和 cookie 带入/写回/合并（假引擎，不需要 Docker）。
