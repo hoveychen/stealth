@@ -26,6 +26,7 @@ start() {
     -e PROXY_MAX_FAILS=2 -e PROXY_RETRY_AFTER_MS=5000 -e PROXY_POOL_RETRIES=2 \
     -e PROXY_PROBE="$GW:$((BASE + 3))" \
     -e SESSION_TTL_MS=6000 -e SESSION_SWEEP_MS=1000 \
+    -e MCP_PROCS=2 -e MCP_PROXY="http://user:secret@$GW:$((BASE + 4))" \
     "$IMAGE" >/dev/null
 }
 
@@ -47,6 +48,7 @@ LP_ENGINE_KILL="docker exec $NAME sh -c 'kill -9 \$(cat /tmp/lightpanda.pid)'" \
 LP_ENGINE_CMDLINE="docker exec $NAME sh -c 'cat /proc/\$(cat /tmp/lightpanda.pid)/cmdline'" \
 LP_SESSION_FILES="docker exec $NAME ls /data/sessions" \
 LP_HISTORY_SH="docker exec -w /data/history $NAME sh -c" \
+LP_MCP_SH="docker exec $NAME sh -c" \
 LP_SERVICE_RESTART="NAME=$NAME PORT=$PORT TEST_PROXY_BASE=$BASE '$HERE/docker-test.sh' '$IMAGE' recreate" \
 node "$HERE/run.mjs" || status=$?
 [ "$status" = 0 ] || docker logs --tail 40 "$NAME" >&2

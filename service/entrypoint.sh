@@ -76,5 +76,7 @@ engine() {
 }
 engine "$@" &
 
-export POOL_SIZE LP_CDP_URL="ws://127.0.0.1:${LP_PORT}/"
+# The service starts the MCP engine processes itself (MCP_PROCS, see
+# lib/mcp.mjs) and gives them the same malloc.
+export POOL_SIZE LP_CDP_URL="ws://127.0.0.1:${LP_PORT}/" LP_ENGINE_PRELOAD="$ENGINE_PRELOAD"
 exec node /app/server.mjs

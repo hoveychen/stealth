@@ -175,6 +175,12 @@
     \\  --host <HOST>
     \\          Host to bind when --port is set (e.g. 0.0.0.0 for all interfaces).
     \\          Defaults to "127.0.0.1".
+    \\  --no-webmcp
+    \\          Keep the WebMCP surface (navigator.modelContext, ModelContext,
+    \\          ModelContextClient) off the pages, as serve and fetch do by default.
+    \\          The browser tools do not need it; Chrome has none of those names,
+    \\          so leave it on only when a page's own WebMCP tools are wanted.
+    \\          Defaults to false.
     \\  --port <INT>
     \\          Serve MCP over HTTP on this port instead of stdio. Clients POST
     \\          JSON-RPC to /mcp; route requests to a session with the
@@ -547,7 +553,8 @@
     \\          WebMCP domain drives. Chrome has none of those three names, so a page
     \\          can identify the engine off them in one expression — leave this off
     \\          for any run whose point is to look like a browser. The mcp command
-    \\          exposes them regardless; this flag is for the CDP-only modes.
+    \\          exposes them unless given --no-webmcp; this flag is for the
+    \\          CDP-only modes.
     \\          Defaults to false.
     \\  --ws-max-concurrent <INT>
     \\          Maximum number of concurrent WebSocket connections.

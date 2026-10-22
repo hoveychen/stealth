@@ -34,6 +34,11 @@
 //
 // B+2 is left closed, so it is the pool's dead proxy. service/test/docker-test.sh
 // sets all of this up against a container.
+//
+// The MCP checks expect MCP_PROCS=2 and MCP_PROXY=http://user:secret@H:B+4 (the
+// test proxy with credentials); LP_MCP_SH runs a shell snippet where the
+// engine processes are (`docker exec NAME sh -c`), to read their command lines
+// and kill one.
 
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -44,12 +49,14 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { startFixtureServer } from './fixture-server.mjs';
 import { startHttpProxy, startSocksProxy } from './proxy-server.mjs';
+import { expectedIds, startPagingServer } from './paging-server.mjs';
+import { McpClient } from './mcp-client.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const EXTERNAL = process.env.LP_SERVICE_URL;
 const LP_BIN = process.env.LP_BIN || path.resolve(here, '../../zig-out/bin/lightpanda');
 if (EXTERNAL) {
-    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES', 'LP_HISTORY_SH']) {
+    for (const v of ['LP_ENGINE_KILL', 'LP_SERVICE_RESTART', 'TEST_PROXY_BASE', 'LP_ENGINE_CMDLINE', 'LP_SESSION_FILES', 'LP_HISTORY_SH', 'LP_MCP_SH']) {
         if (!process.env[v]) {
             console.error(`LP_SERVICE_URL needs ${v} (see the header of this file)`);
             process.exit(2);
@@ -123,7 +130,7 @@ const px = {
 const proxyLogs = () => Object.values(px).flatMap((p) => p.log ?? []);
 const POOL = [`http://${PH}:${px.poolA.port}`, `http://pool:secret@${PH}:${px.poolB.port}`, `http://${PH}:${px.deadPort}`];
 
-let SVC, POOL_SIZE, restartService, sessionFiles, historySh;
+let SVC, POOL_SIZE, restartService, sessionFiles, historySh, mcpSh;
 const shQuote = (s) => `'${s.replace(/'/g, `'\\''`)}'`;
 if (EXTERNAL) {
     SVC = EXTERNAL.replace(/\/$/, '');
@@ -136,7 +143,9 @@ if (EXTERNAL) {
     };
     sessionFiles = async () => (await promisify(exec)(process.env.LP_SESSION_FILES)).stdout.split('\n').filter(Boolean);
     historySh = async (snippet) => (await promisify(exec)(`${process.env.LP_HISTORY_SH} ${shQuote(snippet)}`)).stdout;
+    mcpSh = async (snippet) => (await promisify(exec)(`${process.env.LP_MCP_SH} ${shQuote(snippet)}`)).stdout;
 } else {
+    mcpSh = async (snippet) => (await promisify(exec)(snippet)).stdout;
     POOL_SIZE = 3;
     startEngine();
     await waitHttp(`http://127.0.0.1:${lpPort}/json/version`);
@@ -145,6 +154,7 @@ if (EXTERNAL) {
     const historyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-crawl-history-'));
     historySh = async (snippet) => (await promisify(exec)(snippet, { cwd: historyDir })).stdout;
     let svc;
+    const mcpBasePort = await freePort(); // and the next one
     const startService = () => {
         svc = spawn(process.execPath, [path.resolve(here, '../server.mjs')], {
             env: {
@@ -162,6 +172,10 @@ if (EXTERNAL) {
                 SESSION_TTL_MS: '6000',
                 SESSION_SWEEP_MS: '1000',
                 HISTORY_DIR: historyDir,
+                MCP_PROCS: '2',
+                MCP_BASE_PORT: String(mcpBasePort),
+                MCP_PROXY: `http://user:${PROXY_PASS}@${PH}:${px.auth.port}`,
+                LP_BIN,
             },
             stdio: ['ignore', 'ignore', 'inherit'],
         });
@@ -521,6 +535,158 @@ for (const [name, page] of [['after load', 'spin'], ['while parsing', 'spin-sync
     check('sessions list: GET /sessions has the session, cookie count and domain, no cookie values', list.total >= 1 && mine?.cookies >= 1 && mine.domains.includes(new URL(F).hostname) && mine.expiresAt && !JSON.stringify(list).includes('hidden-value'), JSON.stringify(mine));
     const bad = await fetch(`${SVC}/sessions?limit=0`);
     check('sessions list: bad limit -> 400', bad.status === 400, `${bad.status}`);
+}
+// 18. MCP: agents drive pages through POST /mcp (engine `mcp` processes
+// behind the service), with the calls in the history.
+{
+    const paging = await startPagingServer(process.env.FIXTURE_HOST, process.env.FIXTURE_URL_HOST);
+    const P = paging.base;
+    const MCP = `${SVC}/mcp`;
+    const h = await health();
+    check('mcp: /health shows 2 engine processes up', h.mcp?.enabled === true && h.mcp.processes.length === 2 && h.mcp.processes.every((p) => p.up && p.pid), JSON.stringify(h.mcp));
+    const cmdlines = (await mcpSh(`for f in /proc/[0-9]*/cmdline; do tr '\\0' ' ' < "$f"; echo; done | grep '^[^ ]*lightpanda mcp '`)).split('\n').filter(Boolean);
+    check('mcp: engines run with --no-webmcp and the MCP proxy, none of the bot flags', cmdlines.length === 2 && cmdlines.every((c) => / --no-webmcp( |$)/.test(c) && / --http-proxy http:\/\/user:/.test(c) && !/--webmcp |--obey-robots|--web-bot-auth/.test(c)), JSON.stringify(cmdlines.map((c) => c.replace(/user:[^@]*@/, 'user:***@'))));
+
+    const a = new McpClient(MCP), b = new McpClient(MCP);
+    const init = await a.initialize();
+    await b.initialize();
+    const tools = (await a.request('tools/list')).tools.map((t) => t.name);
+    check('mcp: initialize gives a session id; tools/list has the browser tools, not the session tools or save', /^mcp-[0-9a-f]{24}$/.test(a.sessionId) && a.sessionId !== b.sessionId && init.serverInfo?.name === 'lightpanda' && ['goto', 'click', 'evaluate', 'markdown', 'interactiveElements', 'waitForSelector'].every((t) => tools.includes(t)) && !tools.some((t) => /^session_|^save$/.test(t)), `${a.sessionId} ${tools.join(',')}`);
+
+    await a.tool('goto', { url: `${P}/whoami?tag=mc` });
+    const surface = await a.tool('evaluate', { script: `[typeof navigator.modelContext, typeof ModelContext, typeof ModelContextClient, 'modelContext' in navigator, Object.getOwnPropertyNames(Navigator.prototype).includes('modelContext')].join(',')` });
+    check('mcp: pages carry no WebMCP surface (navigator.modelContext, ModelContext, ModelContextClient)', surface === 'undefined,undefined,undefined,false,false', surface);
+
+    // Link pagination: each page its own URL; follow "下一页" until it is gone.
+    const collect = `JSON.stringify([...document.querySelectorAll('li.item')].map(li => li.dataset.id))`;
+    const got = [];
+    let pages = 0;
+    await a.tool('goto', { url: `${P}/links/1` });
+    for (;;) {
+        pages++;
+        got.push(...JSON.parse(await a.tool('evaluate', { script: collect })));
+        if ((await a.tool('evaluate', { script: `!!document.querySelector('a.next')` })) !== 'true' || pages > 20) break;
+        await a.tool('click', { selector: 'a.next' });
+        await a.tool('waitForSelector', { selector: 'li.item' });
+    }
+    const linkUrl = await a.tool('getUrl');
+    check('mcp: link pagination clicked through to the last page', JSON.stringify(got) === JSON.stringify(expectedIds('L')) && linkUrl === `${P}/links/5`, `${pages} pages, ${got.length} items, at ${linkUrl}`);
+
+    // Ajax pagination: one URL, the button swaps the list in place.
+    const ajax = [];
+    let apages = 0;
+    await a.tool('goto', { url: `${P}/ajax` });
+    for (;;) {
+        apages++;
+        ajax.push(...JSON.parse(await a.tool('evaluate', { script: collect })));
+        if ((await a.tool('evaluate', { script: `!!document.querySelector('#next')` })) !== 'true' || apages > 20) break;
+        await a.tool('click', { selector: '#next' });
+        await a.tool('waitForScript', { script: `document.getElementById('status').textContent === '第 ${apages + 1} 页'` });
+    }
+    check('mcp: ajax pagination clicked through to the last page on one URL', JSON.stringify(ajax) === JSON.stringify(expectedIds('A')) && (await a.tool('getUrl')) === `${P}/ajax`, `${apages} pages, ${ajax.length} items`);
+
+    // Two sessions at once: separate processes, so one's slow page does not
+    // hold the other, and neither sees the other's page or cookies.
+    const t0 = Date.now();
+    const slow = a.tool('goto', { url: `${P}/slow?ms=3000` }).then(() => Date.now() - t0);
+    await sleep(200);
+    const t1 = Date.now();
+    await b.tool('goto', { url: `${P}/whoami?tag=bee` });
+    const fastMs = Date.now() - t1;
+    const slowMs = await slow;
+    const [ua, ub] = [await a.tool('getUrl'), await b.tool('getUrl')];
+    const [ta, tb] = [await a.tool('evaluate', { script: 'document.title' }), await b.tool('evaluate', { script: 'document.title' })];
+    check('mcp: two concurrent sessions do not wait on each other or share a page', fastMs < 1500 && slowMs >= 3000 && ua === `${P}/slow?ms=3000` && ub === `${P}/whoami?tag=bee` && ta === 'slow 3000' && tb === 'whoami bee', `fast ${fastMs} ms, slow ${slowMs} ms, ${ua} / ${ub}, ${ta} / ${tb}`);
+    await a.tool('goto', { url: `${F}/set-cookie?mcpcookie=1` });
+    const ca = await a.tool('getCookies');
+    const cb = await b.tool('getCookies');
+    check('mcp: cookies stay in their session', ca.includes('mcpcookie') && !cb.includes('mcpcookie'), `${ca.slice(0, 120)} | ${cb.slice(0, 120)}`);
+    check('mcp: page loads went through MCP_PROXY with its credentials', px.auth.log.some((l) => l.target === `${P}/links/3` && l.auth === 'ok'), `${px.auth.log.filter((l) => l.target?.startsWith(P)).length} paging requests via the proxy`);
+
+    const refused = await a.tool('session_list').then(() => 'allowed', (e) => e.message);
+    const anon = await fetch(MCP, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    const unknown = await fetch(MCP, { method: 'POST', headers: { 'content-type': 'application/json', 'mcp-session-id': 'mcp-nope' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    const get = await fetch(MCP);
+    check('mcp: session tools refused; no session header 400, unknown session 404, GET 405', /not available/.test(refused) && anon.status === 400 && unknown.status === 404 && get.status === 405, `${refused} / ${anon.status} ${unknown.status} ${get.status}`);
+
+    const listed = await (await fetch(`${SVC}/mcp/sessions`)).json();
+    const mine = listed.sessions?.find((x) => x.id === a.sessionId);
+    check('mcp: GET /mcp/sessions lists the session with its page and call count', listed.total >= 2 && mine?.calls > 10 && mine.url === `${F}/set-cookie?mcpcookie=1`, JSON.stringify(mine));
+
+    await sleep(1200); // the history flushes every second
+    const hist = (await (await fetch(`${SVC}/history?kind=mcp&session_id=${a.sessionId}&limit=1000`)).json()).entries;
+    const gotos = hist.filter((e) => e.tool === 'goto');
+    const nextClick = hist.find((e) => e.tool === 'click' && e.url === `${P}/links/1`);
+    check('mcp: history has every call: goto url and ms, click from page 1 to page 2, the session', hist.length >= 30 && gotos.some((e) => e.url === `${P}/links/1` && e.status === 200 && e.code === null && e.ms >= 0) && nextClick?.finalUrl === `${P}/links/2` && hist.every((e) => e.kind === 'mcp' && e.mcp_session === a.sessionId) && hist.some((e) => e.tool === 'session_start') && hist.every((e) => !e.proxy || e.proxy.includes('***')), `${hist.length} entries, click ${JSON.stringify(nextClick)}`);
+    const onlyCrawl = (await (await fetch(`${SVC}/history?kind=crawl&limit=1000`)).json()).entries;
+    check('mcp: history kind=crawl leaves the MCP lines out', onlyCrawl.length > 0 && onlyCrawl.every((e) => e.kind === 'crawl'), `${onlyCrawl.length}`);
+
+    // An engine process dies: its sessions answer 404 and a new one works.
+    const pa = (await health()).mcp.processes.find((p) => p.name === listed.sessions.find((x) => x.id === a.sessionId).process);
+    await mcpSh(`kill -9 ${pa.pid}`);
+    await sleep(300);
+    const lost = await a.tool('getUrl').then(() => 'still there', (e) => e.message);
+    let reborn = null;
+    for (let i = 0; i < 50 && !reborn; i++) {
+        await sleep(200);
+        const c = new McpClient(MCP);
+        reborn = await c.initialize().then(() => c, () => null);
+    }
+    const bStill = await b.tool('getUrl').catch((e) => e.message);
+    let after = (await health()).mcp;
+    for (let i = 0; i < 100 && !after.processes.every((p) => p.up); i++) {
+        await sleep(200); // LP_RESTART_DELAY
+        after = (await health()).mcp;
+    }
+    check('mcp: a killed engine process loses its sessions (404), is restarted, new sessions work', /HTTP 404/.test(lost) && reborn && (await reborn.tool('goto', { url: `${P}/whoami?tag=again` })) === 'Navigated successfully.' && after.processes.every((p) => p.up) && after.lost >= 1, `${lost} / b: ${bStill} / ${JSON.stringify(after.processes)}`);
+
+    check('mcp: DELETE ends the session', (await b.close()) === 204 && (await b.tool('getUrl').then(() => 'alive', (e) => e.message)).includes('HTTP 404'));
+    await reborn?.close();
+    paging.server.closeAllConnections();
+    paging.server.close();
+}
+// 19. Paging with /crawl alone, the two recipes in README.zh-CN.md
+// ("翻页"): ajax paging in one request's js; link paging as a caller loop,
+// each js returning the next page's link, on one session_id.
+{
+    const paging = await startPagingServer(process.env.FIXTURE_HOST, process.env.FIXTURE_URL_HOST);
+    const P = paging.base;
+    const ajaxJs = `(async () => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const pages = [];
+  for (let n = 1; n <= 50; n++) {
+    pages.push([...document.querySelectorAll('li.item')].map((li) => ({ id: li.dataset.id, title: li.querySelector('.title').textContent })));
+    const next = document.querySelector('#next');
+    if (!next) break;
+    const before = document.querySelector('#list').innerHTML;
+    next.click();
+    for (let i = 0; i < 100 && document.querySelector('#list').innerHTML === before; i++) await sleep(100);
+  }
+  return pages;
+})()`;
+    const r = await crawl({ url: `${P}/ajax`, js: ajaxJs, formats: ['eval', 'meta'], timeout: 30000 });
+    const ids = (r.body.eval?.value ?? []).flat().map((x) => x.id);
+    check('paging recipe: ajax pages clicked through in one request\'s js', r.status === 200 && JSON.stringify(ids) === JSON.stringify(expectedIds('A')) && r.body.eval.value.length === 4, `${r.status} ${r.ms} ms, ${r.body.eval?.value?.length} pages ${ids.length} items ${JSON.stringify(r.body.eval?.error ?? r.body.error ?? '')}`);
+
+    const linkJs = `(() => ({
+  items: [...document.querySelectorAll('li.item')].map((li) => ({ id: li.dataset.id, title: li.querySelector('.title').textContent })),
+  next: document.querySelector('a.next')?.href ?? null,
+}))()`;
+    const sid = `paging-${Date.now()}`;
+    const linkIds = [];
+    let url = `${P}/links/1`, n = 0, statuses = [];
+    const t0 = Date.now();
+    while (url && n < 50) {
+        const page = await crawl({ url, js: linkJs, formats: ['eval'], session_id: sid });
+        statuses.push(page.status);
+        if (page.status !== 200) break;
+        linkIds.push(...page.body.eval.value.items.map((x) => x.id));
+        url = page.body.eval.value.next;
+        n++;
+    }
+    check('paging recipe: link pages followed by the caller, one session_id', JSON.stringify(linkIds) === JSON.stringify(expectedIds('L')) && n === 5 && url === null, `${n} requests in ${Date.now() - t0} ms, statuses ${statuses.join(',')}, ${linkIds.length} items`);
+    paging.server.closeAllConnections();
+    paging.server.close();
 }
 {
     const h = await health();
